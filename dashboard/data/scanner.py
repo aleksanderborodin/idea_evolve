@@ -16,6 +16,31 @@ def _root() -> Path:
     return get_project_root()
 
 
+def _is_sentinel(score: float | None) -> bool:
+    """Check if a score is the sentinel (evaluation error) value."""
+    if score is None:
+        return False
+    metrics = get_metrics_config()
+    sentinel = metrics.get("sentinel_value")
+    if sentinel is not None and score == sentinel:
+        return True
+    return False
+
+
+def _is_valid_score(result: dict | None) -> bool:
+    """Check if an extracted score result represents a real valid score."""
+    if not result:
+        return False
+    score = result.get("fitness")
+    if score is None:
+        return False
+    if not result.get("is_valid", 0):
+        return False
+    if _is_sentinel(score):
+        return False
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Generations & Phases
 # ---------------------------------------------------------------------------
@@ -29,22 +54,39 @@ def get_phase_status(gen: int) -> str:
         return "complete"
 
     ws = root / "workspace"
-    if (ws / f"{gen_str}_consistency_reviewer" / "output" / "state_of_affairs.md").exists():
-        return "consistency_done"
-    if (ws / f"{gen_str}_system_critic" / "output" / "system_analysis.md").exists():
-        return "critic_done"
 
-    ev_output = ws / f"{gen_str}_evaluator" / "output"
+    # Check consistency reviewer
+    cons_ws = ws / f"{gen_str}_consistency_reviewer"
+    if (cons_ws / "output" / "state_of_affairs.md").exists():
+        return "consistency_done"
+    if cons_ws.exists():
+        return "consistency_running"
+
+    # Check system critic
+    critic_ws = ws / f"{gen_str}_system_critic"
+    if (critic_ws / "output" / "system_analysis.md").exists():
+        return "critic_done"
+    if critic_ws.exists():
+        return "critic_running"
+
+    # Check evaluator
+    ev_ws = ws / f"{gen_str}_evaluator"
+    ev_output = ev_ws / "output"
     if ev_output.exists():
         if any([
             (ev_output / "evaluator_report.md").exists(),
             (ev_output / "generation_snapshot.md").exists(),
         ]):
             return "evaluator_done"
+    if ev_ws.exists():
+        return "evaluator_running"
 
-    # Check if agents are still running (workspace dirs exist)
-    ws_dir = root / "workspace"
-    agent_workspaces = list(ws_dir.glob(f"{gen_str}_*")) if ws_dir.exists() else []
+    # Check agent workspaces (exclude evaluator/critic/consistency)
+    special = {f"{gen_str}_evaluator", f"{gen_str}_system_critic", f"{gen_str}_consistency_reviewer"}
+    agent_workspaces = [
+        d for d in (ws.glob(f"{gen_str}_*") if ws.exists() else [])
+        if d.is_dir() and d.name not in special
+    ]
 
     pop_dir = root / "population" / gen_str
     reports_dir = root / "reports" / gen_str
@@ -54,7 +96,6 @@ def get_phase_status(gen: int) -> str:
     )
 
     if has_output:
-        # If workspace dirs still exist, agents are still running
         if agent_workspaces:
             return "agents_running"
         return "agents_done"
@@ -117,7 +158,7 @@ def get_generation_status() -> list[dict]:
                 if d.is_dir():
                     for sol in d.glob("sol*.py"):
                         result = extract_score(sol)
-                        if result and result.get("fitness") is not None and result.get("is_valid", 1):
+                        if _is_valid_score(result):
                             _update_best(result["fitness"])
 
         # Also scan workspace for in-progress solutions
@@ -133,7 +174,7 @@ def get_generation_status() -> list[dict]:
                     score_file = sol.with_suffix(".score")
                     if score_file.exists():
                         result = extract_score(sol)
-                        if result and result.get("fitness") is not None and result.get("is_valid", 1):
+                        if _is_valid_score(result):
                             ws_scored_count += 1
                             _update_best(result["fitness"])
 
@@ -184,18 +225,70 @@ def get_solutions() -> list[dict]:
                     "path": str(sol.relative_to(pop_dir.parent)),
                     "score": score,
                     "is_valid": is_valid,
+                    "is_sentinel": _is_sentinel(score),
                     "size": sol.stat().st_size,
                     "modified": datetime.fromtimestamp(
                         sol.stat().st_mtime
                     ).isoformat(timespec="seconds"),
                 })
 
+    # Also include workspace (in-progress) solutions not yet in population/
+    ws_dir = root / "workspace"
+    if ws_dir.exists():
+        pop_gen_agents = set()
+        for s in solutions:
+            pop_gen_agents.add((s["gen"], s["agent_type"] + "_" + s["instance"], s["file"]))
+
+        for ws in sorted(ws_dir.iterdir()):
+            if not ws.is_dir():
+                continue
+            parts = ws.name.split("_", 1)
+            if len(parts) < 2 or not parts[0].startswith("gen"):
+                continue
+            gen_str = parts[0]
+            agent_id = parts[1]
+            gen_num = int(gen_str[3:]) if gen_str[3:].isdigit() else 0
+
+            agent_parts = agent_id.rsplit("_", 1)
+            agent_type = agent_parts[0] if len(agent_parts) == 2 and agent_parts[1].isdigit() else agent_id
+            instance = agent_parts[1] if len(agent_parts) == 2 and agent_parts[1].isdigit() else "0"
+
+            output_dir = ws / "output"
+            if not output_dir.exists():
+                continue
+            for sol in sorted(output_dir.glob("sol*.py")):
+                if (gen_num, agent_type + "_" + instance, sol.name) in pop_gen_agents:
+                    continue
+                result = extract_score(sol)
+                score = result.get("fitness") if result else None
+                is_valid = result.get("is_valid", 0) if result else 0
+                solutions.append({
+                    "gen": gen_num,
+                    "agent_type": agent_type,
+                    "instance": instance,
+                    "file": sol.name,
+                    "path": str(sol.relative_to(root)),
+                    "score": score,
+                    "is_valid": is_valid,
+                    "is_sentinel": _is_sentinel(score),
+                    "size": sol.stat().st_size,
+                    "modified": datetime.fromtimestamp(
+                        sol.stat().st_mtime
+                    ).isoformat(timespec="seconds"),
+                    "in_progress": True,
+                })
+
     metrics = get_metrics_config()
     higher_is_better = metrics.get("higher_is_better", True)
-    if higher_is_better:
-        solutions.sort(key=lambda x: x.get("score") if x.get("score") is not None else -9999, reverse=True)
-    else:
-        solutions.sort(key=lambda x: x.get("score") if x.get("score") is not None else 9999)
+
+    def _sort_key(x):
+        s = x.get("score")
+        # Sentinels and None sort to bottom
+        if s is None or x.get("is_sentinel"):
+            return float('inf') if not higher_is_better else float('-inf')
+        return s
+
+    solutions.sort(key=_sort_key, reverse=higher_is_better)
     return solutions
 
 
@@ -356,6 +449,71 @@ def get_reports(gen: int | None = None) -> list[dict]:
     return reports
 
 
+def get_feedback() -> dict:
+    """Get system critic analysis, recommendations, and consistency reviews.
+
+    Checks both finalized feedback/ and in-progress workspace/ outputs.
+    """
+    root = _root()
+    result = {"recommendations": None, "analyses": [], "consistency_reviews": []}
+    seen_analysis_gens = set()
+
+    # Current recommendations (finalized)
+    rec_path = root / "feedback" / "system_recommendations.md"
+    if rec_path.exists():
+        result["recommendations"] = rec_path.read_text()[:8000]
+
+    # Per-gen analyses (finalized)
+    analysis_dir = root / "feedback" / "system_analysis"
+    if analysis_dir.exists():
+        for f in sorted(analysis_dir.glob("*.md"), reverse=True):
+            gen_num = int(f.stem[3:]) if f.stem.startswith("gen") and f.stem[3:].isdigit() else 0
+            seen_analysis_gens.add(gen_num)
+            result["analyses"].append({
+                "gen": gen_num,
+                "content": f.read_text()[:5000],
+                "in_progress": False,
+            })
+
+    # In-progress critic outputs from workspace
+    ws_dir = root / "workspace"
+    if ws_dir.exists():
+        for ws in sorted(ws_dir.iterdir(), reverse=True):
+            if not ws.name.endswith("_system_critic") or not ws.is_dir():
+                continue
+            gen_str = ws.name.split("_")[0]
+            gen_num = int(gen_str[3:]) if gen_str.startswith("gen") and gen_str[3:].isdigit() else 0
+
+            # Analysis
+            analysis = ws / "output" / "system_analysis.md"
+            if analysis.exists() and gen_num not in seen_analysis_gens:
+                result["analyses"].insert(0, {
+                    "gen": gen_num,
+                    "content": analysis.read_text()[:5000],
+                    "in_progress": True,
+                })
+
+            # Recommendations (workspace version if no finalized one)
+            recs = ws / "output" / "system_recommendations.md"
+            if recs.exists() and result["recommendations"] is None:
+                result["recommendations"] = recs.read_text()[:8000]
+
+    # Sort analyses newest first
+    result["analyses"].sort(key=lambda a: a["gen"], reverse=True)
+
+    # Consistency reviews (finalized)
+    cons_dir = root / "feedback" / "consistency_reviews"
+    if cons_dir.exists():
+        for f in sorted(cons_dir.glob("*.md"), reverse=True):
+            gen_num = int(f.stem[3:]) if f.stem.startswith("gen") and f.stem[3:].isdigit() else 0
+            result["consistency_reviews"].append({
+                "gen": gen_num,
+                "content": f.read_text()[:5000],
+            })
+
+    return result
+
+
 # ---------------------------------------------------------------------------
 # File Tree
 # ---------------------------------------------------------------------------
@@ -488,7 +646,7 @@ def get_active_agents() -> list[dict]:
                     "score": score,
                     "is_valid": is_valid,
                 })
-                if score is not None and is_valid:
+                if _is_valid_score(result):
                     if best_score is None:
                         best_score = score
                     elif higher_is_better and score > best_score:

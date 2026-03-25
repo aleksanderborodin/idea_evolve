@@ -1,58 +1,66 @@
-# Debrief: gen001_explore_1
+# Debrief Report — gen001 explore_1 (Advanced Numerical Optimization)
 
-## 1. Output Files and Scores
+## All Solutions
 
-| File | Fitness | Confirmed (.score) | Approach |
-|------|---------|-------------------|----------|
-| sol01.py | 1.6904 | yes | L-BFGS + JAX gradients, softplus, N=1000, Gaussian init |
-| sol02.py | 1.8111 | yes | L-BFGS + softplus, N=600, flat block init |
-| sol03.py | 1.5257 | yes | Adam 80k steps, N=600, cosine window init |
-| sol04.py | 1.5178 | yes | Multi-scale Adam: N=600 (40k) → upsample → N=2000 (50k) — **beats baseline 1.5185** |
-| sol05.py | 1.5177 | no (.score missing) | Extended multi-scale: N=600 (50k) → N=2000 (80k), multiple seeds |
-| sol06.py | 1.5176 | no (.score missing) | Three-phase: N=600 → N=2000 → N=4000, AdamW, multiple restarts |
-| sol07.py | TBD (unevaluated) | no | Lion optimizer + cosine warm restarts, N=2000 |
-| sol08.py | TBD (unevaluated) | no | Multi-start (3 seeds) at N=600 → N=2000 (80k) |
-| sol09.py | TBD (unevaluated) | no | Multi-start with diverse inits (flat, narrow, wide, two-bump) → N=2000 (100k) |
-| sol10.py | TBD (unevaluated) | no | Multi-scale Adam → N=2000, then L-BFGS polish |
-| sol11.py | TBD (unevaluated) | no | Basin hopping: 5 rounds of perturb-then-reoptimize |
-| sol12.py | TBD (unevaluated) | no | Aggressive basin hopping: 10 rounds, varying noise levels |
-| sol13.py | TBD (unevaluated) | no | Normalized optimization (L1-projected after each step) + N=600 → N=4000 |
+| File   | Fitness    | Valid | Approach |
+|--------|------------|-------|----------|
+| sol01  | 1.5207     | yes   | Gaussian init (σ=0.08), N=800, 100k Adam steps |
+| sol02  | 1.5270     | yes   | Multi-scale: Hann init, N=200→600→1200 |
+| sol03  | 1.5189     | yes   | Baseline init + 30k Adam + L-BFGS-B |
+| sol04  | 1.5182     | yes   | Baseline init + 80k Adam (2× baseline) |
+| sol05  | **1.5155** | yes   | 8 seeds with shifted-support init, best → 60k Adam + L-BFGS |
+| sol06  | 1.5183     | yes   | 16 seeds → top-3 refined, upsample N=1500 + L-BFGS |
+| sol07  | unevaluated | ?   | 32 seeds (16 asymmetric modes) → top-3 100k Adam + L-BFGS |
 
-Best confirmed result: **sol04 at 1.5178** (beats baseline 1.5185).
-sol05 and sol06 have fitness headers suggesting ~1.5176-1.5177 but no `.score` sidecars — the agent may have computed fitness in-session without running `evaluate.py`, or the sidecar writes failed.
+**Baseline: 1.5185. Best found: 1.5155 (sol05). Target: ≤ 1.5053.**
 
-## 2. Approaches Tried
+## 1. What Did You Try?
 
-The agent methodically explored three tracks as directed:
+1. **sol01 — Gaussian shape prior (idea_003):** Initialized with a Gaussian centered at 0 (σ=0.08), N=800, 100k Adam steps with cosine schedule. Result: 1.5207 — WORSE than baseline. The symmetric Gaussian initialization converges to a symmetric local minimum, and symmetric functions have C ≥ 2 analytically.
 
-**Optimizer track:** L-BFGS (sol01, sol02) underperformed — converged to C=1.69-1.81. Adam consistently outperformed L-BFGS for this landscape. The agent noted that Adam's adaptive noise helps escape bad local minima, while softplus reparameterization unfavorably distorts the landscape for second-order methods.
+2. **sol02 — Multi-scale optimization (idea_004):** Raised cosine (Hann window) init at N=200, optimize 25k steps, upsample to N=600 (30k steps), upsample to N=1200 (25k steps). Result: 1.5270 — worst of all. Coarse optimization locked into a bad basin.
 
-**Resolution track:** Multi-scale coarse-to-fine (sol04-sol06) was the key insight. Going N=600 → N=2000 (and later → N=4000) with upsampling between phases beat the baseline. Higher resolution alone did not help — the two-phase handoff mattered.
+3. **sol03 — Adam warm-up + L-BFGS (idea_001):** Baseline init, 30k Adam steps, then L-BFGS-B with non-negativity bounds for up to 5000 iterations. Result: 1.5189 — barely an improvement. L-BFGS converges quickly to the same local minimum that Adam found.
 
-**Initialization track:** Cosine window init (sol03) did not improve over flat block. The agent pivoted to multi-start diversity (sol08, sol09) and basin hopping (sol11, sol12) in later solutions to address the local minima problem instead.
+4. **sol04 — Longer Adam:** Exact baseline setup (N=600, flat+noise init) but 80k steps (2× baseline). Result: 1.5182 — marginal improvement. Diminishing returns; the optimizer is near a local minimum.
 
-The agent also explored Adam → L-BFGS hybrid (sol10), and L1-normalized optimization (sol13) as later ideas.
+5. **sol05 — Multiple seeds with shifted support:** 8 random seeds with support blocks shifted by ±N/16 in each direction, 15k steps each to find best basin, then 60k Adam + L-BFGS refinement. Result: **1.5155** — best result, beats baseline by 0.003. The shifted-support seeds explore different function basins.
 
-## 3. Information Gaps
+6. **sol06 — Aggressive multi-seed + N=1500:** 16 seeds with 10k steps each (diverse modes), top-3 refined 60k steps, best upsampled to N=1500 and refined 20k steps + L-BFGS. Result: 1.5183 — worse than sol05. Upsampling to N=1500 with only 20k steps was insufficient to re-converge.
 
-- No observations.md was written. The agent's conclusions about L-BFGS vs Adam are preserved only in solution header comments.
-- The agent did not attempt AdamW with explicit weight decay as a standalone approach (sol06 uses it but embedded in three-phase multi-scale, so the signal is confounded).
-- No explicit recording of what N=4000 costs in wall-clock time — later solutions using N=4000 may have exceeded the time budget, which could explain why sol07-sol13 were not evaluated.
+7. **sol07 — 32 seeds with 16 diverse asymmetric modes:** More systematic asymmetric initialization (shifted blocks, half-domain, ramps, Gaussians), 12k steps each, top-3 refined 100k steps + L-BFGS. **Not evaluated due to time constraint.**
 
-## 4. Completion Status
+## 2. What Information Did You Lack?
 
-**Partial — timed out or ran out of turns before evaluating sol07-sol13.** The evaluate-immediately workflow was followed for sol01-sol04 (and partially for sol05-sol06), then broke down. The last 7 solutions were written but not evaluated. This is consistent with session timeout: the agent continued writing solutions but the clock ran out before it could run evaluate.py on them.
+- The actual shape of the optimized function — need to plot/visualize what sol05 looks like. Is it concentrated on one side? Does it have multiple humps?
+- Whether there are published formulas or known function families that achieve C near 1.28 or 1.5053.
+- How much of the score difference between seeds is due to noise vs. genuine basin differences.
 
-## 5. Recommendations for Next Generation
+## 3. What Given Facts Might Be Wrong?
 
-1. **Multi-scale is the promising direction.** sol04-sol06 all beat or closely match the baseline (1.5176-1.5178). Exploit should take sol04/sol05/sol06 as starting points and push harder on phase durations and final resolution (N=4000+).
+- idea_004 (multi-scale) was described as avoiding local minima at high resolution. In practice, multi-scale made things worse here because the coarse-resolution minimum was bad. The Hann window initialization at N=200 converges to a poor basin that persists. Multi-scale may only help with a better coarse init.
 
-2. **Evaluate sol07-sol13.** These were written but not scored. Several contain promising ideas (basin hopping, multi-start with diverse inits, Adam+L-BFGS hybrid). The evaluator should run evaluate.py on them.
+## 4. Was the State of Affairs Accurate?
 
-3. **L-BFGS as cold-start optimizer is confirmed bad.** L-BFGS from scratch (sol01, sol02) gives C=1.69-1.81. L-BFGS as a warm-start polish after Adam (sol10) is unscored but theoretically sound — worth evaluating.
+Gen-1, no prior State of Affairs. The initial facts are consistent with observations.
 
-4. **Basin hopping (sol11, sol12) is unscored but conceptually strong** for escaping local minima. Priority to evaluate and potentially exploit if scores are good.
+## 5. What Would You Do Differently?
 
-5. **Multi-start with diverse initializations (sol09)** targets the basin-of-attraction problem directly and was unevaluated. Should be scored before discarding.
+- Skip symmetric initializations entirely (Gaussian, Hann centered at 0). All symmetric inits were worse than asymmetric.
+- Run sol07 to completion — 32 seeds with deliberate asymmetric modes was the natural next step.
+- Try initializations with support concentrated near one boundary (e.g., f on [0, 1/4] only, or f on [-1/4, 0] only).
+- Try N=1000-1200 directly with multi-seed (not via upsampling) to avoid the upsampling artifact issue.
 
-6. The gap between baseline (1.5185) and best here (1.5176) is modest (~0.0007). The theoretical target is 1.5053, ~0.013 below baseline. Numerical optimization alone may not close this gap — coordinate with explore_2's analytical constructions to see if a fundamentally different function shape is needed.
+## 6. Specific Experiments to Run
+
+- **Asymmetric single-side init:** Initialize f = 1 on [0, 1/4] (right half of domain), run 80k Adam steps. The baseline appears to converge to an asymmetric function — this tests whether starting asymmetric helps directly.
+- **Left-side init:** Same but f = 1 on [-1/4, 0].
+- **Noisy restart:** Run baseline to convergence (~40k), then add Gaussian noise (σ=0.05) and restart Adam at lower LR. Repeat 5-10 times. This is simulated annealing.
+- **N=1200 pure multi-seed (no upsampling):** Run 8 seeds directly at N=1200 with baseline-style init. Each seed runs 60k steps. No upsampling artifacts.
+
+## 7. What Surprised You?
+
+- **Gaussian initialization is worse than flat+noise**: Despite being theoretically "smooth and well-shaped," a Gaussian starts in a symmetric basin where the gradient pushes toward symmetric local minima with C ≥ 2. The flat baseline init with small noise happens to break symmetry effectively.
+- **Multi-scale was the worst approach**: Theoretically sound, but in practice the Hann window initialization at N=200 converges to a bad attractor. The coarse resolution captures the wrong features.
+- **Multi-seed improvement is real and significant**: Going from 1 seed to 8 seeds (sol05 vs baseline) improved by 0.003, which is meaningful for a problem where the target improvement is only 0.013 total. This strongly suggests there are many local minima with meaningfully different C values.
+- **L-BFGS alone doesn't help much**: After Adam, the function is already at a good local minimum w.r.t. L-BFGS. The improvement is negligible (1.5185 → 1.5189).

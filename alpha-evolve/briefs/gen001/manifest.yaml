@@ -1,5 +1,5 @@
 generation: 1
-strategy_summary: "Cold start: two orthogonal explorations (gradient optimization vs analytical construction), one full baseline improvement, one research survey of the mathematical landscape"
+strategy_summary: "Cold start: two orthogonal explorations (analytical construction vs numerical optimization), one full baseline, one research survey of the mathematical literature"
 agents:
   - type: explore
     instance: 1

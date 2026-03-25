@@ -2,7 +2,7 @@
 // Alpha Evolve Dashboard — Client Logic
 // ======================================================================
 
-const PHASE_ORDER = ['not_started', 'planned', 'agents_running', 'agents_done', 'evaluator_done', 'critic_done', 'consistency_done', 'complete'];
+const PHASE_ORDER = ['not_started', 'planned', 'agents_running', 'agents_done', 'evaluator_running', 'evaluator_done', 'critic_running', 'critic_done', 'consistency_running', 'consistency_done', 'complete'];
 
 let overviewData = null;
 let solutionsData = null;
@@ -39,11 +39,11 @@ document.querySelectorAll('.nav-tab').forEach(btn => {
     clearInterval(refreshTimer);
     clearInterval(agentRefreshTimer);
     if (tab === 'overview') {
-      refreshTimer = setInterval(loadOverview, 10000);
+      refreshTimer = setInterval(loadOverview, 60000);
     }
     if (tab === 'pipeline') {
       loadActiveAgents();
-      agentRefreshTimer = setInterval(loadActiveAgents, 5000);
+      agentRefreshTimer = setInterval(loadActiveAgents, 60000);
     }
   });
 });
@@ -53,7 +53,10 @@ async function apiFetch(url) {
   try {
     const r = await fetch(url);
     if (!r.ok) throw new Error(r.status);
-    return await r.json();
+    const data = await r.json();
+    const el = document.getElementById('lastUpdate');
+    if (el) el.textContent = new Date().toLocaleTimeString();
+    return data;
   } catch (e) {
     console.error('API error:', url, e);
     return null;
@@ -68,15 +71,14 @@ async function loadOverview() {
   const s = data.stats;
   const c = data.config;
 
-  document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
-
   // Metrics — handle both higher-is-better and lower-is-better
   const dec = c.decimals || 4;
   const hib = c.higher_is_better;
+  const sentinel = c.sentinel_value;
   let pct = 0;
   if (s.best_score != null && c.target_score != null) {
-    // Find baseline from initial programs
-    const initScores = (data.initial_scores || []).filter(x => x.score != null).map(x => x.score);
+    // Find baseline from initial programs (exclude sentinel)
+    const initScores = (data.initial_scores || []).filter(x => x.score != null && x.score !== sentinel).map(x => x.score);
     const baseline = initScores.length > 0 ? (hib ? Math.max(...initScores) : Math.min(...initScores)) : (hib ? 0 : s.best_score * 1.5);
     if (hib) {
       pct = c.target_score > 0 ? Math.min(100, (s.best_score / c.target_score) * 100) : 0;
@@ -116,18 +118,24 @@ async function loadOverview() {
   document.getElementById('knowVal').textContent = s.total_clusters + s.total_patterns;
   document.getElementById('knowSub').textContent = s.total_clusters + ' clusters \u00b7 ' + s.total_patterns + ' patterns';
 
-  // Phase strip — map agents_running to agents_done step for display
+  // Phase strip — map *_running to the corresponding step as active
   const currentPhase = s.current_phase;
-  const displayPhase = currentPhase === 'agents_running' ? 'agents_done' : currentPhase;
   const phaseIdx = PHASE_ORDER.indexOf(currentPhase);
+  // Map running states to the phase-step they belong to
+  const runningToStep = {
+    agents_running: 'agents_done',
+    evaluator_running: 'evaluator_done',
+    critic_running: 'critic_done',
+    consistency_running: 'consistency_done',
+  };
+  const activeStep = runningToStep[currentPhase] || currentPhase;
   document.querySelectorAll('.phase-step').forEach(el => {
     const elPhase = el.dataset.phase;
     const elIdx = PHASE_ORDER.indexOf(elPhase);
     el.classList.remove('completed', 'active', 'pending');
-    if (elPhase === 'agents_done' && currentPhase === 'agents_running') {
+    if (elPhase === activeStep) {
       el.classList.add('active');
     } else if (elIdx < phaseIdx) el.classList.add('completed');
-    else if (elIdx === phaseIdx) el.classList.add('active');
     else el.classList.add('pending');
   });
 
@@ -156,38 +164,47 @@ async function loadOverview() {
     `).join('');
   }
 
-  // Chart — use score_progression.md data, or synthesize from generation scores
-  let chartProgression = data.progression;
-  if ((!chartProgression || chartProgression.length === 0) && data.generations.length > 0) {
-    chartProgression = data.generations
-      .filter(g => g.best_score != null)
-      .map(g => ({ gen: g.gen, best_fitness: g.best_score }));
+  // Chart — eagerly load solutions for scatter plot, then redraw
+  if (!solutionsData) {
+    apiFetch('/api/solutions').then(sols => {
+      if (sols) solutionsData = sols;
+      redrawChart();
+    });
+  } else {
+    redrawChart();
   }
-  const initScores = (data.initial_scores || []).filter(x => x.score != null).map(x => x.score);
-  let baselineScore = initScores.length > 0 ? (c.higher_is_better ? Math.max(...initScores) : Math.min(...initScores)) : null;
-  // Fallback baseline from config if initial programs have no score
-  if (baselineScore == null && c.baseline_score != null) baselineScore = c.baseline_score;
-  drawChart(chartProgression, c.target_score, c.higher_is_better, baselineScore, c.decimals || 4);
 }
 
 function updatePipeline(currentPhase) {
+  const runningToStep = {
+    agents_running: 'agents_done',
+    evaluator_running: 'evaluator_done',
+    critic_running: 'critic_done',
+    consistency_running: 'consistency_done',
+  };
+  const activeStep = runningToStep[currentPhase] || currentPhase;
   const phaseIdx = PHASE_ORDER.indexOf(currentPhase);
+
+  // Pipeline node order maps to PHASE_ORDER done-states
+  const nodePhases = ['planned', 'agents_done', 'evaluator_done', 'critic_done', 'consistency_done', 'complete'];
+
   document.querySelectorAll('.pipeline-node').forEach(node => {
     const nodePhase = node.dataset.pipePhase;
     const nodeIdx = PHASE_ORDER.indexOf(nodePhase);
     node.classList.remove('active-phase', 'completed-phase');
-    if (nodePhase === 'agents_done' && currentPhase === 'agents_running') {
+    if (nodePhase === activeStep) {
       node.classList.add('active-phase');
-    } else if (nodeIdx < phaseIdx) node.classList.add('completed-phase');
-    else if (nodeIdx === phaseIdx) node.classList.add('active-phase');
+    } else if (nodeIdx < phaseIdx) {
+      node.classList.add('completed-phase');
+    }
   });
 
-  // Arrows
+  // Arrows — activate arrows leading up to the active node
+  const activeNodeIdx = nodePhases.indexOf(activeStep);
   for (let i = 1; i <= 5; i++) {
     const arrow = document.getElementById('pa-' + i);
     if (!arrow) continue;
-    const prevPhaseIdx = i; // arrow i connects node i to node i+1
-    if (prevPhaseIdx < phaseIdx) {
+    if (i <= activeNodeIdx) {
       arrow.classList.add('flow-active');
     } else {
       arrow.classList.remove('flow-active');
@@ -211,8 +228,166 @@ function renderAgentCards(agentTypes) {
   }).join('');
 }
 
-// ----- Chart (Canvas) -----
-function drawChart(progression, target, higherIsBetter, baseline, decimals) {
+// =====================================================================
+// Chart System — Layered score progression with interactive tooltips
+// =====================================================================
+//
+// Architecture:
+//   1. buildChartData()  — transforms raw solutions + progression into
+//      structured layers: allPoints, genBests, runningBest, records
+//   2. drawChart()       — renders layers bottom-up on canvas:
+//      Grid > Baseline > Target > Scatter > GenBest > BestLine > Records
+//   3. chartHitTest()    — finds nearest point to mouse for tooltips
+//   4. Event listeners   — mousemove (tooltip), click (select), mouseleave (hide)
+//
+// Data flow:
+//   /api/solutions → allPoints[]   (every solution as a dot)
+//   /api/overview  → progression[] (gen-level bests, used if solutions unavailable)
+//   Config         → target, baseline, direction, sentinel, decimals
+//
+// Each point: { gen, score, agent, file, isGenBest, isRecord, px, py }
+// px/py are set during render for hit testing without recomputing.
+//
+// Extending:
+//   - Add layers by adding a draw function in drawChart() render sequence
+//   - Add data by extending buildChartData() return object
+//   - Hit regions are point-based; for area hits, extend chartHitTest()
+// =====================================================================
+
+let chartPoints = [];      // All rendered points with px/py for hit testing
+let chartState = null;     // Last render state for reuse (axes, padding, etc.)
+let selectedPoint = null;  // Currently clicked point
+let zoomState = { mode: 'auto', yMin: null, yMax: null };
+
+function computeAutoRange(scores, target, baseline) {
+  const vals = scores.filter(v => v != null && isFinite(v));
+  if (vals.length === 0) return null;
+
+  // Include target/baseline in reference values
+  const refVals = [...vals];
+  if (target != null && isFinite(target)) refVals.push(target);
+  if (baseline != null && isFinite(baseline)) refVals.push(baseline);
+
+  if (vals.length < 3) {
+    const mn = Math.min(...refVals);
+    const mx = Math.max(...refVals);
+    const m = (mx - mn) * 0.15 || 0.005;
+    return { min: mn - m, max: mx + m };
+  }
+
+  // IQR method
+  const sorted = [...vals].sort((a, b) => a - b);
+  const q1 = sorted[Math.floor(sorted.length * 0.25)];
+  const q3 = sorted[Math.floor(sorted.length * 0.75)];
+  const iqr = q3 - q1 || 0.005;
+  let lo = q1 - 1.5 * iqr;
+  let hi = q3 + 1.5 * iqr;
+
+  // Include target/baseline if within 2x IQR of fences
+  if (target != null && isFinite(target) && target >= lo - 2 * iqr && target <= hi + 2 * iqr) {
+    lo = Math.min(lo, target);
+    hi = Math.max(hi, target);
+  }
+  if (baseline != null && isFinite(baseline) && baseline >= lo - 2 * iqr && baseline <= hi + 2 * iqr) {
+    lo = Math.min(lo, baseline);
+    hi = Math.max(hi, baseline);
+  }
+
+  // Clamp to actual data range
+  lo = Math.max(lo, Math.min(...vals));
+  hi = Math.min(hi, Math.max(...vals));
+  // But re-extend for target/baseline that are within the IQR fence
+  if (target != null && isFinite(target) && target >= q1 - 1.5 * iqr && target <= q3 + 1.5 * iqr) {
+    lo = Math.min(lo, target);
+    hi = Math.max(hi, target);
+  }
+  if (baseline != null && isFinite(baseline) && baseline >= q1 - 1.5 * iqr && baseline <= q3 + 1.5 * iqr) {
+    lo = Math.min(lo, baseline);
+    hi = Math.max(hi, baseline);
+  }
+
+  const margin = (hi - lo) * 0.12 || 0.005;
+  return { min: lo - margin, max: hi + margin };
+}
+
+function updateZoomToggle() {
+  const btn = document.getElementById('chartZoomToggle');
+  if (!btn) return;
+  if (zoomState.mode === 'auto') {
+    btn.textContent = 'Auto-focus';
+    btn.classList.add('active');
+  } else {
+    btn.textContent = 'Show all';
+    btn.classList.remove('active');
+  }
+}
+
+function buildChartData(solutions, progression, higherIsBetter, sentinel) {
+  // Collect all valid solution scores as scatter points
+  const allPoints = [];
+  const genMap = {};  // gen -> [scores]
+
+  if (solutions && solutions.length > 0) {
+    solutions.forEach(s => {
+      if (s.score == null || s.is_sentinel || s.score === sentinel) return;
+      if (!s.is_valid) return;
+      const pt = {
+        gen: s.gen, score: s.score,
+        agent: s.agent_type + '_' + s.instance,
+        file: s.file, inProgress: s.in_progress || false,
+        isGenBest: false, isRecord: false,
+      };
+      allPoints.push(pt);
+      if (!genMap[s.gen]) genMap[s.gen] = [];
+      genMap[s.gen].push(pt);
+    });
+  }
+
+  // If no solution-level data, fall back to progression for gen bests
+  if (allPoints.length === 0 && progression && progression.length > 0) {
+    progression.forEach(p => {
+      if (p.best_fitness == null) return;
+      const pt = {
+        gen: p.gen, score: p.best_fitness,
+        agent: '?', file: '?', inProgress: false,
+        isGenBest: true, isRecord: false,
+      };
+      allPoints.push(pt);
+      genMap[p.gen] = [pt];
+    });
+  }
+
+  // Determine gen bests
+  const genBests = [];
+  const isBetter = higherIsBetter
+    ? (a, b) => a > b
+    : (a, b) => a < b;
+
+  for (const gen of Object.keys(genMap).map(Number).sort((a, b) => a - b)) {
+    const pts = genMap[gen];
+    let best = pts[0];
+    for (let i = 1; i < pts.length; i++) {
+      if (isBetter(pts[i].score, best.score)) best = pts[i];
+    }
+    best.isGenBest = true;
+    genBests.push(best);
+  }
+
+  // Compute running best (monotonically improving) and mark records
+  const runningBest = [];
+  let currentBest = null;
+  for (const gb of genBests) {
+    if (currentBest == null || isBetter(gb.score, currentBest.score)) {
+      currentBest = gb;
+      gb.isRecord = true;
+    }
+    runningBest.push({ gen: gb.gen, score: currentBest.score });
+  }
+
+  return { allPoints, genBests, runningBest, records: genBests.filter(p => p.isRecord) };
+}
+
+function drawChart(chartData, target, higherIsBetter, baseline, decimals) {
   const canvas = document.getElementById('progressionChart');
   const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
@@ -227,164 +402,441 @@ function drawChart(progression, target, higherIsBetter, baseline, decimals) {
 
   ctx.clearRect(0, 0, W, H);
 
-  const pad = { top: 20, right: 20, bottom: 30, left: 60 };
+  const pad = { top: 28, right: 20, bottom: 32, left: 66 };
   const chartW = W - pad.left - pad.right;
   const chartH = H - pad.top - pad.bottom;
 
-  if ((!progression || progression.length === 0) && baseline == null) {
+  const { allPoints, genBests, runningBest, records } = chartData;
+
+  if (allPoints.length === 0 && baseline == null) {
     ctx.fillStyle = '#94a3b8';
     ctx.font = '12px JetBrains Mono, monospace';
     ctx.textAlign = 'center';
     ctx.fillText('No data yet \u2014 waiting for first generation', W / 2, H / 2);
+    chartPoints = [];
+    chartState = null;
     return;
   }
 
-  // Determine Y-axis range from all data points
-  const allScores = [
-    ...(progression || []).map(p => p.best_fitness),
+  // ---- Axes range ----
+  const allScores = allPoints.map(p => p.score);
+  const fullValues = [
+    ...allScores,
     ...(target != null ? [target] : []),
     ...(baseline != null ? [baseline] : []),
   ].filter(v => v != null && isFinite(v));
 
-  let minScore = Math.min(...allScores);
-  let maxScore = Math.max(...allScores);
-  const margin = (maxScore - minScore) * 0.15 || 0.01;
-  minScore -= margin;
-  maxScore += margin;
+  const fullMin = Math.min(...fullValues) - (Math.max(...fullValues) - Math.min(...fullValues)) * 0.12 || -0.01;
+  const fullMax = Math.max(...fullValues) + (Math.max(...fullValues) - Math.min(...fullValues)) * 0.12 || 0.01;
 
-  const maxGen = Math.max(...(progression || []).map(p => p.gen), 5);
+  let minS, maxS;
+  if (zoomState.yMin != null && zoomState.yMax != null) {
+    minS = zoomState.yMin;
+    maxS = zoomState.yMax;
+  } else if (zoomState.mode === 'auto' && allScores.length >= 1) {
+    const autoRange = computeAutoRange(allScores, target, baseline);
+    if (autoRange) { minS = autoRange.min; maxS = autoRange.max; }
+    else { minS = fullMin; maxS = fullMax; }
+  } else {
+    minS = fullMin; maxS = fullMax;
+  }
 
-  function x(gen) { return pad.left + (gen / maxGen) * chartW; }
-  function y(score) { return pad.top + chartH - ((score - minScore) / (maxScore - minScore)) * chartH; }
+  const maxGen = Math.max(...allPoints.map(p => p.gen), 5);
 
-  // Grid lines
+  function xPos(gen) { return pad.left + (gen / maxGen) * chartW; }
+  function yPos(score) { return pad.top + chartH - ((score - minS) / (maxS - minS)) * chartH; }
+
+  chartState = { pad, W, H, chartW, chartH, minS, maxS, fullMin, fullMax, maxGen, dec, xPos, yPos, higherIsBetter };
+
+  // ---- Layer 0: Grid ----
   ctx.strokeStyle = '#e2e8f0';
   ctx.lineWidth = 1;
-  for (let i = 0; i <= 5; i++) {
-    const yy = pad.top + (i / 5) * chartH;
+  const gridLines = 6;
+  for (let i = 0; i <= gridLines; i++) {
+    const yy = pad.top + (i / gridLines) * chartH;
     ctx.beginPath();
     ctx.moveTo(pad.left, yy);
     ctx.lineTo(W - pad.right, yy);
     ctx.stroke();
 
-    const scoreLabel = (maxScore - (i / 5) * (maxScore - minScore)).toFixed(dec);
+    const label = (maxS - (i / gridLines) * (maxS - minS)).toFixed(dec);
     ctx.fillStyle = '#94a3b8';
     ctx.font = '10px JetBrains Mono, monospace';
     ctx.textAlign = 'right';
-    ctx.fillText(scoreLabel, pad.left - 8, yy + 3);
+    ctx.fillText(label, pad.left - 8, yy + 3);
   }
 
-  // X axis labels
+  // X axis
   ctx.textAlign = 'center';
   ctx.fillStyle = '#475569';
-  for (let g = 0; g <= maxGen; g += Math.max(1, Math.floor(maxGen / 10))) {
-    ctx.fillText('G' + g, x(g), H - 8);
+  ctx.font = '10px JetBrains Mono, monospace';
+  const xStep = Math.max(1, Math.floor(maxGen / 10));
+  for (let g = 0; g <= maxGen; g += xStep) {
+    ctx.fillText('G' + g, xPos(g), H - 8);
   }
 
-  // Baseline line (initial program)
+  // ---- Layer 1: Baseline line ----
   if (baseline != null) {
+    const by = yPos(baseline);
     ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)';
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
-    ctx.moveTo(pad.left, y(baseline));
-    ctx.lineTo(W - pad.right, y(baseline));
+    ctx.moveTo(pad.left, by);
+    ctx.lineTo(W - pad.right, by);
     ctx.stroke();
     ctx.setLineDash([]);
+    // Label — position on right side to avoid overlap with direction arrow
     ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
-    ctx.font = '10px JetBrains Mono, monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText('BASELINE ' + baseline.toFixed(dec), pad.left + 5, y(baseline) - 5);
+    ctx.font = '9px JetBrains Mono, monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText('BASELINE ' + baseline.toFixed(dec), W - pad.right - 5, by - 5);
   }
 
-  // Target line
+  // ---- Layer 2: Target line ----
   if (target != null) {
+    const ty = yPos(target);
     ctx.strokeStyle = 'rgba(5, 150, 105, 0.35)';
     ctx.lineWidth = 1;
     ctx.setLineDash([6, 4]);
     ctx.beginPath();
-    ctx.moveTo(pad.left, y(target));
-    ctx.lineTo(W - pad.right, y(target));
+    ctx.moveTo(pad.left, ty);
+    ctx.lineTo(W - pad.right, ty);
     ctx.stroke();
     ctx.setLineDash([]);
-
     ctx.fillStyle = 'rgba(5, 150, 105, 0.6)';
-    ctx.font = '10px JetBrains Mono, monospace';
-    ctx.textAlign = 'right';
-    ctx.fillText('TARGET ' + target.toFixed(dec), W - pad.right - 5, y(target) - 5);
+    ctx.font = '9px JetBrains Mono, monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('TARGET ' + target.toFixed(dec), pad.left + 5, ty - 5);
   }
 
-  // "Better" direction arrow
+  // Direction indicator — top-right corner (no overlap)
   ctx.fillStyle = '#94a3b8';
-  ctx.font = '10px JetBrains Mono, monospace';
-  ctx.textAlign = 'left';
-  const betterDir = higherIsBetter ? '\u2191 better' : '\u2193 better';
-  ctx.fillText(betterDir, pad.left + 5, pad.top + 12);
+  ctx.font = '9px JetBrains Mono, monospace';
+  ctx.textAlign = 'right';
+  ctx.fillText(higherIsBetter ? '\u2191 better' : '\u2193 better', W - pad.right - 5, pad.top + 10);
 
-  if (progression && progression.length > 0) {
-    // Gradient fill
-    const betterY = higherIsBetter ? y(maxScore) : y(minScore);
-    const worseY = higherIsBetter ? y(minScore) : y(maxScore);
+  // ---- Clip to chart area for data layers ----
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(pad.left - 2, pad.top - 2, chartW + 4, chartH + 4);
+  ctx.clip();
+
+  // ---- Layer 3: Scatter — all solutions as small dots ----
+  allPoints.forEach(pt => {
+    pt.px = xPos(pt.gen);
+    pt.py = yPos(pt.score);
+  });
+
+  allPoints.forEach(pt => {
+    if (pt.isGenBest || pt.isRecord) return; // drawn later
+    ctx.fillStyle = pt.inProgress ? 'rgba(37, 99, 235, 0.25)' : 'rgba(148, 163, 184, 0.35)';
+    ctx.beginPath();
+    ctx.arc(pt.px, pt.py, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // ---- Layer 4: Best-so-far fill + line (connecting records) ----
+  if (records.length > 0) {
+    // Gradient fill under the line through records
+    const betterY = higherIsBetter ? yPos(maxS) : yPos(minS);
+    const worseY = higherIsBetter ? yPos(minS) : yPos(maxS);
     const grad = ctx.createLinearGradient(0, betterY, 0, worseY);
-    grad.addColorStop(0, 'rgba(5, 150, 105, 0.15)');
+    grad.addColorStop(0, 'rgba(5, 150, 105, 0.12)');
     grad.addColorStop(1, 'rgba(5, 150, 105, 0)');
 
-    if (progression.length > 1) {
+    if (records.length > 1) {
       ctx.fillStyle = grad;
       ctx.beginPath();
-      const baseY = higherIsBetter ? y(minScore) : y(maxScore);
-      ctx.moveTo(x(progression[0].gen), baseY);
-      progression.forEach(p => ctx.lineTo(x(p.gen), y(p.best_fitness)));
-      ctx.lineTo(x(progression[progression.length - 1].gen), baseY);
+      const baseY = higherIsBetter ? yPos(minS) : yPos(maxS);
+      ctx.moveTo(xPos(records[0].gen), baseY);
+      for (const r of records) {
+        ctx.lineTo(xPos(r.gen), yPos(r.score));
+      }
+      const lastR = records[records.length - 1];
+      ctx.lineTo(xPos(lastR.gen), baseY);
       ctx.closePath();
       ctx.fill();
     }
 
-    // Line
+    // Line connecting records
     ctx.strokeStyle = '#059669';
     ctx.lineWidth = 2;
     ctx.lineJoin = 'round';
     ctx.beginPath();
-    progression.forEach((p, i) => {
-      if (i === 0) ctx.moveTo(x(p.gen), y(p.best_fitness));
-      else ctx.lineTo(x(p.gen), y(p.best_fitness));
+    records.forEach((r, i) => {
+      const rx = xPos(r.gen);
+      const ry = yPos(r.score);
+      if (i === 0) ctx.moveTo(rx, ry);
+      else ctx.lineTo(rx, ry);
     });
     ctx.stroke();
-
-    // Points
-    progression.forEach(p => {
-      ctx.fillStyle = '#059669';
-      ctx.beginPath();
-      ctx.arc(x(p.gen), y(p.best_fitness), 3, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(x(p.gen), y(p.best_fitness), 1.5, 0, Math.PI * 2);
-      ctx.fill();
-    });
   }
+
+  // ---- Layer 5: Gen-best dots (medium, blue) ----
+  genBests.forEach(pt => {
+    if (pt.isRecord) return; // drawn as star
+    ctx.fillStyle = '#2563eb';
+    ctx.beginPath();
+    ctx.arc(pt.px, pt.py, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(pt.px, pt.py, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // ---- Layer 6: Record stars (new best ever) ----
+  records.forEach(pt => {
+    drawStar(ctx, pt.px, pt.py, 5, 8, 4, '#059669');
+    // White center
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(pt.px, pt.py, 2, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // ---- Layer 7: Selected point highlight ----
+  if (selectedPoint) {
+    const sp = selectedPoint;
+    ctx.strokeStyle = '#059669';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(sp.px, sp.py, 10, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // ---- End clip ----
+  ctx.restore();
+
+  // ---- Outlier indicators ----
+  const aboveCount = allPoints.filter(p => p.py < pad.top).length;
+  const belowCount = allPoints.filter(p => p.py > pad.top + chartH).length;
+  if (aboveCount > 0) {
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '9px JetBrains Mono, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('\u25b2 ' + aboveCount + ' above', pad.left + chartW / 2, pad.top - 4);
+  }
+  if (belowCount > 0) {
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '9px JetBrains Mono, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('\u25bc ' + belowCount + ' below', pad.left + chartW / 2, pad.top + chartH + 14);
+  }
+
+  // Store points for hit testing
+  chartPoints = allPoints;
 }
 
-// Resize chart on window resize
-window.addEventListener('resize', () => {
-  if (overviewData) {
-    const c = overviewData.config;
-    const initScores = (overviewData.initial_scores || []).filter(x => x.score != null).map(x => x.score);
-    let bl = initScores.length > 0 ? (c.higher_is_better ? Math.max(...initScores) : Math.min(...initScores)) : null;
-    if (bl == null && c.baseline_score != null) bl = c.baseline_score;
-    let prog = overviewData.progression;
-    if ((!prog || prog.length === 0) && overviewData.generations.length > 0) {
-      prog = overviewData.generations.filter(g => g.best_score != null).map(g => ({ gen: g.gen, best_fitness: g.best_score }));
-    }
-    drawChart(prog, c.target_score, c.higher_is_better, bl, c.decimals || 4);
+function drawStar(ctx, cx, cy, spikes, outerR, innerR, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  let rot = -Math.PI / 2;
+  for (let i = 0; i < spikes; i++) {
+    ctx.lineTo(cx + Math.cos(rot) * outerR, cy + Math.sin(rot) * outerR);
+    rot += Math.PI / spikes;
+    ctx.lineTo(cx + Math.cos(rot) * innerR, cy + Math.sin(rot) * innerR);
+    rot += Math.PI / spikes;
   }
-});
+  ctx.closePath();
+  ctx.fill();
+}
+
+// ---- Chart Interactivity ----
+function chartHitTest(mouseX, mouseY) {
+  if (!chartPoints.length) return null;
+  let closest = null;
+  let minDist = 20; // max pixel distance to register a hit
+  for (const pt of chartPoints) {
+    // Skip points outside the visible (clipped) area
+    if (chartState && (pt.py < chartState.pad.top - 2 || pt.py > chartState.pad.top + chartState.chartH + 2)) continue;
+    const dx = pt.px - mouseX;
+    const dy = pt.py - mouseY;
+    const d = Math.sqrt(dx * dx + dy * dy);
+    if (d < minDist) {
+      minDist = d;
+      closest = pt;
+    }
+  }
+  return closest;
+}
+
+function showChartTooltip(pt, mouseX, mouseY) {
+  const tt = document.getElementById('chartTooltip');
+  const container = document.getElementById('chartContainer');
+  if (!tt || !container) return;
+
+  const dec = (chartState && chartState.dec) || 4;
+  const agentType = pt.agent.split('_')[0];
+  const badgeClass = 'badge-' + agentType;
+  let html = `<div class="tt-label">Gen ${pt.gen} &middot; ${esc(pt.agent)}</div>`;
+  html += `<div class="tt-score" style="color: ${pt.isRecord ? 'var(--accent)' : 'var(--text-primary)'}">${pt.score.toFixed(dec)}</div>`;
+  html += `<div style="color:var(--text-tertiary)">${esc(pt.file)}</div>`;
+  if (pt.isRecord) html += `<div class="tt-record">\u2605 New record</div>`;
+  else if (pt.isGenBest) html += `<div style="color:var(--blue);font-size:0.65rem">Gen best</div>`;
+  if (pt.inProgress) html += `<div style="color:var(--amber);font-size:0.65rem">In progress</div>`;
+
+  tt.innerHTML = html;
+  tt.classList.add('visible');
+
+  // Position tooltip avoiding edges
+  const cRect = container.getBoundingClientRect();
+  let tx = mouseX + 14;
+  let ty = mouseY - 10;
+  if (tx + 200 > cRect.width) tx = mouseX - 200;
+  if (ty < 0) ty = mouseY + 14;
+  tt.style.left = tx + 'px';
+  tt.style.top = ty + 'px';
+}
+
+function hideChartTooltip() {
+  const tt = document.getElementById('chartTooltip');
+  if (tt) tt.classList.remove('visible');
+}
+
+// Canvas event listeners
+(function initChartEvents() {
+  const canvas = document.getElementById('progressionChart');
+  if (!canvas) return;
+
+  canvas.addEventListener('mousemove', e => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const hit = chartHitTest(mx, my);
+    if (hit) {
+      canvas.style.cursor = 'pointer';
+      showChartTooltip(hit, mx, my);
+    } else {
+      canvas.style.cursor = 'crosshair';
+      hideChartTooltip();
+    }
+  });
+
+  canvas.addEventListener('mouseleave', () => {
+    hideChartTooltip();
+    canvas.style.cursor = 'crosshair';
+  });
+
+  let skipNextClick = false;
+
+  canvas.addEventListener('click', e => {
+    if (skipNextClick) { skipNextClick = false; return; }
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const hit = chartHitTest(mx, my);
+    if (hit) {
+      selectedPoint = hit;
+      redrawChart();
+    } else {
+      selectedPoint = null;
+      redrawChart();
+    }
+  });
+
+  // Wheel zoom — centered on cursor Y position
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    if (!chartState) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const my = e.clientY - rect.top;
+    const { pad: p, chartH: ch, minS: curMin, maxS: curMax, fullMin: fMin, fullMax: fMax } = chartState;
+
+    // Convert mouse Y to score
+    const frac = 1 - (my - p.top) / ch;
+    const centerScore = curMin + frac * (curMax - curMin);
+
+    // Zoom factor: 10% per tick
+    const factor = e.deltaY > 0 ? 1.1 : 0.9;
+    let newMin = centerScore - (centerScore - curMin) * factor;
+    let newMax = centerScore + (curMax - centerScore) * factor;
+
+    // Clamp to full data range
+    if (newMin < fMin) newMin = fMin;
+    if (newMax > fMax) newMax = fMax;
+    if (newMax - newMin < 0.0001) return;
+
+    zoomState.yMin = newMin;
+    zoomState.yMax = newMax;
+    zoomState.mode = 'manual';
+    updateZoomToggle();
+    redrawChart();
+  }, { passive: false });
+
+  // Double-click to reset zoom
+  canvas.addEventListener('dblclick', () => {
+    skipNextClick = true;
+    zoomState = { mode: 'auto', yMin: null, yMax: null };
+    updateZoomToggle();
+    redrawChart();
+  });
+
+  // Toggle button
+  const zoomBtn = document.getElementById('chartZoomToggle');
+  if (zoomBtn) {
+    zoomBtn.addEventListener('click', () => {
+      if (zoomState.mode === 'auto') {
+        zoomState = { mode: 'full', yMin: null, yMax: null };
+      } else {
+        zoomState = { mode: 'auto', yMin: null, yMax: null };
+      }
+      updateZoomToggle();
+      redrawChart();
+    });
+  }
+})();
+
+// Centralized chart redraw — call after data changes or window resize
+function redrawChart() {
+  if (!overviewData) return;
+  // Reset auto-range on data refresh so it recomputes with new data
+  if (zoomState.mode === 'auto') {
+    zoomState.yMin = null;
+    zoomState.yMax = null;
+  }
+  const c = overviewData.config;
+  const sv = c.sentinel_value;
+  const hib = c.higher_is_better;
+  const ns = v => v != null && v !== sv;
+
+  // Baseline
+  const initScores = (overviewData.initial_scores || []).filter(x => ns(x.score)).map(x => x.score);
+  let bl = initScores.length > 0 ? (hib ? Math.max(...initScores) : Math.min(...initScores)) : null;
+  if (bl == null && c.baseline_score != null) bl = c.baseline_score;
+
+  // Progression fallback (if no solutions data yet)
+  let prog = overviewData.progression
+    ? overviewData.progression.filter(p => ns(p.best_fitness))
+    : [];
+  if (prog.length === 0 && overviewData.generations.length > 0) {
+    prog = overviewData.generations.filter(g => ns(g.best_score)).map(g => ({ gen: g.gen, best_fitness: g.best_score }));
+  }
+  // Append in-progress generations
+  if (prog.length > 0 && overviewData.generations.length > 0) {
+    const progGens = new Set(prog.map(p => p.gen));
+    overviewData.generations.forEach(g => {
+      if (ns(g.best_score) && !progGens.has(g.gen)) {
+        prog.push({ gen: g.gen, best_fitness: g.best_score });
+      }
+    });
+    prog.sort((a, b) => a.gen - b.gen);
+  }
+
+  const chartData = buildChartData(solutionsData, prog, hib, sv);
+  drawChart(chartData, c.target_score, hib, bl, c.decimals || 4);
+}
+
+// Chart redraws on data refresh, not on window resize
 
 // ----- Solutions -----
 async function loadSolutions() {
-  if (!solutionsData) {
-    solutionsData = await apiFetch('/api/solutions');
+  solutionsData = await apiFetch('/api/solutions');
+  // Set correct initial sort direction based on fitness direction
+  if (overviewData && overviewData.config && solSort.key === 'score') {
+    solSort.dir = overviewData.config.higher_is_better ? -1 : 1;
   }
   renderSolutions();
 }
@@ -412,11 +864,16 @@ function renderSolutions() {
   if (solFilterGen !== 'all') filtered = filtered.filter(s => s.gen == solFilterGen);
   if (solFilterAgent !== 'all') filtered = filtered.filter(s => s.agent_type === solFilterAgent);
 
-  // Sort
+  // Sort — sentinels and nulls always go to the bottom
+  const sv = (overviewData && overviewData.config) ? overviewData.config.sentinel_value : null;
   filtered.sort((a, b) => {
     let av = a[solSort.key], bv = b[solSort.key];
-    if (av == null) av = -99999;
-    if (bv == null) bv = -99999;
+    // Push sentinel/null to bottom regardless of direction
+    const aBottom = av == null || (solSort.key === 'score' && (a.is_sentinel || av === sv));
+    const bBottom = bv == null || (solSort.key === 'score' && (b.is_sentinel || bv === sv));
+    if (aBottom && bBottom) return 0;
+    if (aBottom) return 1;
+    if (bBottom) return -1;
     if (typeof av === 'string') return av.localeCompare(bv) * solSort.dir;
     return (av - bv) * solSort.dir;
   });
@@ -432,9 +889,10 @@ function renderSolutions() {
   info.textContent = filtered.length + ' solution' + (filtered.length !== 1 ? 's' : '');
 
   tbody.innerHTML = filtered.map(s => {
-    const scoreClass = s.score == null ? 'score-none' : '';
+    const isSentinel = s.is_sentinel || (sv != null && s.score === sv);
+    const scoreClass = s.score == null ? 'score-none' : isSentinel ? 'score-none' : '';
     const dec = (overviewData && overviewData.config) ? overviewData.config.decimals || 4 : 4;
-    const scoreText = s.score != null ? s.score.toFixed(dec) : '--';
+    const scoreText = isSentinel ? 'ERR' : (s.score != null ? s.score.toFixed(dec) : '--');
     const validClass = s.is_valid ? 'valid-yes' : 'valid-no';
     const sizeStr = s.size > 1024 ? (s.size / 1024).toFixed(1) + 'K' : s.size + 'B';
     const badgeClass = 'badge-' + s.agent_type;
@@ -457,7 +915,16 @@ document.querySelectorAll('.sol-table th[data-sort]').forEach(th => {
   th.addEventListener('click', () => {
     const key = th.dataset.sort;
     if (solSort.key === key) solSort.dir *= -1;
-    else { solSort.key = key; solSort.dir = key === 'score' ? -1 : 1; }
+    else {
+      solSort.key = key;
+      if (key === 'score') {
+        // Best-first: descending for higher-is-better, ascending for lower-is-better
+        const hib = overviewData && overviewData.config ? overviewData.config.higher_is_better : true;
+        solSort.dir = hib ? -1 : 1;
+      } else {
+        solSort.dir = 1;
+      }
+    }
 
     document.querySelectorAll('.sol-table th').forEach(h => {
       h.classList.remove('sort-active');
@@ -586,7 +1053,69 @@ document.getElementById('ideasControls').addEventListener('click', e => {
 });
 
 // ----- Reports -----
+function renderFeedback(data) {
+  const section = document.getElementById('feedbackSection');
+  const empty = document.getElementById('feedbackEmpty');
+  if (!section) return;
+
+  if (!data || (!data.recommendations && data.analyses.length === 0 && data.consistency_reviews.length === 0)) {
+    section.innerHTML = '';
+    section.appendChild(empty);
+    empty.style.display = 'block';
+    return;
+  }
+
+  empty.style.display = 'none';
+  let html = '<div class="feedback-cards">';
+
+  // Current recommendations
+  if (data.recommendations) {
+    html += `
+      <div class="feedback-card feedback-recs">
+        <div class="feedback-card-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="feedback-toggle">&#9654;</span>
+          <span class="feedback-badge recs">Recommendations</span>
+          <span class="feedback-label">Current system critic recommendations</span>
+        </div>
+        <div class="feedback-card-body"><pre class="feedback-pre">${esc(data.recommendations)}</pre></div>
+      </div>`;
+  }
+
+  // Analyses (newest first)
+  data.analyses.forEach(a => {
+    const ipBadge = a.in_progress ? '<span class="live-agent-status-label" style="margin-left:6px;font-size:0.58rem;color:var(--amber)">IN PROGRESS</span>' : '';
+    html += `
+      <div class="feedback-card feedback-analysis">
+        <div class="feedback-card-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="feedback-toggle">&#9654;</span>
+          <span class="feedback-badge analysis">Critic Analysis</span>
+          <span class="report-gen-badge">Gen ${a.gen}</span>${ipBadge}
+        </div>
+        <div class="feedback-card-body"><pre class="feedback-pre">${esc(a.content)}</pre></div>
+      </div>`;
+  });
+
+  // Consistency reviews
+  data.consistency_reviews.forEach(r => {
+    html += `
+      <div class="feedback-card feedback-consistency">
+        <div class="feedback-card-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="feedback-toggle">&#9654;</span>
+          <span class="feedback-badge consistency">Consistency Review</span>
+          <span class="report-gen-badge">Gen ${r.gen}</span>
+        </div>
+        <div class="feedback-card-body"><pre class="feedback-pre">${esc(r.content)}</pre></div>
+      </div>`;
+  });
+
+  html += '</div>';
+  section.innerHTML = html;
+}
+
 async function loadReports() {
+  // Load feedback (critic/consistency) in parallel with reports
+  apiFetch('/api/feedback').then(renderFeedback);
+
   const data = await apiFetch('/api/reports');
   if (!data) return;
   reportsData = data;
@@ -903,4 +1432,16 @@ function openKnowledgeModal(kind, itemId) {
 
 // ----- Init -----
 loadOverview();
-refreshTimer = setInterval(loadOverview, 10000);
+refreshTimer = setInterval(loadOverview, 60000);
+
+// Manual refresh button
+document.getElementById('refreshBtn')?.addEventListener('click', () => {
+  const activeTab = document.querySelector('.nav-btn.active')?.dataset.tab;
+  if (activeTab === 'overview') loadOverview();
+  else if (activeTab === 'solutions') loadSolutions();
+  else if (activeTab === 'knowledge') loadKnowledge();
+  else if (activeTab === 'reports') loadReports();
+  else if (activeTab === 'architecture') loadFiles();
+  else if (activeTab === 'pipeline') { loadOverview(); loadActiveAgents(); }
+  else loadOverview();
+});

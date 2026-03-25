@@ -65,10 +65,17 @@
     <div class="chart-section">
       <div class="section-header">
         <span class="section-title">Score Progression</span>
-        <span class="section-title" style="font-size: 0.7rem; color: var(--text-ghost)">Fitness over generations</span>
+        <button class="chart-zoom-btn active" id="chartZoomToggle" title="Scroll to zoom, double-click to reset">Auto-focus</button>
+        <span class="chart-legend" id="chartLegend">
+          <span class="legend-item"><span class="legend-dot" style="background:var(--text-ghost);opacity:0.4"></span>All solutions</span>
+          <span class="legend-item"><span class="legend-dot" style="background:var(--blue)"></span>Gen best</span>
+          <span class="legend-item"><span class="legend-star">&#9733;</span>New record</span>
+          <span class="legend-item"><span class="legend-line" style="background:var(--accent)"></span>Best so far</span>
+        </span>
       </div>
-      <div class="chart-container">
+      <div class="chart-container" id="chartContainer">
         <canvas id="progressionChart"></canvas>
+        <div class="chart-tooltip" id="chartTooltip"></div>
       </div>
     </div>
 

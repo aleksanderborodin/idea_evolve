@@ -1,23 +1,48 @@
 {
   "generations": {
     "gen001": {
-      "architect": 138.2,
-      "agent_explore_1_work": 458.2,
+      "architect": 132.3,
       "agent_research_1_work": 600.1,
-      "agent_research_1_wrap_up": 63.4,
-      "agent_research_1": 663.5,
+      "agent_research_1_wrap_up": 172.1,
+      "agent_research_1": 772.3,
       "agent_full_1_work": 900.1,
-      "agent_full_1_wrap_up": 160.7,
-      "agent_full_1_debrief": 266.6,
-      "agent_full_1": 1166.7,
-      "agent_explore_2_work": 1200.2,
-      "agent_explore_1_wrap_up": 900.1,
-      "agent_explore_1_debrief": 1028.7,
-      "agent_explore_1": 1486.9,
-      "agent_explore_2_wrap_up": 900.1,
-      "agent_explore_2_debrief": 973.8,
-      "agent_explore_2": 2174.0,
-      "evaluator": 554.8
+      "agent_full_1_wrap_up": 62.5,
+      "agent_full_1_debrief": 117.4,
+      "agent_full_1": 1017.5,
+      "agent_explore_1_work": 1200.2,
+      "agent_explore_2_work": 1200.1,
+      "agent_explore_1_wrap_up": 23.2,
+      "agent_explore_2_wrap_up": 96.6,
+      "agent_explore_2": 1296.8,
+      "agent_explore_1_debrief": 145.1,
+      "agent_explore_1": 1345.2,
+      "evaluator": 421.1
+    },
+    "gen002": {
+      "architect": 206.2,
+      "agent_explore_1_work": 1200.3,
+      "agent_explore_2_work": 1200.3,
+      "agent_full_1_work": 1200.3,
+      "agent_exploit_1_work": 1500.2,
+      "agent_explore_2_wrap_up": 589.3,
+      "agent_explore_2": 1789.6,
+      "agent_explore_1_wrap_up": 744.9,
+      "agent_explore_1": 1945.2,
+      "agent_full_1_wrap_up": 900.1,
+      "agent_full_1_debrief": 945.2,
+      "agent_full_1": 2145.5,
+      "agent_exploit_1_wrap_up": 666.9,
+      "agent_exploit_1": 2167.1,
+      "evaluator": 900.1,
+      "evaluator_wrap_up": 48.6,
+      "evaluator_debrief": 301.9,
+      "system_critic": 307.8,
+      "consistency_reviewer": 322.2,
+      "consistency_reviewer_debrief": 24.7,
+      "total": 4230.3
+    },
+    "gen003": {
+      "architect": 242.8
     }
   }
 }

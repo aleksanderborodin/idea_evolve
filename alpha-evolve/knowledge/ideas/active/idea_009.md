@@ -1,30 +1,29 @@
 ---
 type: idea
 id: idea_009
-name: "Symmetry enforcement"
+name: "Softplus reparameterization for non-negativity"
 lifecycle: active
-confidence: 0.5
+confidence: 0.6
 first_seen: generation_1
 last_updated: generation_1
 last_confirmed_gen: 1
-supported_by: []
-contradicted_by: [gen001_explore_2_sol01, gen001_explore_2_sol02]
-related_ideas: [idea_006]
-cluster: cluster_002
-tags: [symmetry, parameterization, constraint]
+supported_by: [gen001_full_1_sol03, gen001_full_1_sol04]
+contradicted_by: []
+related_ideas: [idea_005, idea_001]
+cluster: cluster_001
+tags: [reparameterization, softplus, non-negativity, constraint]
 ---
 
-Enforce even symmetry f(x) = f(-x) by optimizing only on [0, 1/4] and mirroring. This halves
-the parameter count and eliminates asymmetric local minima. Research_1 provides strong
-theoretical motivation: the extremal function is almost certainly even-symmetric.
+Instead of using relu(f) or bounds to enforce non-negativity, parameterize
+f = softplus(raw_params) where raw_params are unconstrained. This ensures
+f > 0 strictly (no dead gradients from relu's flat region at 0) and provides
+smooth gradients everywhere.
 
-Gen 1 evidence is NEGATIVE but confounded:
-- explore_2/sol01 (symmetric Gaussian, C=2.0000) and sol02 (symmetry-enforced free-form, C=2.0000)
-  both scored C ~ 2.0. HOWEVER, these used symmetric initialization with a SINGLE centered bump,
-  which is provably bad (for even unimodal functions, f*f peaks at t=0 and C >= 2).
+**Evidence:**
+- full_1/sol03 and sol04 (both top-2 solutions) use softplus reparameterization.
+- explore_1/sol05 and sol07 use relu — also good but 0.005 worse than softplus solutions.
+- explore_2/sol09 uses relu — 1.5182.
 
-The issue is NOT symmetry enforcement itself — it's that symmetry + unimodal init = bad basin.
-Symmetry + TWO-BUMP init (which shifts the autoconvolution peak away from t=0) is the correct
-combination and has NOT been tested. This is a high-priority experiment for gen 2.
-
-full_1/sol01 also used symmetry + relu projection and scored C=2.0, confirming the same issue.
+The evidence is suggestive but not conclusive: sol03's advantage over sol05 could
+be due to smooth-max rather than softplus. A controlled experiment isolating softplus
+vs relu with the same optimizer would clarify.

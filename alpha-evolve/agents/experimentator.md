@@ -94,6 +94,7 @@ the experiment completes. Directory structure:
 - `output/sandbox/scripts/` — executable test scripts
 - `output/sandbox/data/` — raw output logs and measurements
 - `output/sandbox/notes.md` — any observations made during execution
+- `output/report.md` — debrief report (written per the debrief instructions appended to your prompt)
 
 ## Principles
 

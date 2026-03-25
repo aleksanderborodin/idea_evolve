@@ -1,68 +1,89 @@
-# fitness: 0.0
-# Approach: L-BFGS-B via scipy for fast convergence from warm start
-# L-BFGS builds a curvature model and takes large Newton-like steps,
-# converging in far fewer iterations than Adam.
-# Two phases: Adam warm-start (5000 steps) then L-BFGS refinement.
+# fitness: 1.5278
+# Long asymmetric optimization: 70k total steps with softplus parameterization
+# Key insight from sol02/sol03: asymmetric init enables C < 1.6.
+# Strategy: best of 3 random asymmetric seeds (35k each), then
+# continue best for 35k more = 70k total for winner.
+# softplus parameterization ensures smooth positive constraint (better gradients than relu).
 
-import numpy as np
-import jax
-import jax.numpy as jnp
-import optax
-from scipy.optimize import minimize
 import sys
 sys.path.insert(0, '/home/sasha/Desktop/project_alpha/alpha-evolve/problem')
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+import optax
+
 from helper import compute_c
 
 
-def entrypoint() -> np.ndarray:
-    N = 800
+def run_phase(params, opt, num_steps):
+    opt_state = opt.init(params)
 
-    # Phase 1: Adam warm-start from middle box init
-    schedule = optax.warmup_cosine_decay_schedule(
-        init_value=0.0, peak_value=0.01,
-        warmup_steps=500, decay_steps=9500, end_value=1e-4,
-    )
-    optimizer = optax.adam(schedule)
-    key = jax.random.PRNGKey(42)
-    f_values = jnp.zeros((N,))
-    f_values = f_values.at[N//4:3*N//4].set(1.0)
-    f_values = f_values + 0.05 * jax.random.uniform(key, (N,))
-
-    opt_state = optimizer.init(f_values)
+    def objective(p):
+        return compute_c(jax.nn.softplus(p))
 
     @jax.jit
-    def train_step(p, st):
-        loss, grads = jax.value_and_grad(compute_c)(p)
-        updates, st = optimizer.update(grads, st, p)
+    def train_step(p, opt_st):
+        loss, grads = jax.value_and_grad(objective)(p)
+        updates, opt_st = opt.update(grads, opt_st, p)
         p = optax.apply_updates(p, updates)
-        return p, st, loss
+        return p, opt_st, loss
 
-    # 10k Adam warm-up steps
-    for _ in range(10000):
-        f_values, opt_state, loss = train_step(f_values, opt_state)
+    for _ in range(num_steps):
+        params, opt_state, loss = train_step(params, opt_state)
+    return params, float(loss)
 
-    warm_start = np.array(f_values)
 
-    # Phase 2: L-BFGS-B refinement (no non-negativity constraint — relu applied inside)
-    # Objective and gradient via JAX
-    @jax.jit
-    def obj_and_grad(x):
-        f = jnp.array(x)
-        val, g = jax.value_and_grad(compute_c)(f)
-        return val, g
+def entrypoint() -> np.ndarray:
+    N = 1000
+    x = jnp.linspace(-0.25, 0.25, N, endpoint=False)
 
-    def scipy_obj(x):
-        val, g = obj_and_grad(x.astype(np.float32))
-        return float(val), np.array(g, dtype=np.float64)
+    def to_params(f_raw):
+        # Inverse softplus: softplus(p) = f_raw => p = log(exp(f_raw) - 1)
+        f_clamped = jnp.maximum(f_raw, 1e-3)
+        return jnp.log(jnp.exp(f_clamped) - 1.0 + 1e-7)
 
-    result = minimize(
-        scipy_obj,
-        warm_start.astype(np.float64),
-        method='L-BFGS-B',
-        jac=True,
-        bounds=[(0, None)] * N,  # non-negativity constraint as bounds
-        options={'maxiter': 10000, 'ftol': 1e-15, 'gtol': 1e-8}
+    # Three asymmetric seeds
+    seeds = [
+        # Seed A: ramp on right half
+        jnp.where(x >= 0, 1.5 + 4.0 * x, 0.1),
+        # Seed B: steep ramp on right quarter
+        jnp.where(x >= 0.05, 2.0 + 3.0 * (x - 0.05), 0.05),
+        # Seed C: two unequal bumps biased right
+        1.8 * jnp.exp(-((x - 0.1) ** 2) / (2 * 0.06 ** 2))
+        + 0.4 * jnp.exp(-((x + 0.1) ** 2) / (2 * 0.06 ** 2)) + 0.05,
+    ]
+
+    PHASE1_STEPS = 35000
+
+    best_params = None
+    best_c = float('inf')
+
+    for seed_f in seeds:
+        params = to_params(seed_f)
+        opt = optax.adam(
+            optax.warmup_cosine_decay_schedule(
+                init_value=0.0, peak_value=0.008,
+                warmup_steps=PHASE1_STEPS // 20,
+                decay_steps=PHASE1_STEPS - PHASE1_STEPS // 20,
+                end_value=1e-6,
+            )
+        )
+        final_params, c_val = run_phase(params, opt, PHASE1_STEPS)
+        if c_val < best_c:
+            best_c = c_val
+            best_params = final_params
+
+    # Phase 2: continue best for 35k more at lower lr
+    PHASE2_STEPS = 35000
+    opt2 = optax.adam(
+        optax.warmup_cosine_decay_schedule(
+            init_value=0.0, peak_value=0.003,
+            warmup_steps=PHASE2_STEPS // 20,
+            decay_steps=PHASE2_STEPS - PHASE2_STEPS // 20,
+            end_value=1e-6,
+        )
     )
+    best_params, _ = run_phase(best_params, opt2, PHASE2_STEPS)
 
-    f_final = np.maximum(result.x, 0.0)
-    return f_final.astype(np.float32)
+    return np.array(jax.nn.softplus(best_params))

@@ -1,66 +1,71 @@
-# fitness: 0.0
-# Approach: Extended Adam (80k steps) + L-BFGS refinement
-# The baseline uses 40k Adam steps. Running 80k gives more convergence time.
-# Then L-BFGS takes large Newton-like steps to refine from a good basin.
-# N=600 for consistency with baseline.
+# fitness: 1.5801
+# Gaussian mixture parameterization — learnable bump positions, widths, and heights
+# f(x) = sum_k h_k * exp(-(x - mu_k)^2 / (2*sigma_k^2))
+# This allows the optimizer to discover: how many bumps, where to place them, how wide.
+# Naturally positive by construction (no relu/softplus needed).
+# Key: asymmetric placement (don't restrict mu_k to be symmetric around 0).
 
-import numpy as np
-import jax
-import jax.numpy as jnp
-import optax
-from scipy.optimize import minimize
 import sys
 sys.path.insert(0, '/home/sasha/Desktop/project_alpha/alpha-evolve/problem')
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+import optax
+
 from helper import compute_c
 
 
 def entrypoint() -> np.ndarray:
-    N = 600
+    N = 1000
+    K = 8  # number of Gaussian components
+    x = jnp.linspace(-0.25, 0.25, N, endpoint=False)
 
-    # Phase 1: Extended Adam (80k steps from baseline init)
+    def build_f(log_h, mu, log_sigma):
+        # heights are exp(log_h) (positive)
+        # widths are exp(log_sigma) (positive)
+        h = jnp.exp(log_h)       # (K,)
+        sigma = jnp.exp(log_sigma)  # (K,)
+        # f(x) = sum_k h_k * exp(-(x - mu_k)^2 / (2*sigma_k^2))
+        # shape: broadcast (N, K) over x and mus
+        diff = x[:, None] - mu[None, :]  # (N, K)
+        gaussians = jnp.exp(-0.5 * (diff / sigma[None, :]) ** 2)  # (N, K)
+        return (gaussians * h[None, :]).sum(axis=1)  # (N,)
+
+    def objective(params):
+        log_h, mu, log_sigma = params
+        f = build_f(log_h, mu, log_sigma)
+        return compute_c(f)
+
+    # Asymmetric initialization: bumps biased toward right side
+    key = jax.random.PRNGKey(7)
+    log_h_init = jnp.zeros(K)
+    # Positions: somewhat spread, biased slightly right
+    mu_init = jnp.array([0.12, 0.08, 0.05, 0.15, -0.05, 0.18, -0.02, 0.1])
+    log_sigma_init = jnp.full((K,), jnp.log(0.05))
+
+    params = (log_h_init, mu_init, log_sigma_init)
+
+    num_steps = 80000
     schedule = optax.warmup_cosine_decay_schedule(
         init_value=0.0,
-        peak_value=0.005,
-        warmup_steps=2000,
-        decay_steps=78000,
-        end_value=1e-7,
+        peak_value=0.01,
+        warmup_steps=4000,
+        decay_steps=num_steps - 4000,
+        end_value=1e-6,
     )
-    optimizer = optax.adam(schedule)
-
-    key = jax.random.PRNGKey(42)
-    f_values = jnp.zeros((N,))
-    f_values = f_values.at[N//4:3*N//4].set(1.0)
-    f_values = f_values + 0.05 * jax.random.uniform(key, (N,))
-
-    opt_state = optimizer.init(f_values)
+    optimizer = optax.adam(learning_rate=schedule)
+    opt_state = optimizer.init(params)
 
     @jax.jit
-    def train_step(p, st):
-        loss, grads = jax.value_and_grad(compute_c)(p)
-        updates, st = optimizer.update(grads, st, p)
+    def train_step(p, opt_st):
+        loss, grads = jax.value_and_grad(objective)(p)
+        updates, opt_st = optimizer.update(grads, opt_st, p)
         p = optax.apply_updates(p, updates)
-        return p, st, loss
+        return p, opt_st, loss
 
-    for _ in range(80000):
-        f_values, opt_state, loss = train_step(f_values, opt_state)
+    for _ in range(num_steps):
+        params, opt_state, loss = train_step(params, opt_state)
 
-    warm = np.array(jax.nn.relu(f_values))
-
-    # Phase 2: L-BFGS-B from warm start
-    val_and_grad = jax.jit(jax.value_and_grad(compute_c))
-
-    def scipy_obj(x):
-        x_jax = jnp.array(x.astype(np.float32))
-        val, g = val_and_grad(x_jax)
-        return float(val), np.array(g, dtype=np.float64)
-
-    result = minimize(
-        scipy_obj,
-        warm.astype(np.float64),
-        method='L-BFGS-B',
-        jac=True,
-        bounds=[(0, None)] * N,
-        options={'maxiter': 5000, 'ftol': 1e-15, 'gtol': 1e-9}
-    )
-
-    return np.maximum(result.x, 0.0).astype(np.float32)
+    f_final = build_f(*params)
+    return np.array(f_final)

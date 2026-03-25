@@ -16,4 +16,5 @@ from .scanner import (
     get_solution_idea_map,
     get_eval_cache_stats,
     get_active_agents,
+    get_feedback,
 )

@@ -1,0 +1,25 @@
+generation: 3
+strategy_summary: "Coarse-scale SA (#1 priority), diverse coarse inits, warm-start polish from best, AlphaEvolve array retrieval"
+agents:
+  - type: explore
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen003/explore_1.md"
+    timeout: 1500
+  - type: explore
+    instance: 2
+    model: sonnet
+    brief: "briefs/gen003/explore_2.md"
+    timeout: 1200
+  - type: exploit
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen003/exploit_1.md"
+    timeout: 1200
+  - type: research
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen003/research_1.md"
+    timeout: 600
+parallel_groups:
+  - ["explore_1", "explore_2", "exploit_1", "research_1"]

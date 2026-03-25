@@ -3,23 +3,29 @@ type: idea
 id: idea_003
 name: "Function shape priors"
 lifecycle: active
-confidence: 0.4
+confidence: 0.5
 first_seen: generation_0
 last_updated: generation_1
 last_confirmed_gen: 1
-supported_by: []
-contradicted_by: [gen001_explore_1_sol03]
-related_ideas: [idea_006, idea_011]
+supported_by: [gen001_explore_1_sol05, gen001_full_1_sol03]
+contradicted_by: [gen001_explore_1_sol01, gen001_explore_2_sol01, gen001_explore_2_sol07]
+related_ideas: [idea_006, idea_008]
 cluster: cluster_002
-tags: [initialization, function-shape]
+tags: [initialization, shape, prior, gaussian, hann]
 ---
 
-Initialize with known function families with good autoconvolution properties. Gen 1 tested
-cosine window initialization (explore_1/sol03, C=1.5257) which did NOT improve over standard
-flat block init + optimization (explore_1/sol04, C=1.5178). The flat block centered on the
-middle half of the domain remains a reliable starting point.
+Initialize with known function families that have good autoconvolution properties:
+Gaussians, bump functions, cosine windows, B-splines. Use these as starting
+points for optimization rather than flat/random initialization.
 
-However, research_1 identified that two-bump and Sidon-set-inspired initializations are
-theoretically motivated (see idea_011). These have NOT been tested yet and may offer
-fundamentally different basins of attraction. The failure of cosine window init does not
-invalidate multi-bump priors — it only shows that smooth unimodal priors don't help.
+**Gen 1 evidence is mixed:**
+- Gaussian initialization (explore_1/sol01): 1.5207 — WORSE than flat+noise baseline.
+  Symmetric Gaussians converge to symmetric local minima with C >= 2 before breaking symmetry.
+- Hann window (explore_2/sol01): 3.0 — terrible. Symmetric and concentrated.
+- Gaussian mixture K=8 (explore_2/sol07): 1.5801 — over-parameterized, hard to optimize.
+- However, DIVERSE random bumps as seeds (explore_1/sol05, full_1/sol03) worked well
+  when combined with multi-restart — the shape prior is useful as part of a diverse
+  seed pool, not as a single initialization.
+
+Key insight: No single shape prior is reliably better than flat+noise. The value
+is in diversity of initializations across multiple restarts.

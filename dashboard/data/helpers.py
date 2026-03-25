@@ -98,6 +98,7 @@ def get_metrics_config() -> dict:
                     "decimals": spec.get("decimals", 4),
                     "lower_bound": spec.get("lower_bound"),
                     "upper_bound": spec.get("upper_bound"),
+                    "sentinel_value": spec.get("sentinel_value"),
                 }
         return {}
     except Exception:

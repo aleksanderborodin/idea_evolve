@@ -3,29 +3,31 @@ type: idea
 id: idea_006
 name: "Analytical constructions"
 lifecycle: active
-confidence: 0.5
+confidence: 0.4
 first_seen: generation_0
-last_updated: generation_1
+last_updated: generation_2
 last_confirmed_gen: 1
 supported_by: []
-contradicted_by: []
-related_ideas: [idea_011, idea_009]
+contradicted_by: [gen001_explore_2_sol01]
+related_ideas: [idea_003, idea_008]
 cluster: cluster_002
-tags: [analytical, mathematical-structure, sidon]
+tags: [analytical, theory, construction]
 ---
 
-Study the mathematical structure of the problem to construct or inform solutions analytically.
-Research_1 produced rich findings:
+Study the mathematical structure of the problem. The optimal function may
+have analytical properties (symmetry, specific support pattern) that can
+be constructed directly rather than optimized numerically.
 
-1. The optimal function is almost certainly even-symmetric (f(x) = f(-x)).
-2. Bimodal (two-bump) functions can shift the autoconvolution peak away from t=0, enabling
-   lower C than unimodal functions.
-3. Sidon set constructions from additive combinatorics provide good initialization templates.
-4. Known bounds: 1.28 <= C <= 1.5098. The target 1.5053 is just below the best known upper bound.
+**Gen 1 evidence:**
+- explore_2/sol01 (pure Hann window, no optimization): C=3.0 — analytical
+  constructions without optimization are far from competitive.
+- Research agent (research_1) found that the AlphaEvolve team achieved C=1.5032
+  with a 600-interval step function, and ThetaEvolve matched at 1.503133.
+- The optimal function has "non-symmetric, multi-peaked, complex structure"
+  according to literature — simple analytical forms don't suffice.
+- The arcsine distribution shape was suggested as a promising initialization
+  but remains untested.
 
-None of these analytical insights have been directly tested as solution strategies yet.
-The research strongly suggests that the current approach (flat block -> gradient descent ->
-unimodal solution) may be stuck in a suboptimal basin. Two-bump or multi-bump initializations
-could access a fundamentally better basin.
-
-Priority: HIGH for next generation. Test Sidon-inspired and two-bump initializations.
+The idea remains active because understanding the mathematical structure
+(e.g., C >= 2 for symmetric functions) provides critical guidance even if
+no closed-form optimum exists.

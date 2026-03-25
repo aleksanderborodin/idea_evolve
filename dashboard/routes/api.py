@@ -7,6 +7,7 @@ from dashboard.data import (
     get_config,
     get_coverage_matrix,
     get_eval_cache_stats,
+    get_feedback,
     get_file_tree,
     get_generation_status,
     get_initial_scores,
@@ -98,13 +99,14 @@ def overview():
     valid_solutions = sum(1 for s in all_sols if s.get("is_valid"))
 
     # Compute baseline: from initial programs, or from first generation's worst valid score
-    init_vals = [s["score"] for s in initial_scores if s.get("score") is not None]
+    sentinel = metrics.get("sentinel_value")
+    init_vals = [s["score"] for s in initial_scores
+                 if s.get("score") is not None and s.get("score") != sentinel]
     if init_vals:
         baseline_score = min(init_vals) if not higher_is_better else max(init_vals)
     elif generations:
-        # Use first generation's best as a rough baseline indicator
         first_gen_score = generations[0].get("best_score")
-        baseline_score = first_gen_score
+        baseline_score = first_gen_score if first_gen_score != sentinel else None
     else:
         baseline_score = None
 
@@ -116,6 +118,7 @@ def overview():
             "higher_is_better": higher_is_better,
             "decimals": metrics.get("decimals", 4),
             "baseline_score": baseline_score,
+            "sentinel_value": sentinel,
         },
         "agent_types": agent_types,
         "stats": {
@@ -183,6 +186,11 @@ def knowledge_item(kind, item_id):
 @api_bp.route("/files")
 def files():
     return jsonify(get_file_tree())
+
+
+@api_bp.route("/feedback")
+def feedback():
+    return jsonify(get_feedback())
 
 
 @api_bp.route("/generation/<int:gen>")

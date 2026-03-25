@@ -9,6 +9,7 @@ inspecting which files exist.
 
 import argparse
 import fcntl
+import hashlib
 import json
 import math
 import os
@@ -30,18 +31,18 @@ import yaml
 # ---------------------------------------------------------------------------
 
 DEFAULT_MAX_TURNS = {
-    "architect": 30,
-    "explore": 80,
-    "exploit": 80,
-    "genetic": 60,
-    "full": 80,
-    "research": 40,
-    "experimentator": 60,
-    "evaluator": 120,
-    "system_critic": 30,
-    "consistency_reviewer": 40,
-    "wrap_up": 60,
-    "debrief_recovery": 15,
+    "architect": 50,
+    "explore": 135,
+    "exploit": 135,
+    "genetic": 100,
+    "full": 135,
+    "research": 70,
+    "experimentator": 100,
+    "evaluator": 200,
+    "system_critic": 50,
+    "consistency_reviewer": 70,
+    "wrap_up": 100,
+    "debrief_recovery": 25,
 }
 
 
@@ -92,6 +93,65 @@ def _get_recent_timing(project_root: Path, current_gen: int, lookback: int = 3) 
         if key in timing.get("generations", {}):
             result[key] = timing["generations"][key]
     return result
+
+
+PREFLIGHT_CACHE = "history/.preflight_ok"
+
+REQUIRED_FILES = [
+    "problem/description.md",
+    "problem/evaluate.py",
+    "problem/validate.py",
+    "problem/metrics.yaml",
+    "user/config.yaml",
+    "agents/architect.md",
+    "agents/explore.md",
+    "agents/exploit.md",
+    "agents/genetic.md",
+    "agents/full.md",
+    "agents/research.md",
+    "agents/experimentator.md",
+    "agents/evaluator.md",
+    "agents/system_critic.md",
+    "agents/consistency_review.md",
+    "prompts/debrief_instructions.md",
+    "prompts/analysis_debrief.md",
+    "prompts/debrief_recovery.md",
+]
+
+
+def _preflight_check(project_root: Path):
+    """Validate all required files exist. Cached so re-runs are instant."""
+    cache_path = project_root / PREFLIGHT_CACHE
+    # Build a hash of all required file mtimes for cache invalidation
+    mtimes = []
+    missing = []
+    for rel in REQUIRED_FILES:
+        p = project_root / rel
+        if p.exists():
+            mtimes.append(f"{rel}:{p.stat().st_mtime}")
+        else:
+            missing.append(rel)
+
+    if missing:
+        print("ERROR: Required files missing:")
+        for m in missing:
+            print(f"  - {m}")
+        sys.exit(1)
+
+    check_hash = hashlib.md5("\n".join(mtimes).encode()).hexdigest()
+
+    # If cache matches, skip
+    if cache_path.exists():
+        try:
+            if cache_path.read_text().strip() == check_hash:
+                return
+        except Exception:
+            pass
+
+    # All files present — write cache
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(check_hash)
+    print("  Preflight check passed — all required files present.")
 
 
 def load_config(project_root: Path) -> dict:
@@ -159,13 +219,13 @@ def get_max_turns(config: dict, agent_type: str) -> int:
 
 
 DEFAULT_TIMEOUTS = {
-    "architect": 600,
-    "agent_default": 900,
-    "evaluator": 900,
-    "system_critic": 600,
-    "consistency_reviewer": 900,
-    "wrap_up": 900,
-    "debrief_recovery": 300,
+    "architect": 1020,
+    "agent_default": 1530,
+    "evaluator": 1530,
+    "system_critic": 1020,
+    "consistency_reviewer": 1530,
+    "wrap_up": 1530,
+    "debrief_recovery": 510,
 }
 
 
@@ -225,10 +285,55 @@ def phase_status(project_root: Path, gen: int) -> str:
         if ev_has_output:
             return "evaluator_done"
 
+    # Agents are done if ALL manifest agents have produced output or report.
+    # Check manifest to know how many agents were planned.
+    manifest_path = project_root / "briefs" / gen_str / "manifest.yaml"
+    if manifest_path.exists():
+        try:
+            with open(manifest_path) as f:
+                manifest_data = yaml.safe_load(f) or {}
+            planned_agents = manifest_data.get("agents", [])
+            if planned_agents:
+                pop_dir = project_root / "population" / gen_str
+                reports_dir = project_root / "reports" / gen_str
+                research_dir = project_root / "knowledge" / "research" / gen_str
+                experiments_dir = project_root / "knowledge" / "experiments" / gen_str
+
+                completed = 0
+                for spec in planned_agents:
+                    atype = spec.get("type", "")
+                    inst = spec.get("instance", 1)
+                    agent_name = f"{atype}_{inst}"
+                    # Check: output dir in population, OR report in reports/, OR
+                    # research/experiment output, OR workspace still has output/
+                    has_agent_output = (
+                        (pop_dir / agent_name).exists()
+                        or (reports_dir / f"{agent_name}.md").exists()
+                        or (atype == "research" and research_dir.exists() and any(research_dir.iterdir()))
+                        or (atype == "experimentator" and experiments_dir.exists() and any(experiments_dir.iterdir()))
+                    )
+                    # Also check workspace (agent ran but outputs not yet moved)
+                    ws_dir = project_root / "workspace" / f"{gen_str}_{agent_name}"
+                    if not has_agent_output and ws_dir.exists():
+                        ws_output = ws_dir / "output"
+                        has_agent_output = ws_output.exists() and any(ws_output.iterdir())
+                    if has_agent_output:
+                        completed += 1
+
+                if completed >= len(planned_agents):
+                    return "agents_done"
+                elif completed > 0:
+                    # Some agents done but not all — still in progress.
+                    # Return "planned" so run_agents re-runs (it will skip completed ones
+                    # since their workspaces are already moved).
+                    return "planned"
+        except Exception:
+            pass
+
+    # Fallback for missing/corrupt manifest: check if any output exists
     pop_dir = project_root / "population" / gen_str
     reports_dir = project_root / "reports" / gen_str
     research_dir = project_root / "knowledge" / "research" / gen_str
-    # Agents are done if any output exists in population, reports, or research
     has_output = (
         (pop_dir.exists() and any(pop_dir.iterdir()))
         or (reports_dir.exists() and any(reports_dir.iterdir()))
@@ -548,9 +653,11 @@ def move_evaluator_outputs(project_root: Path, gen: int):
     # SCALE-6: When clusters are updated, fix orphaned idea back-references
     src = ws_output / "updated_clusters"
     if src.exists():
-        old_cluster_names = {f.stem for f in (project_root / "knowledge" / "clusters").glob("*.md")} if (project_root / "knowledge" / "clusters").exists() else set()
+        clusters_dir = project_root / "knowledge" / "clusters"
+        clusters_dir.mkdir(parents=True, exist_ok=True)
+        old_cluster_names = {f.stem for f in clusters_dir.glob("*.md")}
         for f in src.iterdir():
-            shutil.copy2(f, project_root / "knowledge" / "clusters" / f.name)
+            shutil.copy2(f, clusters_dir / f.name)
         new_cluster_names = {f.stem for f in (project_root / "knowledge" / "clusters").glob("*.md")}
         removed_clusters = old_cluster_names - new_cluster_names
         if removed_clusters:
@@ -563,7 +670,9 @@ def move_evaluator_outputs(project_root: Path, gen: int):
 
     src = ws_output / "generation_snapshot.md"
     if src.exists():
-        shutil.copy2(src, project_root / "history" / "generations" / f"{gen_str}.md")
+        gen_dir = project_root / "history" / "generations"
+        gen_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, gen_dir / f"{gen_str}.md")
 
     src = ws_output / "evaluator_report.md"
     if src.exists():
@@ -650,9 +759,11 @@ def move_consistency_outputs(project_root: Path, gen: int):
 
     src = ws_output / "updated_clusters"
     if src.exists():
-        old_cluster_names = {f.stem for f in (project_root / "knowledge" / "clusters").glob("*.md")} if (project_root / "knowledge" / "clusters").exists() else set()
+        clusters_dir = project_root / "knowledge" / "clusters"
+        clusters_dir.mkdir(parents=True, exist_ok=True)
+        old_cluster_names = {f.stem for f in clusters_dir.glob("*.md")}
         for f in src.iterdir():
-            shutil.copy2(f, project_root / "knowledge" / "clusters" / f.name)
+            shutil.copy2(f, clusters_dir / f.name)
         new_cluster_names = {f.stem for f in (project_root / "knowledge" / "clusters").glob("*.md")}
         removed_clusters = old_cluster_names - new_cluster_names
         if removed_clusters:
@@ -694,13 +805,17 @@ def _fix_orphaned_cluster_refs(project_root: Path, removed_clusters: set[str]):
             if cluster_val in removed_clusters:
                 try:
                     text = idea_file.read_text()
-                    # Only replace within YAML frontmatter (between --- markers)
                     if text.startswith("---"):
                         end = text.index("---", 3)
                         frontmatter = text[: end + 3]
                         body = text[end + 3 :]
-                        frontmatter = frontmatter.replace(
-                            f"cluster: {cluster_val}", "cluster: unclustered"
+                        # Use regex to replace only the cluster field value
+                        frontmatter = re.sub(
+                            r'^(cluster:\s*).*$',
+                            r'\1unclustered',
+                            frontmatter,
+                            count=1,
+                            flags=re.MULTILINE,
                         )
                         idea_file.write_text(frontmatter + body)
                 except Exception:
@@ -769,7 +884,9 @@ def update_rankings(project_root: Path, gen: int):
             for sol in agent_dir.glob("sol*.py"):
                 score = _extract_score(sol, metric_name)
                 if score is not None:
-                    # Filter invalid/sentinel scores
+                    # Filter invalid/sentinel/non-finite scores
+                    if not math.isfinite(score):
+                        continue
                     if higher_better and score <= 0:
                         continue
                     if not higher_better and score >= sentinel * 0.9:
@@ -786,9 +903,16 @@ def update_rankings(project_root: Path, gen: int):
             all_scores.append((score, p))
             valid_cache.append((score, path_str))
 
-    # Save updated cache
+    # Save updated cache (with file locking for crash-resume safety)
     scores_cache_path.parent.mkdir(parents=True, exist_ok=True)
-    scores_cache_path.write_text(json.dumps(valid_cache))
+    lock_path = scores_cache_path.parent / "all_scores.json.lock"
+    try:
+        with open(lock_path, "w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            scores_cache_path.write_text(json.dumps(valid_cache))
+            fcntl.flock(lock, fcntl.LOCK_UN)
+    except Exception:
+        scores_cache_path.write_text(json.dumps(valid_cache))
 
     # Find best score based on direction
     if not all_scores:
@@ -828,23 +952,49 @@ def update_rankings(project_root: Path, gen: int):
 
 
 def _extract_score(sol_path: Path, metric_name: str = "fitness") -> float | None:
-    """Extract the primary metric score from a .score file or solution header."""
+    """Extract the primary metric score for a solution.
+
+    Priority: .score sidecar → eval cache (by content hash) → header comment.
+    The eval cache is written by evaluate.py and is the authoritative source.
+    """
+    # 1. .score sidecar file (written by agents alongside solutions)
     score_file = sol_path.with_suffix(".score")
     if score_file.exists():
         try:
             data = json.loads(score_file.read_text())
             if isinstance(data, dict) and metric_name in data:
                 return float(data[metric_name])
-            # Fallback: try "fitness" if metric_name not found
-            if isinstance(data, dict) and "fitness" in data:
-                return float(data["fitness"])
         except Exception:
             pass
 
+    # 2. Eval cache — keyed by file content hash, written by evaluate.py
+    try:
+        content_hash = hashlib.sha256(sol_path.read_bytes()).hexdigest()
+        cache_path = sol_path.parents[3] / "history" / "eval_cache.json"  # population/genNNN/agent/sol.py → project_root
+        if not cache_path.exists():
+            # Try from project root directly
+            for parent in sol_path.parents:
+                candidate = parent / "history" / "eval_cache.json"
+                if candidate.exists():
+                    cache_path = candidate
+                    break
+        if cache_path.exists():
+            cache_lock = cache_path.with_suffix(".lock")
+            with open(cache_lock, "w") as lock:
+                fcntl.flock(lock, fcntl.LOCK_SH)
+                cache = json.loads(cache_path.read_text())
+                fcntl.flock(lock, fcntl.LOCK_UN)
+            if content_hash in cache:
+                cached_result = cache[content_hash]
+                if isinstance(cached_result, dict) and metric_name in cached_result:
+                    return float(cached_result[metric_name])
+    except Exception:
+        pass
+
+    # 3. Header comment fallback (# fitness: 1.234)
     try:
         text = sol_path.read_text()
         for line in text.split("\n")[:10]:
-            # Check for "# metric_name: value", "# fitness: value", or "# score: value"
             for key in [metric_name, "fitness", "score"]:
                 if f"{key}:" in line.lower():
                     parts = line.split(":")
@@ -1383,7 +1533,7 @@ in your report. Check `last_confirmed_gen` in each idea's frontmatter.
 
 Write all output to: `{ws_path}/output/`
 
-1. Verify scores: `python3 {project_root}/problem/evaluate.py <solution_file>`
+1. Collect scores from `.score` files (only run `evaluate.py` if a `.score` file is missing)
 2. `output/new_ideas/` — new idea files with YAML frontmatter
 3. `output/new_patterns/` — new pattern files with YAML frontmatter
 4. `output/updated_ideas/` — updated idea files
@@ -1530,6 +1680,7 @@ def _absolutize_brief_paths(project_root: Path, briefs_dir: Path):
     path_prefixes = (
         "population/", "knowledge/", "problem/", "history/", "reports/",
         "briefs/", "feedback/", "user/", "agents/", "workspace/",
+        "papers/", "prompts/", "dashboard/",
     )
     # Only match paths that look like file references:
     # inside backticks, after list markers (- or N.), or at line start
@@ -1890,6 +2041,12 @@ def run_agents(project_root: Path, gen: int, config: dict):
         with open(manifest_path) as f:
             manifest = yaml.safe_load(f)
 
+    if not manifest or not manifest.get("agents"):
+        print("  WARNING: Manifest is empty or has no agents — regenerating default manifest...")
+        _create_default_manifest(project_root, gen, config)
+        with open(manifest_path) as f:
+            manifest = yaml.safe_load(f)
+
     agents = manifest.get("agents", [])
     parallel_groups = manifest.get("parallel_groups", [])
     max_parallel = config.get("max_parallel_sessions", 10)
@@ -1918,7 +2075,14 @@ def run_agents(project_root: Path, gen: int, config: dict):
 
     # Execute groups sequentially; agents within each group in parallel
     for group_idx, group in enumerate(parallel_groups):
-        group_specs = [agent_lookup[name] for name in group if name in agent_lookup]
+        # Deduplicate agent names within group to prevent double-launches
+        seen = set()
+        deduped_group = []
+        for name in group:
+            if name not in seen:
+                seen.add(name)
+                deduped_group.append(name)
+        group_specs = [agent_lookup[name] for name in deduped_group if name in agent_lookup]
         if not group_specs:
             continue
         if len(parallel_groups) > 1:
@@ -1970,6 +2134,64 @@ def _preconcat_knowledge(project_root: Path, ws: Path):
     dump_path = ws / "knowledge_dump.md"
     dump_path.write_text(dump)
     return dump_path
+
+
+def _write_failure_notice(dest_dir: Path, filename: str, agent_type: str, gen: int,
+                          expected_files: list[str], ws: Path):
+    """Write a failure notice when an analysis agent produces no output."""
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    gen_str = f"gen{gen:03d}"
+
+    # Gather debug info
+    ws_output = ws / "output"
+    produced = []
+    if ws_output.exists():
+        produced = [f.name for f in ws_output.iterdir() if f.is_file()]
+
+    prompt_size = 0
+    prompt_path = ws / "prompt.md"
+    if prompt_path.exists():
+        prompt_size = prompt_path.stat().st_size
+
+    # Check timing
+    timing_path = ws.parent.parent / "history" / "timing.json"
+    timing_info = "unknown"
+    try:
+        if timing_path.exists():
+            import json as _json
+            timing = _json.loads(timing_path.read_text())
+            gen_timing = timing.get("generations", {}).get(gen_str, {})
+            agent_time = gen_timing.get(agent_type)
+            if agent_time is not None:
+                timing_info = f"{agent_time:.1f}s"
+    except Exception:
+        pass
+
+    notice = f"""# {agent_type.replace('_', ' ').title()} — FAILED (Gen {gen})
+
+**Status:** Agent did not produce expected output files.
+
+## Expected Files
+{chr(10).join(f'- `{f}`' for f in expected_files)}
+
+## Files Actually Produced
+{chr(10).join(f'- `{f}`' for f in produced) if produced else '- (none)'}
+
+## Debug Info
+- Generation: {gen}
+- Workspace: `{ws}`
+- Prompt size: {prompt_size:,} bytes
+- Elapsed time: {timing_info}
+- Workspace still exists: {ws.exists()}
+
+## Possible Causes
+- Agent timed out before writing output
+- Agent wrote files to wrong directory
+- Agent errored during execution
+- Session crashed without recovery
+"""
+    (dest_dir / filename).write_text(notice)
+    print(f"  NOTICE: {agent_type} failure recorded to {dest_dir / filename}")
 
 
 def _run_analysis_with_debrief(
@@ -2079,6 +2301,19 @@ def run_evaluator(project_root: Path, gen: int, config: dict):
         allowed_tools=["Read", "Write", "Bash", "Glob", "Grep"], config=config,
     )
 
+    # Check if evaluator produced key output; write failure notice if not
+    ws_output = ws / "output"
+    has_report = (ws_output / "evaluator_report.md").exists() if ws_output.exists() else False
+    has_snapshot = (ws_output / "generation_snapshot.md").exists() if ws_output.exists() else False
+    if not has_report and not has_snapshot:
+        gen_str = f"gen{gen:03d}"
+        reports_dir = project_root / "reports" / gen_str
+        _write_failure_notice(
+            reports_dir, "evaluator_failure.md", "evaluator", gen,
+            ["evaluator_report.md", "generation_snapshot.md", "new_ideas/", "updated_ideas/"],
+            ws,
+        )
+
     try:
         move_evaluator_outputs(project_root, gen)
         cleanup_workspace(project_root, gen, "evaluator")
@@ -2104,6 +2339,17 @@ def run_system_critic(project_root: Path, gen: int, config: dict):
         allowed_tools=["Read", "Write", "Glob", "Grep"], config=config,
     )
 
+    # Check if critic produced output; write failure notice if not
+    ws_output = ws / "output"
+    has_analysis = (ws_output / "system_analysis.md").exists() if ws_output.exists() else False
+    if not has_analysis:
+        _write_failure_notice(
+            project_root / "feedback" / "system_analysis",
+            f"gen{gen:03d}.md", "system_critic", gen,
+            ["system_analysis.md", "system_recommendations.md", "experiment_suggestions.md"],
+            ws,
+        )
+
     try:
         move_critic_outputs(project_root, gen)
         cleanup_workspace(project_root, gen, "system_critic")
@@ -2114,6 +2360,8 @@ def run_system_critic(project_root: Path, gen: int, config: dict):
 
 def should_run_consistency_review(project_root: Path, gen: int, config: dict) -> bool:
     interval = config.get("consistency_review_interval", 3)
+    if interval < 1:
+        interval = 3
     if gen % interval == 0:
         return True
 
@@ -2147,6 +2395,17 @@ def run_consistency_review(project_root: Path, gen: int, config: dict):
         max_turns=get_max_turns(config, "consistency_reviewer"),
         allowed_tools=["Read", "Write", "Glob", "Grep"], config=config,
     )
+
+    # Check if reviewer produced output; write failure notice if not
+    ws_output = ws / "output"
+    has_soa = (ws_output / "state_of_affairs.md").exists() if ws_output.exists() else False
+    if not has_soa:
+        _write_failure_notice(
+            project_root / "feedback" / "consistency_reviews",
+            f"gen{gen:03d}.md", "consistency_reviewer", gen,
+            ["state_of_affairs.md", "updated_ideas/", "updated_clusters/"],
+            ws,
+        )
 
     try:
         move_consistency_outputs(project_root, gen)
@@ -2272,13 +2531,7 @@ def main():
     project_root = Path(args.project_root).resolve()
     print(f"Alpha Evolve — Project root: {project_root}")
 
-    if not (project_root / "problem" / "description.md").exists():
-        print("ERROR: problem/description.md not found.")
-        sys.exit(1)
-
-    if not (project_root / "problem" / "evaluate.py").exists():
-        print("ERROR: problem/evaluate.py not found.")
-        sys.exit(1)
+    _preflight_check(project_root)
 
     config = load_config(project_root)
     max_gens = config.get("generations", 20)

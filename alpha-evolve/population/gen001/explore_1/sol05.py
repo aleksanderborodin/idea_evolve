@@ -1,59 +1,86 @@
-# fitness: 1.5176833982700835
-# Extended multi-scale: N=600 (50k) → N=2000 (80k), more steps both phases
-# Also tries different seeds to find better basin
-
-import sys
-sys.path.insert(0, '/home/sasha/Desktop/project_alpha/alpha-evolve/problem')
+# fitness: 1.515505474999503
+# Multiple random seeds + select best + refine with L-BFGS
+# Strategy: Run 8 random seeds for 15k steps, pick best, then run 60k steps + L-BFGS
+# Rationale: Problem may have many local minima; wider search over initial conditions
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+import scipy.optimize
 
 from helper import compute_c
 
 
-def run_adam_phase(f_init, steps, lr, warmup, optimizer=None):
-    """Run Adam optimization for a given number of steps."""
-    if optimizer is None:
-        schedule = optax.warmup_cosine_decay_schedule(
-            init_value=0.0, peak_value=lr,
-            warmup_steps=warmup, decay_steps=steps - warmup,
-            end_value=lr * 1e-4,
-        )
-        optimizer = optax.adam(learning_rate=schedule)
-
-    opt_state = optimizer.init(f_init)
-    f = f_init
+def run_adam(f_init, num_steps, lr):
+    schedule = optax.warmup_cosine_decay_schedule(
+        init_value=0.0,
+        peak_value=lr,
+        warmup_steps=max(200, num_steps // 10),
+        decay_steps=num_steps,
+        end_value=lr * 1e-5,
+    )
+    optimizer = optax.adam(learning_rate=schedule)
+    f_values = jnp.array(f_init)
+    opt_state = optimizer.init(f_values)
 
     @jax.jit
-    def step_fn(f, s):
-        loss, g = jax.value_and_grad(compute_c)(f)
-        upd, s = optimizer.update(g, s, f)
-        return optax.apply_updates(f, upd), s, loss
+    def train_step(f_vals, opt_st):
+        loss, grads = jax.value_and_grad(compute_c)(f_vals)
+        updates, opt_st = optimizer.update(grads, opt_st, f_vals)
+        f_vals = optax.apply_updates(f_vals, updates)
+        return f_vals, opt_st, loss
 
-    for _ in range(steps):
-        f, opt_state, _ = step_fn(f, opt_state)
-    return jax.nn.relu(f)
+    best_loss = float('inf')
+    best_f = f_values
+    for step in range(num_steps):
+        f_values, opt_state, loss = train_step(f_values, opt_state)
+        if float(loss) < best_loss:
+            best_loss = float(loss)
+            best_f = f_values
+
+    return np.array(jax.nn.relu(best_f)), best_loss
 
 
 def entrypoint() -> np.ndarray:
-    # Phase 1: coarse at N=600
-    N_coarse = 600
-    key = jax.random.PRNGKey(42)
-    f_coarse = jnp.zeros((N_coarse,))
-    si, ei = N_coarse // 4, 3 * N_coarse // 4
-    f_coarse = f_coarse.at[si:ei].set(1.0)
-    f_coarse = f_coarse + 0.05 * jax.random.uniform(key, (N_coarse,))
+    N = 600
+    n_seeds = 8
 
-    f_coarse = run_adam_phase(f_coarse, steps=50000, lr=0.005, warmup=2000)
+    # Phase 1: quick run with multiple seeds to find best basin
+    best_overall_loss = float('inf')
+    best_overall_f = None
 
-    # Phase 2: upsample to N=2000
-    N_fine = 2000
-    x_c = np.linspace(-0.25, 0.25, N_coarse)
-    x_f = np.linspace(-0.25, 0.25, N_fine)
-    f_fine = jnp.array(np.interp(x_f, x_c, np.array(f_coarse)))
+    for seed in range(n_seeds):
+        key = jax.random.PRNGKey(seed)
+        f_init = jnp.zeros((N,))
+        # Vary initialization: different offsets and scales
+        start_idx = max(0, N // 4 + (seed - n_seeds // 2) * N // 16)
+        end_idx = min(N, 3 * N // 4 + (seed - n_seeds // 2) * N // 16)
+        f_init = f_init.at[start_idx:end_idx].set(1.0)
+        f_init = f_init + 0.05 * jax.random.uniform(key, (N,))
 
-    f_fine = run_adam_phase(f_fine, steps=80000, lr=0.0015, warmup=3000)
+        f_result, loss = run_adam(f_init, num_steps=15000, lr=0.007)
+        if loss < best_overall_loss:
+            best_overall_loss = loss
+            best_overall_f = f_result
 
-    return np.array(f_fine)
+    # Phase 2: refine best with longer Adam
+    best_f_long, _ = run_adam(best_overall_f, num_steps=60000, lr=0.003)
+
+    # Phase 3: L-BFGS fine-tuning
+    def objective_and_grad(f_np):
+        f_jax = jnp.array(f_np, dtype=jnp.float32)
+        loss, grads = jax.value_and_grad(compute_c)(f_jax)
+        return float(loss), np.array(grads, dtype=np.float64)
+
+    bounds = [(0.0, None)] * N
+    result = scipy.optimize.minimize(
+        objective_and_grad,
+        best_f_long.astype(np.float64),
+        method='L-BFGS-B',
+        jac=True,
+        bounds=bounds,
+        options={'maxiter': 5000, 'ftol': 1e-12, 'gtol': 1e-8},
+    )
+
+    return np.maximum(result.x, 0.0).astype(np.float32)

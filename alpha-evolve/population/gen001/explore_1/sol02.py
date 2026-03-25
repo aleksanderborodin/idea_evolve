@@ -1,51 +1,72 @@
-# fitness: 1.811140785998411
-# L-BFGS via scipy with JAX gradients, flat block init (like baseline), N=600
-# RESULT: L-BFGS converges to worse local minimum (1.81) vs Adam (1.52)
-# Lesson: Adam's adaptive noise helps escape bad minima; softplus changes landscape unfavorably
-
-import sys
-sys.path.insert(0, '/home/sasha/Desktop/project_alpha/alpha-evolve/problem')
+# fitness: 1.526966637203846
+# Multi-scale optimization: N=200 -> N=600 -> N=1200
+# Strategy: Coarse optimization first to find global shape, then upsample and refine
+# Rationale: Avoids local minima at high resolution; coarse pass finds correct basin
 
 import jax
 import jax.numpy as jnp
 import numpy as np
-import scipy.optimize as opt
+import optax
+import scipy.interpolate
 
 from helper import compute_c
 
 
-def entrypoint() -> np.ndarray:
-    N = 600
-
-    val_and_grad_fn = jax.jit(jax.value_and_grad(lambda p: compute_c(jax.nn.softplus(p))))
-
-    def objective_and_grad(params_np):
-        params = jnp.array(params_np, dtype=jnp.float32)
-        val, grad = val_and_grad_fn(params)
-        return float(val), np.array(grad, dtype=np.float64)
-
-    key = jax.random.PRNGKey(42)
-    f_init = jnp.zeros((N,))
-    start_idx, end_idx = N // 4, 3 * N // 4
-    f_init = f_init.at[start_idx:end_idx].set(1.0)
-    f_init = f_init + 0.05 * jax.random.uniform(key, (N,))
-    f_init = jax.nn.relu(f_init)
-
-    f_np = np.array(f_init)
-    f_np = np.clip(f_np, 0.001, None)
-    params0 = np.log(np.exp(f_np) - 1.0)
-
-    _ = objective_and_grad(params0)
-
-    result = opt.minimize(
-        objective_and_grad,
-        params0.astype(np.float64),
-        method='L-BFGS-B',
-        jac=True,
-        options={'maxiter': 5000, 'maxfun': 25000, 'ftol': 1e-14, 'gtol': 1e-8}
+def optimize_at_resolution(f_init, num_steps, lr_peak, warmup_frac=0.1):
+    warmup_steps = int(num_steps * warmup_frac)
+    schedule = optax.warmup_cosine_decay_schedule(
+        init_value=0.0,
+        peak_value=lr_peak,
+        warmup_steps=warmup_steps,
+        decay_steps=num_steps - warmup_steps,
+        end_value=lr_peak * 1e-5,
     )
+    optimizer = optax.adam(learning_rate=schedule)
+    f_values = jnp.array(f_init)
+    opt_state = optimizer.init(f_values)
 
-    params_final = jnp.array(result.x, dtype=jnp.float32)
-    f_final = jax.nn.softplus(params_final)
+    @jax.jit
+    def train_step(f_vals, opt_st):
+        loss, grads = jax.value_and_grad(compute_c)(f_vals)
+        updates, opt_st = optimizer.update(grads, opt_st, f_vals)
+        f_vals = optax.apply_updates(f_vals, updates)
+        return f_vals, opt_st, loss
 
-    return np.array(f_final)
+    for step in range(num_steps):
+        f_values, opt_state, loss = train_step(f_values, opt_state)
+
+    return np.array(jax.nn.relu(f_values))
+
+
+def upsample(f_arr, new_n):
+    """Upsample 1D array from len(f_arr) to new_n using cubic interpolation."""
+    old_n = len(f_arr)
+    xs_old = np.linspace(-0.25, 0.25, old_n)
+    xs_new = np.linspace(-0.25, 0.25, new_n)
+    interp = scipy.interpolate.interp1d(xs_old, f_arr, kind='cubic', fill_value='extrapolate')
+    result = interp(xs_new)
+    return np.maximum(result, 0.0)  # maintain non-negativity
+
+
+def entrypoint() -> np.ndarray:
+    key = jax.random.PRNGKey(42)
+
+    # Stage 1: N=200, 25k steps — find general shape
+    N1 = 200
+    xs = np.linspace(-0.25, 0.25, N1)
+    # Raised cosine init (Hann window) — smooth, concentrated at center
+    f1_init = 0.5 + 0.5 * np.cos(4 * np.pi * xs)
+    f1_init = np.maximum(f1_init, 0.0)
+    f1 = optimize_at_resolution(f1_init, num_steps=25000, lr_peak=0.01)
+
+    # Stage 2: N=600, 30k steps — intermediate refinement
+    N2 = 600
+    f2_init = upsample(f1, N2)
+    f2 = optimize_at_resolution(f2_init, num_steps=30000, lr_peak=0.005)
+
+    # Stage 3: N=1200, 25k steps — fine resolution refinement
+    N3 = 1200
+    f3_init = upsample(f2, N3)
+    f3 = optimize_at_resolution(f3_init, num_steps=25000, lr_peak=0.002)
+
+    return f3

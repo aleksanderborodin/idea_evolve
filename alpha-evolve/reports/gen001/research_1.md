@@ -1,40 +1,114 @@
 # Research Agent Debrief — Gen 001, research_1
 
-## Task
+## Solutions Table
 
-Research the mathematical background of the First Autocorrelation Inequality and produce a findings report. No solution code was required.
+| File | Fitness (C) | Valid | Notes |
+|------|-------------|-------|-------|
+| (none) | — | — | No solutions produced; research-only session |
 
-## Work Completed
+---
 
-Produced `findings.md` with 8 detailed findings covering:
+## 1. What did I try?
 
-1. **Problem origin and known bounds** (1.28 ≤ C ≤ 1.5098). The target C ≤ 1.5053 is just below the best known upper bound. The true optimum may be significantly lower (possibly 1.48–1.50).
+This was a pure research session. I did not produce solution files — the research agent's
+role is to produce knowledge, not code. I investigated the mathematical theory behind the
+first autocorrelation inequality via web search and paper review.
 
-2. **Why the trivial lower bound C ≥ 1 exists and how C ≥ 1.28 is proved** via L²-L∞ Cauchy-Schwarz argument. Key insight: bimodal (two-bump) functions can shift the autoconvolution peak away from t=0, enabling lower C than unimodal functions.
+**Papers/sources consulted:**
+- arXiv:1403.7988 — Cloninger & Steinerberger (2017): proves C ≥ 1.28 lower bound
+- arXiv:0907.1379 — Matolcsi & Vinuesa (2010): proves C ≤ 1.50992, disproves Schinzel-Schmidt conjecture
+- arXiv:2602.07292 — Rechnitzer (2026): computes related L² constant to 128 digits
+- arXiv:2506.16750 — Boyer et al. (2025): improved example for related inequality
+- arXiv:2508.02803 — further lower bound improvements for related inequality
+- arXiv:2511.23473 — ThetaEvolve (2025): achieves C₁ = 1.503133 on our exact problem
+- AlphaEvolve GitHub: 600-interval step function achieving C₁ ≤ 1.5032
+- arXiv:2001.02326 — Extensions of autocorrelation inequalities
 
-3. **Optimal function properties**: Almost certainly even-symmetric, likely two-bump or W-shaped, probably does not use the full domain uniformly. Three or more bumps may further reduce C.
+**Key findings written to findings.md** — see that file for full structured output.
 
-4. **Optimization landscape**: Non-convex, multiple local minima. Identified two key deficiencies in the baseline: (a) ReLU parameterization kills gradient signal for negative values; (b) no symmetry enforcement doubles parameter space. Recommended softplus/exp reparameterization and explicit symmetry enforcement.
+---
 
-5. **Spectral interpretation**: The goal is to make f★f as flat as possible on [-1/2, 1/2]. Functions with dispersed, irregularly-spaced support produce flatter autoconvolution.
+## 2. What information did I lack?
 
-6. **Sidon set connection**: Discrete Sidon sets like {0,1,3,6} can be lifted to Gaussian bumps on [-1/4, 1/4] as initializations. These provide good starting points for gradient descent because they naturally produce flat autoconvolution.
+- The **exact coefficient values** of the AlphaEvolve/ThetaEvolve 600-interval step function
+  that achieves C = 1.5032. These are in the AlphaEvolve GitHub notebook (mathematical_results.ipynb
+  Section B.2) but I couldn't retrieve raw notebook values from web.
+- The **explicit construction** Matolcsi & Vinuesa used to achieve 1.50992. The paper is
+  behind journal access; only the abstract was available via arXiv.
+- What the gradient-descent-optimized function actually looks like (shape, symmetry) —
+  would require running the baseline optimizer to convergence.
 
-7. **Practical optimization strategies**: Softplus/exp reparameterization, symmetry-enforced half-domain optimization, multi-start with 5–10 initializations, L-BFGS instead of Adam, resolution staircase (N=100 → 300 → 1000), smooth-max objective (log-sum-exp).
+---
 
-8. **Computation details and potential bugs**: The helper.py FFT computation is correct; the padding prevents aliasing. For symmetric f, the argmax should be near the center of the output array — a useful debugging check.
+## 3. What given facts might be wrong or outdated?
 
-## Key Recommendations for Other Agents
+- **fact_002.md** says "best known bounds are 1.28 <= C <= 1.5098." This is outdated.
+  The current upper bound is **C ≤ 1.5032** (AlphaEvolve) / **1.503133** (ThetaEvolve).
+  The project target of 1.5053 is already beaten by the existing literature.
+- The lower bound 1.28 appears to be current (Cloninger-Steinerberger 2017).
 
-- **Most impactful single change**: Replace `relu(g)` with `softplus(g)` or `exp(g)` parameterization AND enforce even symmetry (optimize on [0, 1/4] only, mirror).
-- **Best initializations**: Two symmetric Gaussians at ±0.15 (σ≈0.04), Sidon-inspired 4-bump at {-0.25, -0.167, 0, 0.25}, wide center + narrow wings.
-- **Best optimizer**: L-BFGS (scipy.optimize.minimize with JAX gradients) often outperforms Adam for this type of smooth functional optimization.
-- **Run multi-start**: At least 5 initializations per optimization run; take the best.
+---
 
-## Output Files
+## 4. Was the State of Affairs accurate?
 
-- `findings.md`: Full research report with 8 findings and actionable implications for solution agents.
+Yes — it correctly reflected that no solutions have been run yet and everything is open.
+No inaccuracies to report.
 
-## Result
+---
 
-Research task complete. No solution code was produced (as directed). All findings are in `findings.md`.
+## 5. What would I do differently with more context?
+
+- Download and extract the AlphaEvolve mathematical_results.ipynb to get the actual
+  600-interval coefficient array. That array, used as initialization, would likely
+  immediately achieve C ≤ 1.5032 without any further optimization.
+- Run the baseline optimizer to see what the converged function shape looks like,
+  which would reveal whether it's symmetric, unimodal, multi-peaked, etc.
+- Try running the Matolcsi-Vinuesa paper's construction directly.
+
+---
+
+## 6. Specific experiments to run
+
+1. **Better gradient descent hyperparameters**: Increase num_steps from 40,000 to 200,000;
+   lower end_value of cosine schedule to 1e-6 instead of learning_rate * 1e-4.
+   Expected result: C closer to 1.503 without any structural changes.
+
+2. **Coarse-to-fine**: Start N=50, optimize 10,000 steps → upsample to N=200, optimize
+   10,000 steps → upsample to N=600, optimize 20,000 steps. Use scipy.ndimage.zoom or
+   jnp.interp for upsampling. This was shown effective in arXiv:2506.16750.
+
+3. **Multiple restarts**: Run 10 independent optimizations from different random seeds,
+   keep the best. JAX makes this efficient with vmap.
+
+4. **Simulated annealing wrapper**: After gradient descent converges, add random Gaussian
+   perturbation (σ=0.1) and re-run descent 50 times. Temperature schedule: σ = 0.1 * (1-t/T).
+
+5. **Smooth initialization from theory**: Initialize with f(x) = (1-4x²)^{-1/2} shape
+   (the near-optimal form from Rechnitzer's ansatz) — this is the arcsine distribution
+   on [-1/4, 1/4], which has minimum Fourier peak properties.
+
+6. **Check the AlphaEvolve notebook**: Retrieve Section B.2 from
+   https://github.com/google-deepmind/alphaevolve_results/blob/main/mathematical_results.ipynb
+   to get the exact 600-interval array.
+
+---
+
+## 7. What surprised me?
+
+- The target of 1.5053 is ALREADY beaten by published work (1.5032 by AlphaEvolve, 1.503133
+  by ThetaEvolve). The system's target was set before these results were published.
+- The optimal function appears to have **non-symmetric, multi-peaked, complex** structure —
+  not a simple Gaussian or tent function as one might naively expect.
+- The Schinzel-Schmidt conjecture (C = π/2 ≈ 1.5708) was disproved as recently as 2010,
+  showing this is an active research area with surprises still happening.
+- There is a closely related L² problem (ν₂²) that has been solved to 128 decimal places,
+  while our L∞ problem is far from settled.
+- The gap between the lower bound (1.28) and best upper bound (1.5032) remains large;
+  the true optimum is genuinely unknown.
+
+---
+
+## 8. Findings document
+
+The full structured findings are in:
+`/home/sasha/Desktop/project_alpha/alpha-evolve/workspace/gen001_research_1/output/findings.md`

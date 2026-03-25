@@ -1,19 +1,14 @@
 # fitness: TBD
-"""
-Multi-restart gradient descent with symmetry enforcement and inline relu projection.
-Improvements over baseline:
-- Resolution N=1000 (vs 600)
-- 80k steps (vs 40k)
-- Lower peak LR 0.002 (vs 0.005)
-- Relu projection after each step (keeps optimizer in feasible region throughout)
-- Symmetry enforcement: f[i] = f[N-1-i] (optimal function should be symmetric)
-- 3 restarts with different initializations, keep best result
-"""
+# Approach: N=1000, Gaussian bump init, softplus reparameterization, 80k steps, 3 restarts
+# Improvements over baseline: better init, non-negativity via softplus, more steps, higher resolution
+
+import sys
+sys.path.insert(0, '/home/sasha/Desktop/project_alpha/alpha-evolve/problem')
+
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-
 from helper import compute_c
 
 
@@ -21,71 +16,58 @@ def entrypoint() -> np.ndarray:
     N = 1000
     num_steps = 80000
     warmup_steps = 3000
-    peak_lr = 0.002
+    base_lr = 0.01
+
+    # Domain grid [-0.25, 0.25]
+    x = jnp.linspace(-0.25, 0.25, N)
+
+    # Gaussian bump centered at 0, sigma=0.15 — gives optimizer a head start
+    sigma = 0.15
+    gaussian_bump = jnp.exp(-x**2 / (2.0 * sigma**2))
+
+    # Softplus-inverse for initialization: softplus(x) = log(1+exp(x)), inverse = log(exp(y)-1) = log(expm1(y))
+    # gaussian_bump in range [~0.25, 1.0], all > 0, safe for inv_softplus
+    raw_init = jnp.log(jnp.expm1(jnp.clip(gaussian_bump, 1e-4, None)))
+
+    # Objective in raw (unconstrained) space; softplus ensures f > 0 always
+    def objective(raw_params):
+        f_values = jax.nn.softplus(raw_params)
+        return compute_c(f_values)
 
     schedule = optax.warmup_cosine_decay_schedule(
         init_value=0.0,
-        peak_value=peak_lr,
+        peak_value=base_lr,
         warmup_steps=warmup_steps,
         decay_steps=num_steps - warmup_steps,
-        end_value=peak_lr * 1e-4,
+        end_value=base_lr * 1e-4,
     )
     optimizer = optax.adam(learning_rate=schedule)
 
     @jax.jit
-    def train_step(f_vals, opt_st):
-        loss, grads = jax.value_and_grad(compute_c)(f_vals)
-        updates, new_opt_st = optimizer.update(grads, opt_st, f_vals)
-        f_vals = optax.apply_updates(f_vals, updates)
-        # Project to non-negative feasible region after each step
-        f_vals = jax.nn.relu(f_vals)
-        # Enforce symmetry f(x) = f(-x) — optimal function should be symmetric
-        f_vals = (f_vals + f_vals[::-1]) / 2.0
-        return f_vals, new_opt_st, loss
+    def train_step(raw_p, opt_st):
+        loss, grads = jax.value_and_grad(objective)(raw_p)
+        updates, new_opt_st = optimizer.update(grads, opt_st, raw_p)
+        new_raw_p = optax.apply_updates(raw_p, updates)
+        return new_raw_p, new_opt_st, loss
 
     best_c = float('inf')
     best_f = None
 
-    # Three restarts with different initializations
-    restart_configs = [
-        # (seed, init_type)
-        (42, 'block'),       # Block in center (like baseline)
-        (123, 'triangle'),   # Triangular / tent function (symmetric)
-        (777, 'gaussian'),   # Gaussian bump (symmetric)
-    ]
-
-    for seed, init_type in restart_configs:
+    seeds = [42, 123, 7]
+    for seed in seeds:
         key = jax.random.PRNGKey(seed)
-        noise = 0.05 * jax.random.uniform(key, (N,))
-        x = jnp.linspace(-0.25, 0.25, N)
-
-        if init_type == 'block':
-            f_init = jnp.zeros((N,))
-            s, e = N // 4, 3 * N // 4
-            f_init = f_init.at[s:e].set(1.0)
-            f_init = f_init + noise
-        elif init_type == 'triangle':
-            # Tent function centered at 0
-            f_init = jnp.maximum(0.0, 1.0 - 4.0 * jnp.abs(x))
-            f_init = f_init + noise
-        else:  # gaussian
-            # Gaussian centered at 0
-            f_init = jnp.exp(-50.0 * x ** 2)
-            f_init = f_init + noise
-
-        # Start in feasible (non-negative) region and enforce symmetry
-        f_values = jax.nn.relu(f_init)
-        f_values = (f_values + f_values[::-1]) / 2.0
-
-        opt_state = optimizer.init(f_values)
+        noise = 0.02 * jax.random.normal(key, (N,))
+        raw_params = raw_init + noise
+        opt_state = optimizer.init(raw_params)
 
         for _ in range(num_steps):
-            f_values, opt_state, _ = train_step(f_values, opt_state)
+            raw_params, opt_state, loss = train_step(raw_params, opt_state)
 
-        final_c = float(compute_c(f_values))
+        f_final = jax.nn.softplus(raw_params)
+        c_val = float(compute_c(f_final))
 
-        if final_c < best_c:
-            best_c = final_c
-            best_f = np.array(f_values)
+        if c_val < best_c:
+            best_c = c_val
+            best_f = f_final
 
-    return best_f
+    return np.array(best_f)

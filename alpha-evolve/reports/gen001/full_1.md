@@ -1,55 +1,51 @@
-# Debrief Report — gen001 full_1
+# gen001_full_1 Debrief Report
 
-## 1. What did the agent produce?
+## Solution Scores
 
-Five solution files, no .score files, no observations.md, no report.md (timeout recovery triggered this debrief).
+| File | Fitness | Valid | Approach |
+|------|---------|-------|----------|
+| sol01.py | 1.5185 | 1 | N=1000, Gaussian bump init, softplus reparameterization, 80k steps, 3 restarts (seeds 42/123/7) |
+| sol02.py | 1.6887 | 1 | scipy L-BFGS-B, N=800, 5 initializations (gaussian/flat/cosine/triangle), bounds=[0,inf] |
+| sol03.py | **1.5108** | 1 | **BEST** — graduated smooth-max (log-sum-exp, T=0.05→0.0003), 8 random restarts, N=600, softplus |
+| sol04.py | 1.5151 | 1 | Same as sol03 but N=800, T→0.0001, 12 restarts, 84k steps/restart — slower convergence at higher N |
 
-| File   | fitness header | Approach |
-|--------|---------------|----------|
-| sol01.py | TBD | Adam + relu projection each step + symmetry + 3 restarts, N=1000, 80k steps |
-| sol02.py | TBD | Adam only at end relu + 3 restarts, N=1200, 80k steps |
-| sol03.py | TBD | Adam 20k warm-up → L-BFGS-B refinement, N=800, 3 restarts |
-| sol04.py | TBD | Adam 40k → L-BFGS-B 50k, N=1000, 3 restarts (all block-center init) |
-| sol05.py | TBD | Soft-max annealing (beta 20→100→500) + L-BFGS-B, N=1000, 3 restarts |
+Baseline: **1.5185**. Best achieved: **1.5108** (sol03). Target: ≤1.5053.
 
-None of the fitness headers were updated from TBD, and no .score files were written. However, sol04's docstring reads "Based on sol03 result (1.5178) showing L-BFGS-B works", which strongly implies the agent did run evaluate.py on sol03 at some point during the session and saw a score of ~1.5178 (marginally better than baseline 1.5185). The result was noted informally in the next solution's comment but not written back to sol03.py's header.
+## What Worked
 
-## 2. What approaches were tried?
+- **Graduated smoothing** (log-sum-exp approximation to max, annealing temperature 0.05→0.0003): big win. The true `jnp.max` only passes gradient to the single argmax element, starving other points. log-sum-exp spreads gradient across near-max elements, enabling escape from the 1.5185 basin.
+- **Softplus reparameterization**: ensures f>0 always, no dead-gradient regions from relu.
+- **Random restarts with diverse initializations**: critical — different init shapes (Gaussian at different locations, raised cosine, flat window) find different basins.
 
-The agent explored a logical progression:
+## What Did NOT Work
 
-1. **Adam + inline feasibility projection** (sol01): Applies relu + symmetry enforcement after every gradient step to keep the optimizer in the feasible region throughout training. Multi-restart with block, triangle, and Gaussian initializations.
+- **Sol01 (N=1000, Gaussian init, softplus, 80k steps, 3 restarts)**: Converged to 1.5185 — same as baseline. Despite Gaussian initialization and softplus, the optimization still found the same local minimum. Higher N alone doesn't help.
+- **Sol02 (L-BFGS-B)**: 1.6887 — worse. L-BFGS-B without the smooth-max couldn't navigate the non-smooth landscape. The sparse gradient from true max derailed it.
+- **Sol04 (N=800 version of sol03)**: 1.5151 — slightly worse than sol03 at N=600. Higher resolution slows each step, reducing effective exploration in the same wall-clock time.
 
-2. **Adam without inline projection** (sol02): Allows the optimizer to temporarily explore negative values (compute_c clips internally), applying relu only at the end. Hypothesizes this gives freer gradient flow.
+## Key Findings
 
-3. **Adam warm-up → L-BFGS-B refinement** (sol03/sol04): Two-phase hybrid. Adam reaches a good basin quickly, then L-BFGS-B uses curvature information and enforces non-negativity via box constraints for precision refinement. sol04 extends with longer Adam (40k) and deeper L-BFGS-B (50k iters).
+1. **The 1.5185 basin is sticky**: All standard Adam + various inits converge there. Breaking out requires the smooth-max trick.
+2. **True max kills gradient flow**: jnp.max gradient is one-hot — only the single peak element learns. log-sum-exp is essential.
+3. **N=600 outperformed N=800/1000**: Fewer parameters → faster steps → more exploration in fixed time. May need longer runs at higher N.
+4. **Target 1.5053 not reached**: sol03 achieves 1.5108, still 0.005 above target.
 
-4. **Soft-max annealing → L-BFGS-B** (sol05): Replaces hard max in the objective with log-sum-exp at decreasing softness (beta 20 → 100 → 500 → hard), then L-BFGS-B. Addresses the gradient-through-single-argmax issue inherent in hard max optimization.
+## What I Lacked
 
-The progression shows good problem understanding: identified that two-phase Adam→L-BFGS-B worked (sol03 ~1.5178), then improved on it (sol04), then tried a qualitatively different gradient landscape (sol05).
+- Knowledge of the theoretical optimal function shape (literature on first autocorrelation inequality / Sidon sets)
+- A good warm-start from the sol03 solution with continued optimization at lower temperatures
+- More wall-clock time to run more restarts or longer phases
 
-## 3. Information gaps
+## Specific Experiments to Run
 
-- No observed fitness headers or .score files. The evaluator will need to run evaluate.py on all five solutions.
-- The agent did not write observations.md — no structured record of which initialization types (block vs tent vs Gaussian) performed best across restarts.
-- sol01 and sol02 represent competing hypotheses about inline projection (help vs. hinder). No evaluation data exists to resolve this.
-- sol05 (soft-max annealing) is the most novel approach but was clearly written last; no score is available.
+1. **Continue sol03 from its best checkpoint**: resume with T=0.0001→0.00003 for another 50k steps
+2. **Asymmetric initializations**: the theoretical bound 1.28 may require non-symmetric f; try skewed initializations
+3. **Higher N starting from sol03's shape**: upsample sol03's function to N=1200, then fine-tune
+4. **Lower temperature floor**: try T=0.00001 (nearly true max) — may converge to better solution
+5. **Exploit agent**: take sol03 (1.5108) and push it with a dedicated fine-tuning session
 
-## 4. Did the agent complete its work?
+## Surprises
 
-Partially. The agent produced a coherent series of five solutions with clear iterative logic, but did not:
-- Update any `# fitness:` headers
-- Write any .score sidecar files
-- Write observations.md
-- Write a report.md (triggering this recovery)
-
-The session timed out before the agent could finish evaluation and reporting. The informal reference to sol03 scoring 1.5178 suggests at least one evaluation was run during the session, but the results were not persisted correctly.
-
-## 5. What should the next generation try differently?
-
-- **Evaluate all five solutions first.** Sol03/sol04 (Adam→L-BFGS-B) and sol05 (soft-max annealing) are the most promising; determine which actually beats baseline before building on them.
-- **If sol03/sol04 beat baseline (~1.5178):** Next agents should exploit the Adam→L-BFGS-B pipeline with higher N (1500–2000), more restarts, or better initializations informed by what sol03/sol04 converge to.
-- **If sol05 (soft-max annealing) beats 1.5178:** It should become the new baseline approach. The annealing idea is sound — hard-max gradients are sparse and noisy.
-- **Symmetry enforcement (sol01):** Worth evaluating. If the optimal function is symmetric (plausible by the problem's structure), enforcing it throughout optimization halves the search space.
-- **Initialization diversity:** The agent defaulted to block-center init for most restarts in sol04. Try initializations informed by what the best solution from sol01–sol03 looks like (e.g., does it develop a multi-bump structure?).
-- **Enforce evaluate-immediately workflow.** All five solutions were written before any were properly evaluated. The agent should write one solution, evaluate, update the header, then proceed.
+- L-BFGS-B, normally excellent for smooth bounded optimization, performed worst (1.6887). The non-smooth max makes it unstable without the smoothing trick.
+- Sol01 with 3× restarts at N=1000 still found 1.5185 exactly — strongly suggests a very wide attractor basin for this value.
+- The graduated smoothing idea worked immediately on first try (sol03), jumping from 1.5185 to 1.5108 with N=600 and only 8 restarts.

@@ -1,21 +1,24 @@
 ---
 type: pattern
 id: pattern_002
-name: "Multi-scale coarse-to-fine consistently beats single-resolution"
+name: "Symmetric initializations converge to worse minima"
 lifecycle: confirmed
 confidence: 0.9
 first_seen: generation_1
 last_updated: generation_1
-evidence: [gen001_explore_1_sol04, gen001_explore_1_sol05, gen001_explore_1_sol06, gen001_explore_1_sol09, gen001_explore_1_sol11, gen001_explore_1_sol12]
-related_ideas: [idea_004, idea_002]
-tags: [multi-scale, performance]
+evidence: [gen001_explore_1_sol01, gen001_explore_2_sol01, gen001_explore_2_sol07]
+related_ideas: [idea_003, idea_012]
+tags: [symmetry, initialization, convergence]
 ---
 
-Solutions using multi-scale optimization (N=600->N=2000) consistently score 1.516-1.518,
-while single-resolution solutions at N=600 score 1.525+ and single-resolution at N=1000-1200
-score 1.518-1.521.
+Solutions initialized with symmetric functions (centered Gaussian, Hann window,
+centered raised cosine) consistently score worse than flat+noise or asymmetric
+initializations.
 
-The coarse phase at N=600 with 40k steps finds the right function shape efficiently.
-Upsampling via linear interpolation preserves the shape. The fine phase at N=2000 with
-50-80k steps provides precision improvement. This two-phase approach is strictly dominant
-over single-resolution optimization at any N tested.
+- Hann window: C = 3.0 (catastrophic)
+- Centered Gaussian (N=800): C = 1.5207 (worse than baseline 1.5185)
+- Gaussian mixture K=8: C = 1.5801
+
+This is explained by the mathematical fact that C >= 2 for symmetric functions.
+Symmetric initializations must first break symmetry through gradient noise before
+making progress, wasting optimization budget.

@@ -1,33 +1,28 @@
 ---
 type: idea
 id: idea_011
-name: "Sidon-set and multi-bump initializations"
+name: "Lion optimizer for escaping plateaus"
 lifecycle: active
-confidence: 0.5
+confidence: 0.35
 first_seen: generation_1
 last_updated: generation_1
 last_confirmed_gen: 1
-supported_by: []
+supported_by: [gen001_explore_2_sol09]
 contradicted_by: []
-related_ideas: [idea_006, idea_003, idea_009]
-cluster: cluster_002
-tags: [initialization, sidon, multi-bump, bimodal]
+related_ideas: [idea_001, idea_008]
+cluster: cluster_001
+tags: [lion, optimizer, sign-gradient]
 ---
 
-Initialize optimization with multi-bump functions inspired by Sidon set constructions from
-additive combinatorics. Research_1 identified that:
+Use the Lion optimizer (sign-based gradient updates) as a warmup phase before
+Adam. Lion's sign-gradient property may escape plateaus that Adam gets stuck in.
 
-1. Bimodal (two-bump) functions can achieve lower C than unimodal functions because they shift
-   the autoconvolution peak away from t=0.
-2. Sidon sets {0, 1, 3, 6} provide positions for Gaussian bumps that naturally produce flat
-   autoconvolution.
-3. Suggested initializations:
-   - Two symmetric Gaussians at +/-0.15 (sigma ~0.04)
-   - Sidon-inspired 4 bumps at x ~ {-0.25, -0.167, 0, 0.25}
-   - Wide center + narrow wings
+**Evidence:**
+- explore_2/sol08 (Lion 60k + Adam 50k): C = 1.5207
+- explore_2/sol09 (Lion 50k + Adam 70k, 4 seeds): C = 1.5182
+- explore_2 report claims "Lion > Adam for this objective in the same step budget."
 
-UNTESTED in gen 1. All successful solutions used flat-block or single-bump initialization and
-converged to what appears to be a unimodal solution. Multi-bump initializations access
-fundamentally different basins and could break below the current 1.5168 floor.
-
-This is the HIGHEST PRIORITY untested idea for gen 2.
+However, explore_2/sol09 at 1.5182 is essentially identical to the baseline (1.5185)
+and explore_1/sol04 (pure Adam 80k: 1.5182). The Lion advantage is marginal at best
+and may be entirely explained by the multi-seed search in sol09. A controlled
+experiment (Lion vs Adam, same total steps, same seeds) is needed.

@@ -1,103 +1,94 @@
 # fitness: TBD
-"""
-L-BFGS-B optimization with explicit non-negativity bounds.
-L-BFGS-B uses curvature (second-order) information and enforces f>=0 via box constraints,
-avoiding the relu-clipping gradient issues of Adam-based approaches.
+# Approach: graduated smoothing (log-sum-exp max, annealed temp) + 8 random restarts
+# Key insight: jnp.max gives sparse gradient (only argmax gets signal).
+# log-sum-exp with annealed temperature spreads gradient across near-max elements,
+# giving richer optimization signal. Start warm (T=0.1), cool to T=0.001.
 
-Strategy:
-1. Phase 1: Adam 20k steps to reach a good basin
-2. Phase 2: L-BFGS-B refinement from Phase 1 result (up to 20k iterations)
-3. 3 restarts, keep best
-"""
+import sys
+sys.path.insert(0, '/home/sasha/Desktop/project_alpha/alpha-evolve/problem')
+
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-import scipy.optimize as scipy_opt
-
 from helper import compute_c
 
 
+def make_smooth_compute_c(temp):
+    def smooth_compute_c(f_values):
+        domain_width = 0.5
+        N = len(f_values)
+        dx = domain_width / N
+
+        f_nn = jax.nn.softplus(f_values)
+        integral_f = jnp.sum(f_nn) * dx
+        integral_f_sq = jnp.maximum(integral_f**2, 1e-9)
+
+        padded_f = jnp.pad(f_nn, (0, N))
+        fft_f = jnp.fft.fft(padded_f)
+        conv_f_f = jnp.fft.ifft(fft_f * fft_f).real
+
+        scaled_conv = conv_f_f * dx
+        # Smooth max via log-sum-exp
+        smooth_max = temp * jax.scipy.special.logsumexp(scaled_conv / temp)
+
+        return smooth_max / integral_f_sq
+    return smooth_compute_c
+
+
 def entrypoint() -> np.ndarray:
-    N = 800
-
-    # --- Adam phase ---
-    adam_steps = 20000
-    warmup_steps = 1000
-    peak_lr = 0.005
-
-    schedule = optax.warmup_cosine_decay_schedule(
-        init_value=0.0,
-        peak_value=peak_lr,
-        warmup_steps=warmup_steps,
-        decay_steps=adam_steps - warmup_steps,
-        end_value=peak_lr * 1e-2,  # don't fully decay — keep momentum for L-BFGS-B handoff
-    )
-    optimizer = optax.adam(learning_rate=schedule)
-
-    @jax.jit
-    def adam_step(f_vals, opt_st):
-        loss, grads = jax.value_and_grad(compute_c)(f_vals)
-        updates, new_opt_st = optimizer.update(grads, opt_st, f_vals)
-        f_vals = optax.apply_updates(f_vals, updates)
-        return f_vals, new_opt_st, loss
-
-    # --- L-BFGS-B phase ---
-    compute_c_val_grad = jax.jit(jax.value_and_grad(compute_c))
-
-    def lbfgsb_obj(x):
-        f = jnp.array(x, dtype=jnp.float32)
-        val, grad = compute_c_val_grad(f)
-        return float(val), np.array(grad, dtype=np.float64)
-
-    bounds = scipy_opt.Bounds(lb=0.0, ub=np.inf)
+    N = 600
+    num_steps_per_phase = 15000
+    # Temperature schedule: start warm, anneal in phases
+    temps = [0.05, 0.01, 0.003, 0.001, 0.0003]  # 5 phases × 15k = 75k total
+    base_lr = 0.005
 
     best_c = float('inf')
-    best_f = None
+    best_raw = None
 
-    seeds = [42, 1234, 9999]
     x = jnp.linspace(-0.25, 0.25, N)
 
-    for i, seed in enumerate(seeds):
-        key = jax.random.PRNGKey(seed)
-        noise = 0.05 * jax.random.uniform(key, (N,))
+    for seed in range(8):
+        key = jax.random.PRNGKey(seed * 17 + 3)
 
-        if i == 0:
-            f_init = jnp.zeros((N,))
-            s, e = N // 4, 3 * N // 4
-            f_init = f_init.at[s:e].set(1.0)
-            f_init = f_init + noise
-        elif i == 1:
-            f_init = jnp.zeros((N,))
-            s, e = int(N * 0.15), int(N * 0.85)
-            f_init = f_init.at[s:e].set(1.0)
-            f_init = f_init + noise
-        else:
-            f_init = jnp.maximum(0.0, 1.0 - 4.0 * jnp.abs(x)) + noise
+        # Random initialization: mix of gaussian bumps at random locations + noise
+        pos = jax.random.uniform(key, (), minval=-0.15, maxval=0.15)
+        width = jax.random.uniform(jax.random.fold_in(key, 1), (), minval=0.05, maxval=0.2)
+        init_bump = jnp.exp(-((x - pos)**2) / (2 * width**2))
+        noise_key = jax.random.fold_in(key, 2)
+        noise = 0.05 * jax.random.normal(noise_key, (N,))
+        # raw_params: in softplus space (so f = softplus(raw) > 0 always)
+        # inv_softplus(y) = log(exp(y)-1) = log(expm1(y))
+        raw_params = jnp.log(jnp.expm1(jnp.clip(init_bump, 1e-4, None))) + noise
 
-        # Phase 1: Adam warm-up
-        f_values = f_init
-        opt_state = optimizer.init(f_values)
-        for _ in range(adam_steps):
-            f_values, opt_state, _ = adam_step(f_values, opt_state)
-
-        x0 = np.array(jax.nn.relu(f_values), dtype=np.float64)
-
-        # Phase 2: L-BFGS-B refinement with non-negativity bounds
-        result = scipy_opt.minimize(
-            lbfgsb_obj,
-            x0,
-            method='L-BFGS-B',
-            jac=True,
-            bounds=bounds,
-            options={'maxiter': 20000, 'maxfun': 50000, 'ftol': 1e-14, 'gtol': 1e-9},
+        schedule = optax.warmup_cosine_decay_schedule(
+            init_value=0.0,
+            peak_value=base_lr,
+            warmup_steps=500,
+            decay_steps=num_steps_per_phase * len(temps) - 500,
+            end_value=base_lr * 1e-3,
         )
+        optimizer = optax.adam(learning_rate=schedule)
+        opt_state = optimizer.init(raw_params)
 
-        f_final = np.maximum(0.0, result.x)
-        final_c = float(compute_c(jnp.array(f_final, dtype=jnp.float32)))
+        for temp in temps:
+            smooth_obj = make_smooth_compute_c(temp)
 
-        if final_c < best_c:
-            best_c = final_c
-            best_f = f_final
+            @jax.jit
+            def train_step(raw_p, opt_st, temp=temp):
+                loss, grads = jax.value_and_grad(make_smooth_compute_c(temp))(raw_p)
+                updates, new_opt_st = optimizer.update(grads, opt_st, raw_p)
+                new_raw_p = optax.apply_updates(raw_p, updates)
+                return new_raw_p, new_opt_st, loss
 
-    return best_f.astype(np.float32)
+            for _ in range(num_steps_per_phase):
+                raw_params, opt_state, loss = train_step(raw_params, opt_state)
+
+        f_final = jax.nn.softplus(raw_params)
+        c_val = float(compute_c(f_final))
+
+        if c_val < best_c:
+            best_c = c_val
+            best_raw = raw_params
+
+    return np.array(jax.nn.softplus(best_raw))

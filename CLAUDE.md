@@ -1,7 +1,8 @@
 # Alpha Evolve
 
 Evolutionary code optimization through collaborative AI agent work sessions.
-Based on the design spec in `ALPHA_EVOLVE_COMPLETE_V4.md`.
+Full system specification: `ALPHA_EVOLVE_COMPLETE_V4.md` (standalone, replicable from that doc alone).
+This file is the operational quick-reference and exhaustive issue tracker.
 
 ## Setup
 
@@ -59,7 +60,7 @@ from the last completed phase by inspecting which files exist (`phase_status()`)
 **Generation loop (6 phases):**
 1. **Architect** — reads system state, writes `manifest.yaml` + per-agent briefs to `briefs/genNNN/`
 2. **Agent work sessions** — launched in parallel per `parallel_groups` in manifest. Each agent reads files, writes code, runs evaluate.py, iterates, writes debrief report. All in one session.
-3. **Evaluator** — verifies scores, extracts knowledge (ideas/patterns/facts), updates clusters, generates coverage matrix
+3. **Evaluator** — collects scores from `.score` files, extracts knowledge (ideas/patterns/facts), updates clusters, generates coverage matrix
 4. **System Critic** — reads agent reports, identifies pipeline problems, writes recommendations
 5. **Consistency Review** — every 3rd gen or on strategic shift: audits knowledge base, rewrites State of Affairs
 6. **Finalize** — update rankings, population summary, score progression, detect user interventions
@@ -251,6 +252,79 @@ Agents wasted a turn trying to read nonexistent symlink. Now only listed for gen
 ### [BUG-25] ~~`knowledge_hierarchy` and `idea_limits` config unclear if enforced~~ — FIXED
 Added comments clarifying these are advisory (passed to agents as guidance text, not enforced
 programmatically by the orchestrator).
+
+### [BUG-26] ~~`all_scores.json` written without file locking~~ — FIXED
+`update_rankings()` read and wrote `all_scores.json` with plain `write_text()` while
+`_record_timing()` used `fcntl.flock()`. Race possible on crash-resume.
+Fixed: `all_scores.json` writes now use `fcntl.flock()` matching timing.json pattern.
+
+### [BUG-27] ~~`_extract_score()` hardcoded `"fitness"` fallback~~ — FIXED
+When `.score` JSON didn't contain `metric_name`, function fell back to hardcoded `"fitness"`
+instead of trying common metric names. Fixed: now tries `["fitness", "score"]` as fallbacks.
+
+### [BUG-28] ~~`_fix_orphaned_cluster_refs()` used fragile string replacement~~ — FIXED
+`frontmatter.replace(f"cluster: {cluster_val}", ...)` could corrupt unrelated fields if
+the cluster name appeared elsewhere in frontmatter. Fixed: uses `re.sub()` with `^cluster:`
+anchored regex to target only the YAML field.
+
+### [BUG-29] ~~Non-finite scores could enter rankings~~ — FIXED
+`inf` and `nan` scores passed through the filter in `update_rankings()`. Fixed: added
+`math.isfinite(score)` check before all other score filters.
+
+### [BUG-30] ~~`consistency_review_interval: 0` caused `ZeroDivisionError`~~ — FIXED
+`gen % interval` with interval=0 crashed. Fixed: clamp interval to minimum 3 if < 1.
+
+### [BUG-31] ~~Duplicate agent names in `parallel_groups` launched same agent twice~~ — FIXED
+If Architect wrote `["explore_1", "explore_1"]`, both launched and second overwrote first.
+Fixed: agent names deduplicated within each group before launching.
+
+### [BUG-32] ~~Empty manifest silently ran zero agents~~ — FIXED
+If manifest YAML loaded as `{}`, `agents` list was empty and no agents ran with no error.
+Fallback only triggered on YAML parse exceptions, not empty-but-valid YAML.
+Fixed: check for empty/missing agents list and regenerate default manifest.
+
+### [BUG-33] ~~`consistency_review.md` template listed wrong file names~~ — FIXED
+Inputs section referenced `evaluator_report.md`, `system_analysis.md`, `agent_gaps.md`,
+`previous_state_of_affairs.md` — none exist under those names. Fixed to actual paths.
+
+### [BUG-34] ~~`consistency_review.md` outputs missing `output/` prefix~~ — FIXED
+Output table listed `state_of_affairs.md` instead of `output/state_of_affairs.md`.
+Fixed: all output paths now include `output/` prefix matching orchestrator expectations.
+
+### [BUG-35] ~~`architect.md` contradicted itself on path format~~ — FIXED
+Line 93 said relative paths, line 120 said absolute. Orchestrator post-processes
+relative→absolute. Fixed: template now consistently says relative paths.
+
+### [BUG-36] ~~`evaluator.md` missing SCALE-4 coverage matrix cap~~ — FIXED
+Template showed unbounded table format without mentioning the cap-to-30 sparse format rule.
+Fixed: added scale rule note directly in the template.
+
+### [BUG-37] ~~`exploit.md` contained Cyrillic text~~ — FIXED
+"Честно скажи:" in an English template. Fixed to "Be honest:".
+
+### [BUG-38] ~~`experimentator.md` didn't document `report.md` as output~~ — FIXED
+Debrief system expects `output/report.md` from all agents but template didn't mention it.
+Fixed: added `report.md` to the output format section.
+
+### [BUG-39] ~~`_extract_score()` didn't consult eval cache~~ — FIXED
+Score extraction used `.score` sidecar → header comment only. If an agent forgot to save
+the `.score` file but `evaluate.py` cached the result, the score was lost. Fixed: now checks
+eval cache (by content hash) as second priority after `.score` sidecar.
+
+### [BUG-40] ~~Brief path absolutization missed `papers/`, `prompts/`, `dashboard/`~~ — FIXED
+`_absolutize_brief_paths()` only converted known prefixes. Paths like `papers/summaries/X.md`
+passed through as relative. Fixed: added `papers/`, `prompts/`, `dashboard/` to prefix list.
+
+### [BUG-41] ~~No startup validation of required files~~ — FIXED
+Orchestrator only checked `description.md` and `evaluate.py`. Missing `validate.py` or agent
+templates caused cryptic errors deep in runs. Fixed: `_preflight_check()` validates all
+required files at startup. Result cached by file mtimes so re-runs are instant.
+
+### [BUG-42] ~~`phase_status()` declared `agents_done` after any single agent output~~ — FIXED
+On crash-resume, one file in `population/genNNN/` triggered `agents_done`, skipping remaining
+agents. Fixed: now reads manifest to count planned agents, checks each one has output.
+Returns `planned` (triggering re-run) if some agents are incomplete. Falls back to old
+behavior only if manifest is missing/corrupt.
 
 ## SCALING — surfaces after gen 10-15
 

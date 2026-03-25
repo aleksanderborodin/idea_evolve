@@ -1,7 +1,10 @@
-# Alpha Evolve — V4
+# Alpha Evolve — Complete System Specification
 ## Evolutionary Code Optimization Through Collaborative AI Agent Work Sessions
 
-**V4 changes from V3:** Three-phase timeout with session resume (work → wrap-up → debrief, all in the same conversation), Architect-controlled per-agent timeouts, timing analytics, evaluation caching, knowledge pre-concatenation, configurable timeouts, incremental rankings, academic paper library with pipeline, prompt externalization, and numerous bug fixes. See [Section 14: Changes from V3](#14-changes-from-v3) for the complete list.
+This document is the standalone specification for the Alpha Evolve system. It contains
+everything needed to understand, replicate, and extend the system: architecture, agent
+roles, knowledge model, file formats, orchestrator behavior, configuration, and known
+limitations.
 
 ---
 
@@ -34,11 +37,11 @@ The result is a system where:
 - A dedicated System Critic identifies pipeline problems and missing capabilities
 - All system state lives in files — the orchestrator is stateless and recoverable
 - The user can observe, intervene, or extend the system at any point by editing files
-- **[V4] Agent work is never lost to timeouts — three-phase timeout with session resume preserves full agent memory**
-- **[V4] The Architect controls per-agent timeouts based on timing analytics from prior generations**
-- **[V4] Evaluation results are cached — identical solutions return scores instantly**
-- **[V4] Research agents have internet access and a paper management pipeline (find → download → extract → summarize)**
-- **[V4] Prompt templates externalized to `prompts/` directory — editable without touching Python code**
+- **Agent work is never lost to timeouts — three-phase timeout with session resume preserves full agent memory**
+- **The Architect controls per-agent timeouts based on timing analytics from prior generations**
+- **Evaluation results are cached — identical solutions return scores instantly**
+- **Research agents have internet access and a paper management pipeline (find → download → extract → summarize)**
+- **Prompt templates externalized to `prompts/` directory — editable without touching Python code**
 
 ## 1.3 What Problems It Solves
 
@@ -84,7 +87,7 @@ The knowledge system is organized as a three-layer hierarchy. Layer 0 is a singl
 
 Every agent reads Layer 0. Agents read the Layer 1 clusters relevant to their task. Agents drill into Layer 2 files only when a specific idea or pattern is directly relevant to what they are working on. This ensures that an agent in generation 50 gets the same quality of orientation as an agent in generation 3, without drowning in accumulated detail.
 
-**[V4]** The Evaluator receives a pre-concatenated knowledge dump (`knowledge_dump.md`) that combines all ideas, clusters, and patterns into a single file. This saves the Evaluator dozens of file-read turns, allowing it to spend its turn budget on analysis rather than navigation.
+The Evaluator receives a pre-concatenated knowledge dump (`knowledge_dump.md`) that combines all ideas, clusters, and patterns into a single file. This saves the Evaluator dozens of file-read turns, allowing it to spend its turn budget on analysis rather than navigation.
 
 ## 2.6 Every Piece of Knowledge Has Provenance
 
@@ -98,17 +101,17 @@ The data model uses YAML frontmatter for structured metadata (queried by the orc
 
 Every agent gets debriefed after its run: what did you lack, what might be wrong, what would you do differently? These reports feed back to the Architect (for better briefs), the Evaluator (for knowledge correction), and the System Critic (for pipeline improvements). The System Critic looks at the system itself — not the solutions — and identifies missing capabilities, prompt problems, and actionable recommendations for the user. The system is aware of its own limitations and reports them.
 
-**[V4]** The debrief is embedded in the agent's work prompt (not a separate follow-up session). If an agent times out before writing its report, a debrief recovery session runs automatically. See Section 6.
+The debrief is embedded in the agent's work prompt (not a separate follow-up session). If an agent times out before writing its report, a debrief recovery session runs automatically. See Section 6.
 
 ## 2.9 Debunked Knowledge Is Still Knowledge
 
 When an idea is proven wrong, it is marked as debunked with an explanation of why. It is not deleted. Debunked ideas prevent agents from rediscovering dead ends. But if an agent independently tries a debunked approach and succeeds, that is a legitimate discovery — it means the debunking was context-dependent. Knowledge evolves; nothing is permanently forbidden.
 
-## 2.10 [V4] Nothing Is Lost to Timeouts
+## 2.10 Nothing Is Lost to Timeouts
 
-Agent sessions have finite time budgets. In V3, if an agent timed out, its debrief was lost — the only record of what it tried died with the session. V4 uses a three-phase timeout: when an agent's work session times out, a **wrap-up session** continues the actual work (same model, full capabilities) with a fresh time budget. If the wrap-up also fails, a lightweight **debrief recovery** captures what was produced. Agents get a second chance to finish their work, not just report on it. See Section 6.
+Agent sessions have finite time budgets. A three-phase timeout ensures work is never lost: when an agent's work session times out, a **wrap-up session** continues the actual work (same model, full capabilities) with a fresh time budget. If the wrap-up also fails, a lightweight **debrief recovery** captures what was produced. Agents get a second chance to finish their work, not just report on it. See Section 6.
 
-## 2.11 [V4] The System Measures Itself
+## 2.11 The System Measures Itself
 
 Every phase and agent records how long it took. This timing data flows back to the Architect, which uses it to set per-agent timeouts for the next generation. Agents that need more time get more time. Agents that finish quickly get tighter budgets. The system adapts its resource allocation based on empirical measurement.
 
@@ -145,27 +148,27 @@ The orchestrator's job is mechanical:
 
 Every step is: read a file → launch a session → move the outputs. The orchestrator does not decide strategy. It does not pick agents. It does not evaluate solutions. It moves files.
 
-**Recovery.** If the orchestrator crashes mid-generation, it restarts and inspects the file system. Which files exist tells it exactly where it stopped. Briefs exist but no agent outputs? Resume at step 3. Agent outputs exist but no evaluator report? Resume at step 7. **[V4]** The evaluator completion check accepts partial outputs — if the evaluator produced some knowledge files but crashed before writing its final report, the partial work is preserved and used.
+**Recovery.** If the orchestrator crashes mid-generation, it restarts and inspects the file system. Which files exist tells it exactly where it stopped. Briefs exist but no agent outputs? Resume at step 3. Agent outputs exist but no evaluator report? Resume at step 7. The evaluator completion check accepts partial outputs — if the evaluator produced some knowledge files but crashed before writing its final report, the partial work is preserved and used.
 
 ## 3.2 The Generation Loop
 
 Each generation proceeds through these phases:
 
-**Phase 1 — Planning.** The orchestrator launches the Architect. The Architect reads the State of Affairs (Layer 0), all topic cluster summaries (Layer 1), the population summary, score history, agent reports from the previous generation, system feedback, the latest consistency review, **[V4] and timing data from recent generations**. It assesses the strategic situation and writes a manifest plus a brief for each agent instance. **[V4]** The manifest can include per-agent `timeout` values. The orchestrator post-processes all briefs to convert relative file paths to absolute paths.
+**Phase 1 — Planning.** The orchestrator launches the Architect. The Architect reads the State of Affairs (Layer 0), all topic cluster summaries (Layer 1), the population summary, score history, agent reports from the previous generation, system feedback, the latest consistency review, **and timing data from recent generations**. It assesses the strategic situation and writes a manifest plus a brief for each agent instance. The manifest can include per-agent `timeout` values. The orchestrator post-processes all briefs to convert relative file paths to absolute paths.
 
 **Phase 2 — Parallel work sessions.** The orchestrator reads the manifest and launches all listed agent instances in parallel as Claude Code sessions. Each agent has a work timeout (from manifest or default). Each works autonomously: reading files, writing solutions, running the evaluation script, seeing scores, iterating, and submitting its best work. The debrief instructions are embedded in the agent's prompt — the agent writes its report as its final action.
 
-**[V4] Phase 2b — Wrap-up.** If an agent's work session times out or crashes without producing `report.md`, the orchestrator launches a **wrap-up session** — a new session with the same model, same workspace access, and full tool permissions. The wrap-up agent reads the brief and partial work, then **continues the actual work**: completing solutions, running evaluations, and producing real results. This is not a reporting session — it is a continuation of the original agent's mission with a fresh time budget (default 900s, 60 turns).
+**Phase 2b — Wrap-up.** If an agent's work session times out or crashes without producing `report.md`, the orchestrator launches a **wrap-up session** — a new session with the same model, same workspace access, and full tool permissions. The wrap-up agent reads the brief and partial work, then **continues the actual work**: completing solutions, running evaluations, and producing real results. This is not a reporting session — it is a continuation of the original agent's mission with a fresh time budget (default 900s, 60 turns).
 
-**[V4] Phase 2c — Debrief recovery.** If no `report.md` exists after the wrap-up (or if wrap-up also timed out), a lightweight debrief recovery session (sonnet, 300s, 15 turns) examines what was produced and writes a report. This ensures knowledge is never fully lost.
+**Phase 2c — Debrief recovery.** If no `report.md` exists after the wrap-up (or if wrap-up also timed out), a lightweight debrief recovery session (sonnet, 300s, 15 turns) examines what was produced and writes a report. This ensures knowledge is never fully lost.
 
-**Phase 3 — Evaluation and knowledge update.** The orchestrator launches the Evaluator agent, pointed to its prompt template and the current generation's outputs. **[V4]** The evaluator workspace includes a pre-concatenated `knowledge_dump.md` containing all ideas, clusters, and patterns — saving dozens of file-read turns. The Evaluator verifies scores, extracts knowledge, performs idea matching, updates the solution-idea map, updates cluster summaries, **[V4] consolidates old experiment results into patterns/facts**, and generates the coverage matrix **(capped to top 30 ideas)**. **[V4]** When ideas move between lifecycle directories (active → established, etc.), old copies in previous directories are automatically deleted. When clusters are merged, orphaned idea back-references are updated.
+**Phase 3 — Evaluation and knowledge update.** The orchestrator launches the Evaluator agent, pointed to its prompt template and the current generation's outputs. The evaluator workspace includes a pre-concatenated `knowledge_dump.md` containing all ideas, clusters, and patterns — saving dozens of file-read turns. The Evaluator collects scores from `.score` sidecar files (no re-running `evaluate.py` — scores are already algorithmically verified and cached), extracts knowledge, performs idea matching, updates the solution-idea map, updates cluster summaries, **consolidates old experiment results into patterns/facts**, and generates the coverage matrix **(capped to top 30 ideas)**. When ideas move between lifecycle directories (active → established, etc.), old copies in previous directories are automatically deleted. When clusters are merged, orphaned idea back-references are updated.
 
-**Phase 4 — System critique.** The orchestrator launches the System Critic. It reads all agent reports, observations, and feedback, and writes its analysis. **[V4]** Previous system recommendations are archived before being overwritten, so good insights from earlier generations are preserved.
+**Phase 4 — System critique.** The orchestrator launches the System Critic. It reads all agent reports, observations, and feedback, and writes its analysis. Previous system recommendations are archived before being overwritten, so good insights from earlier generations are preserved.
 
 **Phase 5 — Consistency review (every 3 generations).** The orchestrator checks the generation number. If it is a consistency review generation (or if the Evaluator flagged `strategic_shift: true`), the orchestrator launches the Consistency Reviewer. The Reviewer audits the knowledge base, corrects clusters, and rewrites the State of Affairs.
 
-**Phase 6 — Finalize.** The orchestrator updates ranking symlinks (best.py, top/), saves a generation snapshot **(including timing data)** to `history/generations/`, and logs any detected user interventions. **[V4]** Rankings are updated incrementally: only the new generation's solutions are scanned, with previous scores loaded from `history/all_scores.json`. Negative scores are filtered out.
+**Phase 6 — Finalize.** The orchestrator updates ranking symlinks (best.py, top/), saves a generation snapshot **(including timing data)** to `history/generations/`, and logs any detected user interventions. Rankings are updated incrementally: only the new generation's solutions are scanned, with previous scores loaded from `history/all_scores.json`. Negative scores are filtered out.
 
 ## 3.3 The Architecture
 
@@ -204,7 +207,7 @@ Each generation proceeds through these phases:
    Phase 3 │ orchestrator launches Evaluator (with knowledge dump)
            ▼
     ┌─────────────────┐
-    │ Evaluator Agent  │ verify scores (cached), extract knowledge,
+    │ Evaluator Agent  │ collect scores from .score files, extract knowledge,
     │                  │ idea matching, update Layer 1 clusters,
     │                  │ consolidate old experiments
     └────────┬────────┘
@@ -274,7 +277,7 @@ parallel_groups:
 - `instance` — Sequential integer within the type for this generation.
 - `model` — Which model to use (`opus`, `sonnet`, `haiku`).
 - `brief` — Path to the brief file, relative to project root.
-- `timeout` — **[V4]** Optional. Session timeout in seconds. Default from `config.yaml` `timeouts.agent_default`. The Architect sets this per agent based on timing data from previous generations.
+- `timeout` — Optional. Session timeout in seconds. Default from `config.yaml` `timeouts.agent_default`. The Architect sets this per agent based on timing data from previous generations.
 
 **Parallel groups:**
 - `parallel_groups` — A list of lists. Each inner list contains agent names as `"type_instance"` strings.
@@ -289,17 +292,17 @@ The `strategy_summary` is for humans and analysis agents. The orchestrator ignor
 
 Every agent is launched the same way by the orchestrator: a Claude Code session that receives its prompt template (from `agents/`) and the path to its brief (from `briefs/`). The prompt template defines the agent's role, rules, and output format. The brief defines this specific instance's task for this generation.
 
-Every agent can read the entire project file system. Every agent writes only to its `workspace/{gen}_{type}_{instance}/output/` directory. The orchestrator moves outputs to permanent locations after the session ends. **[V4]** Workspaces are only cleaned up on full success — if output movement fails, the workspace is preserved for debugging.
+Every agent can read the entire project file system. Every agent writes only to its `workspace/{gen}_{type}_{instance}/output/` directory. The orchestrator moves outputs to permanent locations after the session ends. Workspaces are only cleaned up on full success — if output movement fails, the workspace is preserved for debugging.
 
 ## 4.1 Architect — The Coordinator
 
-The Architect reads the State of Affairs (Layer 0), all topic cluster summaries (Layer 1), the population summary, score history, agent reports from the previous generation, system feedback, consistency reviews, **[V4] and timing data from recent generations (`history/timing.json`)**. It writes a manifest (the execution plan for this generation) and a brief for each agent instance.
+The Architect reads the State of Affairs (Layer 0), all topic cluster summaries (Layer 1), the population summary, score history, agent reports from the previous generation, system feedback, consistency reviews, **and timing data from recent generations (`history/timing.json`)**. It writes a manifest (the execution plan for this generation) and a brief for each agent instance.
 
-**[V4]** The Architect sets per-agent `timeout` values in the manifest based on empirical timing data. Agents that took long in previous generations get more time. Research agents that finish quickly get tighter budgets. The Architect sees the last 3 generations' timing data in its prompt.
+The Architect sets per-agent `timeout` values in the manifest based on empirical timing data. Agents that took long in previous generations get more time. Research agents that finish quickly get tighter budgets. The Architect sees the last 3 generations' timing data in its prompt.
 
 The manifest tells the orchestrator exactly what to launch. The briefs tell each agent what to focus on. The Architect is the only agent that decides the composition of each generation.
 
-**[V4]** All file paths in briefs must be absolute (using the project root). The orchestrator post-processes briefs to convert any remaining relative paths to absolute, ensuring agents' Read tool calls always work.
+All file paths in briefs must be absolute (using the project root). The orchestrator post-processes briefs to convert any remaining relative paths to absolute, ensuring agents' Read tool calls always work.
 
 **Prompt template:** `agents/architect.md`
 **Reads:** Layer 0 always. Layer 1 always. Population summary, score history, previous reports, feedback, timing data. Layer 2 as needed.
@@ -370,18 +373,18 @@ The Research agent investigates techniques, algorithms, and approaches relevant 
 **Writes to papers/:** Downloaded PDFs (`pdf/`), extracted text (`md/`), summaries (`summaries/`), updated `index.yaml`.
 **Orchestrator moves to:** `knowledge/research/{generation}/research_{instance}/`
 
-## 4.8 Evaluator Agent — Knowledge Extraction, Score Verification, and Layer 1 Maintenance
+## 4.8 Evaluator Agent — Knowledge Extraction and Layer 1 Maintenance
 
-The Evaluator agent runs after all work sessions complete. It is the primary knowledge worker: it verifies scores, extracts ideas and patterns from results, manages the knowledge lifecycle, maintains the solution-idea map, and updates the topic cluster summaries (Layer 1).
+The Evaluator agent runs after all work sessions complete. It is the primary knowledge worker: it collects verified scores from `.score` files, extracts ideas and patterns from results, manages the knowledge lifecycle, maintains the solution-idea map, and updates the topic cluster summaries (Layer 1).
 
-**[V4] Changes from V3:**
+**Key implementation details:**
 
-- **Pre-concatenated knowledge dump.** The evaluator workspace includes `knowledge_dump.md` — all ideas, clusters, and patterns in one file. The evaluator reads this first, then drills into individual files only when needed. This saves dozens of file-read turns.
-- **Default max_turns increased to 120** (from 60) to give the Evaluator enough room for its analysis work.
+- **Pre-concatenated knowledge dump.** The evaluator workspace includes `knowledge_dump.md` — all ideas, clusters, and patterns in one file (capped at 80K chars). The evaluator reads this first, then drills into individual files only when needed. This saves dozens of file-read turns.
+- **High turn budget.** Default max_turns is 150 (configurable), giving the Evaluator enough room for its analysis across many solutions.
 - **Coverage matrix capped to top 30 most-used ideas** with sparse format to prevent O(N²) growth.
 - **Experiment consolidation.** The evaluator is instructed to consolidate experiment results older than 3 generations into patterns/facts, preventing unbounded growth of `knowledge/experiments/`.
-- **Ghost file cleanup.** When ideas move between lifecycle directories (active → established, etc.), the orchestrator automatically deletes old copies from previous directories. This prevents duplicates that compound every generation.
-- **Cluster merge cleanup.** When clusters are removed or merged, the orchestrator updates orphaned idea `cluster:` references in YAML frontmatter to `unclustered`.
+- **Ghost file cleanup.** When ideas move between lifecycle directories (active → established, etc.), the orchestrator automatically deletes old copies from previous directories via `_remove_from_other_lifecycles()`.
+- **Cluster merge cleanup.** When clusters are removed or merged, the orchestrator updates orphaned idea `cluster:` references using `_fix_orphaned_cluster_refs()` with anchored regex replacement.
 
 **Prompt template:** `agents/evaluator.md`
 **Reads:** Everything, with focus on this generation's submitted solutions, observations, experiment results, the knowledge dump, and existing Layer 1 clusters.
@@ -392,7 +395,7 @@ The Evaluator agent runs after all work sessions complete. It is the primary kno
 
 The System Critic runs after the Evaluator. It looks at the system itself, not the solutions.
 
-**[V4]** Previous system recommendations are archived to `feedback/system_recommendations_archive/genNNN.md` before being overwritten. This preserves good insights from earlier generations that a weak critic might lose.
+Previous system recommendations are archived to `feedback/system_recommendations_archive/genNNN.md` before being overwritten. This preserves good insights from earlier generations that a weak critic might lose.
 
 **Prompt template:** `agents/system_critic.md`
 **Reads:** Everything, with focus on `reports/`, `feedback/`, and observations.
@@ -442,45 +445,76 @@ Knowledge is organized as a three-layer hierarchy designed to scale across many 
 
 Ideas progress through lifecycle stages: `active` → `established` → `archived`, or `active` → `disputed` → `debunked`. Each transition requires evidence and is recorded with provenance.
 
-**[V4]** When an idea moves from one lifecycle directory to another (e.g., `ideas/active/` → `ideas/established/`), the orchestrator automatically removes the old copy from all other lifecycle directories. This prevents ghost files that accumulated in V3.
+When an idea moves from one lifecycle directory to another (e.g., `ideas/active/` → `ideas/established/`), the orchestrator automatically removes the old copy from all other lifecycle directories. This prevents ghost files from accumulating across generations.
 
 ## 5.3 Knowledge Files
 
 All knowledge files use YAML frontmatter with a markdown body:
 
+**Idea file example:**
 ```markdown
 ---
-id: idea_042
 type: idea
-title: "Use D₁₁ root system for lattice construction"
+id: idea_042
+name: "Use D₁₁ root system for lattice construction"
 lifecycle: active
-certainty: medium
-created_gen: 3
-created_by: explore_1
-last_confirmed_gen: 7
+confidence: 0.75
+first_seen: generation_3
+last_updated: generation_7
+last_confirmed_gen: generation_7
+supported_by: [gen003/explore_1/sol01, gen007/exploit_1/sol01]
+contradicted_by: []
+related_ideas: [idea_038, idea_045]
 cluster: cluster_lattice
 tags: [lattice, algebraic]
-solutions: [gen003/explore_1/sol01, gen007/exploit_1/sol01]
-stats:
-  times_used: 4
-  avg_score: 0.82
-  top_score: 0.91
-  median_score: 0.83
-related: [idea_038, idea_045]
 ---
 
 The D₁₁ root system provides 2×11 = 22 vectors...
 ```
 
-## 5.4 [V4] Knowledge Pre-Concatenation
+**Pattern file example:**
+```markdown
+---
+type: pattern
+id: pattern_012
+name: "FFT-based evaluation speeds up fitness computation"
+lifecycle: confirmed
+confidence: 0.9
+first_seen: generation_2
+last_updated: generation_5
+evidence: [gen002/explore_1/sol01, gen005/exploit_1/sol01]
+related_ideas: [idea_010, idea_015]
+tags: [performance, fft]
+---
+
+Using FFT to compute autocorrelation reduces evaluation from O(N²) to O(N log N)...
+```
+
+**Fact file example:**
+```markdown
+---
+type: fact
+id: fact_003
+name: "Theoretical lower bound for C is approximately 1.28"
+confidence: 1.0
+first_seen: generation_1
+verified: true
+source: "mathematical proof"
+tags: [bounds, theory]
+---
+
+The constant C in the first autocorrelation inequality has a theoretical lower bound...
+```
+
+## 5.4 Knowledge Pre-Concatenation
 
 For the Evaluator, reading dozens of individual idea, cluster, and pattern files consumes most of its turn budget. The orchestrator pre-concatenates all knowledge into a single `knowledge_dump.md` file in the evaluator's workspace. The evaluator reads this file first for orientation, then drills into individual files only when it needs to make specific edits. Ideas are truncated to 2000 characters, clusters to 1500, patterns to 1000 — enough for the evaluator to understand each piece without exhausting context.
 
-## 5.5 [V4] Evaluation Caching
+## 5.5 Evaluation Caching
 
-`evaluate.py` caches results in `history/eval_cache.json`, keyed by SHA-256 hash of file content. If two agents generate identical solutions, or the Evaluator re-validates already-validated solutions, cached scores are returned instantly. The cache uses `fcntl` file locking for thread-safe parallel access.
+`evaluate.py` caches results in `history/eval_cache.json`, keyed by SHA-256 hash of file content. If two agents generate identical solutions, cached scores are returned instantly. The Evaluator does not re-run `evaluate.py` — it reads scores from `.score` sidecar files, which are the authoritative algorithmic output. The cache uses `fcntl` file locking for thread-safe parallel access.
 
-## 5.6 [V4] Metrics System — `problem/metrics.yaml`
+## 5.6 Metrics System — `problem/metrics.yaml`
 
 The system supports multiple fitness metrics defined in `problem/metrics.yaml`. This file is the single source of truth for how scores are interpreted, formatted, and reported to agents.
 
@@ -522,7 +556,7 @@ specs:
 | `sentinel_value` | evaluate.py | Error return value per metric; orchestrator filters scores near sentinel |
 | `description` | Orchestrator | Shown in agent prompts and population summary |
 | `lower_bound`/`upper_bound` | Orchestrator | Shown in agent prompts as theoretical bounds |
-| `significant_change` | (Available for future use — evaluator could use to detect meaningful improvement) |
+| `significant_change` | Orchestrator | Used in `_update_score_progression()` to mark trivial deltas with `~` and show improvement direction |
 
 **Problem-agnostic design:** The orchestrator never hardcodes metric names, directions, or formatting. Everything flows from `metrics.yaml`. To change the problem:
 
@@ -538,9 +572,9 @@ specs:
 
 # 6. The Debrief System
 
-## 6.1 How It Works — [V4] Three-Phase Timeout
+## 6.1 How It Works — Three-Phase Timeout
 
-In V3, debrief was a separate follow-up session. In V4, debrief instructions are **embedded in the agent's work prompt** and recovery uses **session resume** (`--resume SESSION_ID`) so the agent retains full memory of its work across all phases.
+Debrief instructions are **embedded in the agent's work prompt** and recovery uses **session resume** (`--resume SESSION_ID`) so the agent retains full memory of its work across all phases.
 
 **Phase 1 — Work session.** The agent runs with its work timeout (configurable per-agent via manifest, default from `config.yaml`) and a unique `--session-id`. The debrief instructions are at the end of its prompt, telling it to write `output/report.md` before finishing. If the agent completes normally, it writes the report and the session ends.
 
@@ -582,7 +616,7 @@ The Evaluator, System Critic, and Consistency Reviewer also use the three-phase 
 
 The Architect decides how many instances of each agent type to launch per generation by writing them into the manifest. The orchestrator reads the manifest and launches exactly what it says.
 
-Each instance gets its own brief with a distinct directive. **[V4]** Each instance can also get its own timeout.
+Each instance gets its own brief with a distinct directive. Each instance can also get its own timeout.
 
 ## 7.2 Instance Coordination
 
@@ -598,7 +632,7 @@ The solution-idea map tracks which ideas are implemented in which solutions and 
 
 ## 8.2 The Coverage Matrix
 
-**[V4]** The coverage matrix is capped to the top 30 most-used ideas and uses a sparse format. At 50+ ideas, a full N×N matrix becomes unwieldy for both agents and the Evaluator to maintain. The sparse format lists only combinations that have been tried, with their best score and count.
+The coverage matrix is capped to the top 30 most-used ideas and uses a sparse format. At 50+ ideas, a full N×N matrix becomes unwieldy for both agents and the Evaluator to maintain. The sparse format lists only combinations that have been tried, with their best score and count.
 
 ---
 
@@ -614,7 +648,7 @@ alpha-evolve/
 │   ├── evaluate.py                   # Problem-agnostic evaluator (loads validate.py, caches)
 │   ├── validate.py                   # Problem-specific validation (returns {metric: value} dict)
 │   ├── helper.py                     # Problem-specific helpers (e.g., differentiable objective)
-│   ├── metrics.yaml                  # [V4] Metric definitions: direction, decimals, sentinels
+│   ├── metrics.yaml                  # Metric definitions: direction, decimals, sentinels
 │   └── initial_programs/             # Baseline solutions for agents to study
 │
 ├── population/                       # All solutions (written only by orchestrator)
@@ -650,16 +684,16 @@ alpha-evolve/
 │   ├── generations/                  # Per-gen snapshots (include timing in V4)
 │   ├── score_progression.md
 │   ├── solution_idea_map.md
-│   ├── coverage_matrix.md            # [V4] Capped to top 30 ideas, sparse format
-│   ├── all_scores.json               # [V4] Incremental rankings cache
-│   ├── timing.json                   # [V4] Per-phase, per-agent timing data
-│   └── eval_cache.json               # [V4] Evaluation results cache (SHA-256 keyed)
+│   ├── coverage_matrix.md            # Capped to top 30 ideas, sparse format
+│   ├── all_scores.json               # Incremental rankings cache
+│   ├── timing.json                   # Per-phase, per-agent timing data
+│   └── eval_cache.json               # Evaluation results cache (SHA-256 keyed)
 │
 ├── briefs/                           # Written only by orchestrator from Architect output
 │   └── gen007/
-│       ├── manifest.yaml             # [V4] Includes per-agent timeout field
+│       ├── manifest.yaml             # Includes per-agent timeout field
 │       ├── manifest_reasoning.md
-│       ├── explore_1.md              # [V4] Paths post-processed to absolute
+│       ├── explore_1.md              # Paths post-processed to absolute
 │       └── ...
 │
 ├── reports/                          # Debrief reports (from agents or recovery sessions)
@@ -672,19 +706,19 @@ alpha-evolve/
 │   ├── agent_gaps/
 │   ├── system_analysis/
 │   ├── system_recommendations.md
-│   ├── system_recommendations_archive/  # [V4] Previous recommendations preserved
+│   ├── system_recommendations_archive/  # Previous recommendations preserved
 │   ├── experiment_suggestions/
 │   ├── experiment_requests/           # Collected from Full agents
 │   └── consistency_reviews/
 │
-├── workspace/                        # [V4] Preserved on failure, cleaned on success
+├── workspace/                        # Preserved on failure, cleaned on success
 │   ├── gen007_explore_1/
 │   │   ├── prompt.md
 │   │   ├── brief.md
 │   │   └── output/
 │   ├── gen007_evaluator/
 │   │   ├── prompt.md
-│   │   ├── knowledge_dump.md          # [V4] Pre-concatenated knowledge
+│   │   ├── knowledge_dump.md          # Pre-concatenated knowledge
 │   │   └── output/
 │   └── ...
 │
@@ -692,10 +726,10 @@ alpha-evolve/
 │   ├── initial_ideas.md
 │   ├── initial_facts.md
 │   ├── interventions.md
-│   └── config.yaml                    # [V4] Expanded with timeouts section
+│   └── config.yaml                    # Expanded with timeouts section
 │
 ├── agents/                            # Agent prompt templates
-│   ├── architect.md                   # [V4] Rewritten to match actual manifest format
+│   ├── architect.md                   # Rewritten to match actual manifest format
 │   ├── explore.md
 │   ├── exploit.md
 │   ├── genetic.md
@@ -756,7 +790,7 @@ The user can:
 
 - Read `knowledge/state_of_affairs.md` for the system's compressed self-knowledge
 - Read `feedback/system_recommendations.md` for what the system thinks needs changing
-- **[V4]** Read `history/timing.json` to see how long each phase and agent took
+- Read `history/timing.json` to see how long each phase and agent took
 - Edit knowledge files, prompts, briefs, or config
 - All user edits are auto-detected and logged in `user/interventions.md`
 
@@ -815,7 +849,7 @@ analysis:
     enabled: true
     model: sonnet
 
-# --- [V4] Timeouts (seconds) ---
+# --- Timeouts (seconds) ---
 # Three-phase timeout: work → wrap-up (continue work) → debrief recovery (report only).
 # The Architect can override agent_default per agent via manifest.yaml.
 timeouts:
@@ -836,7 +870,7 @@ max_turns:
   genetic: 60
   experimentator: 60
   research: 40
-  evaluator: 120                   # [V4] Bumped from 60
+  evaluator: 120                   # Bumped from 60
   system_critic: 30
   consistency_reviewer: 40
 
@@ -883,61 +917,202 @@ The original AlphaEvolve is a single LLM loop that generates, evaluates, and ite
 
 **Human-in-the-loop without blocking.** The user can intervene at any point by editing files. The system never waits.
 
-**[V4] Resilience.** Three-phase timeout with session resume (work → wrap-up → debrief, same conversation) ensures work is completed and knowledge is never lost. The agent retains full memory across all phases. Partial outputs are accepted. Workspaces are preserved on failure. The system degrades gracefully rather than losing work.
+**Resilience.** Three-phase timeout with session resume (work → wrap-up → debrief, same conversation) ensures work is completed and knowledge is never lost. The agent retains full memory across all phases. Partial outputs are accepted. Workspaces are preserved on failure. The system degrades gracefully rather than losing work.
 
-**[V4] Self-measurement.** Timing data flows back to the Architect, which adapts timeout budgets per agent. The system measures its own resource usage and optimizes allocation.
+**Self-measurement.** Timing data flows back to the Architect, which adapts timeout budgets per agent. The system measures its own resource usage and optimizes allocation.
 
-**[V4] Scaling.** Incremental rankings, evaluation caching, knowledge pre-concatenation, coverage matrix capping, experiment consolidation, and ghost file cleanup keep the system efficient through generation 30+.
+**Scaling.** Incremental rankings, evaluation caching, knowledge pre-concatenation, coverage matrix capping, experiment consolidation, and ghost file cleanup keep the system efficient through generation 30+.
 
 ---
 
-# 14. Changes from V3
+# 14. Technical Implementation Details
 
-## Bugs Fixed
+## 14.1 How Agents Are Launched
 
-| Issue | Fix |
-|-------|-----|
-| **Ghost files** — ideas kept in old lifecycle dirs after moving | Orchestrator deletes old copies from all other lifecycle dirs |
-| **Negative scores in rankings** — dragged down averages | Filtered: `score > 0` required |
-| **Relative paths in briefs** — agents' Read tool failed | Orchestrator post-processes all briefs to absolute paths |
-| **Partial evaluator loss** — restart from scratch on crash | Accepts partial outputs (any meaningful file, not just final report) |
-| **Workspace cleanup on failure** — destroyed debugging evidence | Cleanup only on full success; workspace preserved on failure |
-| **Orphaned cluster refs** — idea `cluster:` field pointed to merged/deleted cluster | Orchestrator updates to `unclustered` when clusters are removed |
-| **Operator precedence** — phase_status had `or ... and` without parens | Added parentheses for correct evaluation |
+Every agent is launched as a Claude Code CLI session:
 
-## Scaling Improvements
+```bash
+npx @anthropic-ai/claude-code --print \
+  --model <model> \
+  --max-turns <N> \
+  --allowedTools "Read,Write,Bash,Glob,Grep" \
+  --session-id <uuid> \
+  -p "<prompt>"
+```
 
-| Issue | Fix |
-|-------|-----|
-| **Evaluator turn exhaustion** — ran out of turns reading files at gen 12+ | Default turns bumped to 120 + pre-concatenated knowledge dump |
-| **Rankings rescanned all gens** — quadratic total work | Incremental: `all_scores.json` cache, only scan new generation |
-| **Recommendations overwritten** — good insights lost | Previous version archived to `system_recommendations_archive/` |
-| **Coverage matrix O(N²)** — unwieldy at 50+ ideas | Capped to top 30 ideas, sparse format |
-| **Experiments never consolidated** — unbounded growth | Evaluator instructed to consolidate experiments older than 3 gens |
-| **No eval caching** — identical solutions re-validated | Cache by SHA-256 content hash in `eval_cache.json` with file locking |
+The orchestrator function `launch_claude_session()` manages this. Key behaviors:
+- `start_new_session=True` creates a process group so the entire tree can be killed on timeout
+- On timeout: SIGTERM to process group first, SIGKILL fallback after 5s
+- Returns `(stdout, session_id)` on success
+- Raises `SessionTimeout(session_id)` or `SessionError` on failure
+- Wrap-up and debrief recovery use `--resume <session_id>` to continue the same conversation
 
-## New Capabilities
+Research agents additionally get `--allowedTools "Read,Write,Bash,Glob,Grep,WebSearch,WebFetch"`.
 
-| Feature | Description |
-|---------|-------------|
-| **Three-phase timeout with session resume** | Work → wrap-up → debrief, all via `--resume` on the same session. Agent keeps full memory across phases. Falls back to new session only if no session_id. |
-| **Architect-controlled timeouts** | Per-agent `timeout` field in manifest, based on timing data |
-| **Timing analytics** | Every phase/agent timed, stored in `history/timing.json`, shown in generation snapshots |
-| **Configurable timeouts** | All timeouts in `config.yaml` `timeouts` section, not hardcoded |
-| **Knowledge pre-concatenation** | Single `knowledge_dump.md` for evaluator, saves dozens of turns |
-| **Eval cache with file locking** | Thread-safe cache for parallel agent evaluation |
-| **Paper library** | `papers/` directory with pipeline: find → download → extract → summarize. Managed via `papers/manage.py`. Research agents have WebSearch + WebFetch. Paper summaries available to all agents. |
-| **Externalized prompts** | Prompt templates in `prompts/` directory, loaded at runtime. Editable without touching orchestrator code. |
+## 14.2 Score Extraction Priority
 
-## Architecture Changes
+The orchestrator function `_extract_score()` resolves scores in this priority order:
 
-| V3 | V4 |
-|----|-----|
-| Debrief as separate follow-up session | Debrief embedded in work prompt + wrap-up session to finish work + debrief recovery as final fallback |
-| Fixed 900s agent timeout | Architect sets per-agent timeout from timing data |
-| Evaluator 60 max turns | Evaluator 120 max turns + knowledge dump |
-| All timeouts hardcoded | All timeouts in `config.yaml` |
-| Full N×N coverage matrix | Top-30 sparse coverage matrix |
-| Rankings rescan all gens | Incremental scan + JSON cache |
-| Workspace always cleaned | Workspace preserved on failure |
+1. **`.score` sidecar file** — JSON written by the agent alongside the solution (e.g., `sol01.score`)
+2. **Eval cache** — `history/eval_cache.json` keyed by SHA-256 of file content. This is the authoritative source since `evaluate.py` writes it algorithmically
+3. **Header comment** — `# fitness: 1.234` in the first 10 lines of the solution file
+
+Scores are filtered before entering rankings: `math.isfinite(score)` must be true, and scores must pass direction-specific sentinel filters.
+
+## 14.3 Crash Recovery — `phase_status()`
+
+The function `phase_status(project_root, gen)` reconstructs the current position by checking which files exist:
+
+| Return value | How detected |
+|---|---|
+| `"complete"` | `history/generations/genNNN.md` exists |
+| `"consistency_done"` | `feedback/consistency_reviews/genNNN.md` exists, or workspace has `output/state_of_affairs.md` |
+| `"critic_done"` | `feedback/system_analysis/genNNN.md` exists, or workspace has `output/system_analysis.md` |
+| `"evaluator_done"` | `reports/genNNN/evaluator.md` exists, or workspace has evaluator output files |
+| `"agents_done"` | All agents in manifest have output in population/, reports/, research/, or workspace/ |
+| `"planned"` | `briefs/genNNN/manifest.yaml` exists (some agents may be incomplete) |
+| `"not_started"` | None of the above |
+
+The agent completion check reads the manifest to count planned agents and verifies each one has output. If only some agents completed, it returns `"planned"` so `run_agents` re-runs.
+
+## 14.4 Startup Validation — `_preflight_check()`
+
+Before the first generation, the orchestrator validates all 18 required files exist:
+- Problem files: `description.md`, `evaluate.py`, `validate.py`, `metrics.yaml`
+- Config: `user/config.yaml`
+- All 10 agent templates in `agents/`
+- All 3 prompt templates in `prompts/`
+
+Results are cached by file mtimes in `history/.preflight_ok`. Subsequent runs skip validation unless a file changes or is deleted.
+
+## 14.5 Brief Path Post-Processing — `_absolutize_brief_paths()`
+
+After the Architect writes briefs, the orchestrator converts all relative file paths to absolute. It recognizes paths starting with these prefixes:
+
+`population/`, `knowledge/`, `problem/`, `history/`, `reports/`, `briefs/`, `feedback/`, `user/`, `agents/`, `workspace/`, `papers/`, `prompts/`, `dashboard/`
+
+Paths inside backticks and after list markers (`-`, `1.`) are converted. Already-absolute paths are left untouched.
+
+## 14.6 Knowledge Pre-Concatenation — `_preconcat_knowledge()`
+
+Before launching the Evaluator, the orchestrator builds `knowledge_dump.md` in the evaluator's workspace:
+- Ideas: truncated to 2000 chars each
+- Clusters: truncated to 1500 chars each
+- Patterns: truncated to 1000 chars each
+- Total dump capped at 80K chars
+- Truncated entries end with `[TRUNCATED — read full file for details]`
+
+Similarly, `_preconcat_prev_reports()` builds `prev_gen_reports.md` for the Architect:
+- Each report capped at 3K chars
+- Total capped at 40K chars
+
+## 14.7 Evaluation System — `evaluate.py`
+
+The evaluator is problem-agnostic. It dynamically loads `validate.py` from its own directory:
+
+```python
+# evaluate.py loads validate.py via importlib
+validate = importlib.util.module_from_spec(spec)
+
+# Solutions must implement:
+def entrypoint() -> <problem_specific_output>
+
+# validate() receives the output and returns:
+{"fitness": <float>, "is_valid": <0|1>}
+```
+
+Caching: SHA-256 of file content → `history/eval_cache.json`. Thread-safe via `fcntl.flock()` (shared lock for reads, exclusive for writes). On error, returns sentinel values from `metrics.yaml`.
+
+## 14.8 Timing System
+
+Every phase and agent records elapsed time via `_record_timing()` to `history/timing.json`. Thread-safe with `fcntl` file locking. Structure:
+
+```json
+{
+  "generations": {
+    "gen001": {
+      "architect": 45.2,
+      "agent_explore_1": 892.1,
+      "agent_explore_1_debrief": 120.5,
+      "evaluator": 340.0,
+      "system_critic": 180.3,
+      "total": 1580.0
+    }
+  }
+}
+```
+
+The Architect reads the last 3 generations' timing data and sets per-agent timeouts accordingly.
+
+---
+
+# 15. Known Issues & Limitations
+
+## 15.1 Architectural Limitations
+
+### Write isolation is advisory only
+Agents are instructed to write only to `output/`, but nothing enforces it. A confused agent could corrupt `knowledge/`, `population/`, or any shared file. **Risk:** Medium — Claude Code agents generally follow instructions.
+
+### No solution lineage tracking
+When Exploit refines a solution, it produces a new file with no record of what it descended from. The solution-idea map tracks which ideas a solution uses, but not parent→child relationships between solutions.
+
+### Knowledge files have no version history
+When the Evaluator updates an idea file, it overwrites it. No diff, no changelog. The Consistency Reviewer audits current state but can't see how knowledge evolved.
+
+### Architect is a single point of failure
+If the Architect writes poor briefs, all agents in that generation suffer. There is no mid-generation correction. A bad Architect turn wastes an entire generation of compute.
+
+### No cost awareness or budget management
+Each generation costs roughly $1-5 (1 Architect opus + 3-8 agents sonnet + 1 Evaluator opus + 1 Critic sonnet + possibly 1 Consistency Reviewer opus). A 30-generation run costs $30-150+. No budget limit, no throttle, no cost-based throttling.
+
+### No semantic deduplication of solutions
+Two agents might independently arrive at the same approach. The system treats them as distinct. The Evaluator should catch this during idea matching, but compute is wasted on redundant work.
+
+### No rate limiting or backoff
+10 parallel sessions × 150 turns = potentially 1500 near-simultaneous API calls. Could trigger rate limits depending on API tier.
+
+## 15.2 Scale Considerations (gen 15+)
+
+### Context window pressure at high turn counts
+With 150 max turns, an agent's context window accumulates tool results. By turn 100+, earlier work may be compressed or lost. **No fix** — fundamental limitation of Claude Code sessions. Mitigate by keeping file reads targeted.
+
+### Eval cache grows unbounded
+`history/eval_cache.json` never prunes old entries. Can be pruned manually if it grows past 10MB. Low priority.
+
+### `all_scores.json` stat-checks every cached path
+`update_rankings()` calls `Path.exists()` on every cached score entry. O(N) stat calls per generation. Acceptable until 500+ solutions.
+
+### YAML re-parsing
+`config.yaml` and `metrics.yaml` are re-parsed ~30 times per generation across helper functions. Total ~50ms. Not worth threading config as a parameter.
+
+## 15.3 Advisory Config Not Enforced
+
+### `max_instances` per agent type
+The Architect sees the limit but the orchestrator doesn't reject extra instances. Intentional — hard enforcement would override Architect judgment. Monitor if the Architect consistently exceeds limits.
+
+### `knowledge_hierarchy` token limits
+Token limits for State of Affairs, clusters, etc. are advisory guidance for agents. The orchestrator doesn't truncate knowledge files to fit. Monitor if knowledge files grow excessively large.
+
+## 15.4 Untested End-to-End Flows
+
+These flows are implemented but have not been verified in a real multi-generation run:
+
+- **Genetic crossover** — Requires Architect to specify 2 parents by path. The `genetic.md` template is correct but parent path resolution is untested.
+- **Experimentator → knowledge pipeline** — Experiment results go to `knowledge/experiments/`, evaluator consolidates old ones. The full cycle is untested.
+- **Consistency reviewer cluster updates** — When the reviewer writes `updated_clusters/`, the orchestrator diffs against existing clusters to find removed ones and fix orphaned refs.
+- **Experiment requests flow** — Full agents → `experiment_requests.md` → collected to `feedback/` → listed in Architect prompt.
+- **Gen-1 Evaluator cluster bootstrap** — No example cluster files exist. Prompt describes the format but there's nothing to imitate. First clusters may be poor.
+- **`--allowedTools` auto-approval** — We assume it auto-approves tools in `--print` mode. If not, agents would be blocked waiting for approval.
+
+## 15.5 Spec Deviations — Intentional
+
+| Design spec says | Implementation does | Why |
+|---|---|---|
+| Write isolation enforced | Advisory only | Would need sandboxing, complex |
+| Solution names: `gen007_explore_2_sol03` | Raw naming `sol01.py` in `population/gen007/explore_2/` | Simpler; path provides identity |
+| Agents read at granular L0→L1→L2 drill-down | Agents get file path list, read what they want | Lean prompts; agents navigate autonomously |
+| Knowledge files versioned | Overwritten in place | Would need git or versioning layer |
+| `workspace/` archived after run | Deleted after output moved | Saves disk; workspace preserved on failure for debugging |
+| `observations/` directory | Observations stay in `population/{gen}/{agent}/observations.md` | Simpler routing |
+| Consistency Reviewer debrief to `feedback/` | Debrief to `reports/` like all agents | Consistent routing |
 | architect.md referenced wrong paths/format | architect.md rewritten to match actual orchestrator |

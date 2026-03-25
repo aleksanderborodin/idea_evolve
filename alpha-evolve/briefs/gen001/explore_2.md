@@ -1,25 +1,35 @@
 ## Read first
-- `/home/sasha/Desktop/project_alpha/alpha-evolve/problem/description.md`
-- `/home/sasha/Desktop/project_alpha/alpha-evolve/problem/constraints.md`
-- `/home/sasha/Desktop/project_alpha/alpha-evolve/problem/initial_programs/optimize.py`
-- `/home/sasha/Desktop/project_alpha/alpha-evolve/problem/helper.py`
 - `/home/sasha/Desktop/project_alpha/alpha-evolve/knowledge/facts/fact_001.md`
 - `/home/sasha/Desktop/project_alpha/alpha-evolve/knowledge/facts/fact_002.md`
-- `/home/sasha/Desktop/project_alpha/alpha-evolve/knowledge/ideas/active/idea_005.md`
+- `/home/sasha/Desktop/project_alpha/alpha-evolve/knowledge/facts/fact_003.md`
+- `/home/sasha/Desktop/project_alpha/alpha-evolve/knowledge/facts/fact_004.md`
+- `/home/sasha/Desktop/project_alpha/alpha-evolve/knowledge/facts/fact_005.md`
 - `/home/sasha/Desktop/project_alpha/alpha-evolve/knowledge/ideas/active/idea_006.md`
-- `/home/sasha/Desktop/project_alpha/alpha-evolve/knowledge/ideas/active/idea_004.md`
+- `/home/sasha/Desktop/project_alpha/alpha-evolve/knowledge/ideas/active/idea_003.md`
+- `/home/sasha/Desktop/project_alpha/alpha-evolve/problem/description.md`
+- `/home/sasha/Desktop/project_alpha/alpha-evolve/problem/constraints.md`
+- `/home/sasha/Desktop/project_alpha/alpha-evolve/problem/helper.py`
+- `/home/sasha/Desktop/project_alpha/alpha-evolve/problem/initial_programs/optimize.py`
 
 ## Directive
-Explore analytical and structural approaches to minimizing C. Do NOT just tune the gradient descent from the baseline -- explore_1 handles that. Your job is to find fundamentally different function shapes.
+**Direction: Analytical and structural constructions — exploit mathematical structure of the problem.**
 
-Directions to try:
+The baseline does pure numerical optimization with no mathematical insight. Your goal is to construct functions with known good autoconvolution properties, then optionally polish them with gradient descent.
 
-1. **Symmetry exploitation.** The autoconvolution (f*f) is symmetric. Try functions that are symmetric about the center of [-1/4, 1/4]. Enforce symmetry as a hard constraint (mirror the array) before computing C. This halves the search space.
+Specific approaches to try (in priority order):
 
-2. **Known function families with good autoconvolution properties.** Try: (a) truncated Gaussians with optimized width, (b) raised cosine windows, (c) B-spline basis functions with optimized coefficients, (d) piecewise linear "tent" functions. Parameterize each family with a few parameters and optimize those parameters.
+1. **Characteristic functions of intervals:** The simplest non-negative function is an indicator function (constant on some subinterval, zero elsewhere). Try indicator functions of different widths and positions within [-1/4, 1/4]. The autoconvolution of a box function is a triangle — analyze what width minimizes C.
 
-3. **Sparse/concentrated functions.** Instead of smooth functions, try functions with support on a small subset of the domain. The Sidon set connection suggests sparse constructions might yield low C. Try indicator functions on carefully chosen subsets, or functions that are zero except on a few intervals.
+2. **Symmetric constructions:** The problem has natural symmetry around 0. Try functions that are symmetric: f(x) = f(-x). This halves the effective search space and the autoconvolution inherits the symmetry.
 
-4. **Regularization-guided search.** Add smoothness penalties (TV norm, Laplacian) or entropy terms to the objective. These may reshape the loss landscape to avoid bad local minima.
+3. **Piecewise-linear and piecewise-polynomial functions:** Construct tent functions, trapezoidal functions, or piecewise quadratic shapes. These have analytically tractable autoconvolutions and can be parameterized by a few numbers, enabling exhaustive search over the parameter space.
 
-For each approach, write a solution, evaluate it, then iterate. Use gradient optimization (JAX/optax) as needed to fine-tune parameters within each structural family.
+4. **Cosine/Fourier basis constructions:** Represent f as a sum of cosine basis functions with non-negativity enforced. The autoconvolution in Fourier space is just squaring the transform. Optimize the Fourier coefficients directly.
+
+5. **B-spline representations:** Use B-spline basis with a small number of control points. Optimize control point heights. B-splines are non-negative by construction (with positive coefficients), smooth, and have nice convolution properties.
+
+6. **Hybrid: construct then polish.** Take the best analytical construction and use it as initialization for a short JAX gradient descent run (10k steps) to fine-tune.
+
+Do NOT pursue pure numerical optimization with random/flat initialization — that's explore_1's direction.
+
+For each solution: write it, run `python3 problem/evaluate.py <path>`, update the `# fitness:` header, then move on to the next variant.
