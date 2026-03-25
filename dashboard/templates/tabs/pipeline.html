@@ -1,0 +1,119 @@
+  <!-- ===== PIPELINE ===== -->
+  <div class="tab-content" id="tab-pipeline">
+
+    <div class="pipeline-container">
+      <div class="section-header" style="position: relative; z-index:1;">
+        <span class="section-title">Generation Pipeline</span>
+        <span class="section-title" style="font-size: 0.7rem; color: var(--text-ghost)">6-phase evolutionary loop</span>
+      </div>
+
+      <div class="pipeline-flow" id="pipelineFlow">
+        <div class="pipeline-node" data-pipe-phase="planned" id="pn-architect">
+          <div class="node-icon">&#9998;</div>
+          <div class="node-title">Architect</div>
+          <div class="node-desc">Reads state, writes manifest + agent briefs</div>
+        </div>
+        <div class="pipeline-arrow" id="pa-1"><div class="arrow-line"></div></div>
+
+        <div class="pipeline-node" data-pipe-phase="agents_done" id="pn-agents">
+          <div class="node-icon">&#9881;</div>
+          <div class="node-title">Agent Work</div>
+          <div class="node-desc">Parallel sessions: explore, exploit, genetic, research</div>
+        </div>
+        <div class="pipeline-arrow" id="pa-2"><div class="arrow-line"></div></div>
+
+        <div class="pipeline-node" data-pipe-phase="evaluator_done" id="pn-evaluator">
+          <div class="node-icon">&#9878;</div>
+          <div class="node-title">Evaluator</div>
+          <div class="node-desc">Verify scores, extract knowledge, update clusters</div>
+        </div>
+        <div class="pipeline-arrow" id="pa-3"><div class="arrow-line"></div></div>
+
+        <div class="pipeline-node" data-pipe-phase="critic_done" id="pn-critic">
+          <div class="node-icon">&#9888;</div>
+          <div class="node-title">System Critic</div>
+          <div class="node-desc">Identify pipeline problems, write recommendations</div>
+        </div>
+        <div class="pipeline-arrow" id="pa-4"><div class="arrow-line"></div></div>
+
+        <div class="pipeline-node" data-pipe-phase="consistency_done" id="pn-consistency">
+          <div class="node-icon">&#9881;</div>
+          <div class="node-title">Consistency</div>
+          <div class="node-desc">Audit knowledge, rewrite State of Affairs (every 3rd gen)</div>
+        </div>
+        <div class="pipeline-arrow" id="pa-5"><div class="arrow-line"></div></div>
+
+        <div class="pipeline-node" data-pipe-phase="complete" id="pn-finalize">
+          <div class="node-icon">&#10003;</div>
+          <div class="node-title">Finalize</div>
+          <div class="node-desc">Update rankings, detect interventions, snapshot</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Agents -->
+    <div class="live-agents-section">
+      <div class="section-header">
+        <span class="section-title">Live Agents</span>
+        <span class="section-title" style="font-size: 0.7rem; color: var(--text-ghost)" id="liveAgentStatus">Scanning...</span>
+      </div>
+      <div class="live-agents-container" id="liveAgentsContainer">
+        <div class="empty-state" id="liveAgentsEmpty" style="padding: 30px">
+          <div class="empty-icon">&#9881;</div>
+          <div class="empty-title">No agents running</div>
+          <div class="empty-desc">Active agent sessions will appear here as interactive panels</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Agent Types -->
+    <div class="agents-section">
+      <div class="section-header">
+        <span class="section-title">Agent Types</span>
+        <span class="section-title" style="font-size: 0.7rem; color: var(--text-ghost)">Configured worker agents</span>
+      </div>
+      <div class="agents-grid" id="agentsGrid">
+        <!-- Dynamically rendered from /api/overview agent_types -->
+      </div>
+    </div>
+
+    <!-- Data Flow -->
+    <div class="dataflow-section" style="margin-top: 24px;">
+      <div class="section-header">
+        <span class="section-title">Data Flow</span>
+      </div>
+      <div class="dataflow">
+        <div class="dataflow-col">
+          <div class="dataflow-col-title">Inputs</div>
+          <div class="dataflow-item" style="border-color: var(--purple);">manifest.yaml</div>
+          <div class="dataflow-item" style="border-color: var(--purple);">agent briefs</div>
+          <div class="dataflow-item" style="border-color: var(--accent);">knowledge/</div>
+          <div class="dataflow-item" style="border-color: var(--blue);">population/top/</div>
+        </div>
+        <div class="dataflow-arrow-col">&rarr;</div>
+        <div class="dataflow-col">
+          <div class="dataflow-col-title">Agent Work</div>
+          <div class="dataflow-item" style="border-color: var(--amber);">sol*.py</div>
+          <div class="dataflow-item" style="border-color: var(--amber);">observations.md</div>
+          <div class="dataflow-item" style="border-color: var(--amber);">report.md</div>
+          <div class="dataflow-item" style="border-color: var(--amber);">findings.md</div>
+        </div>
+        <div class="dataflow-arrow-col">&rarr;</div>
+        <div class="dataflow-col">
+          <div class="dataflow-col-title">Evaluator</div>
+          <div class="dataflow-item" style="border-color: var(--accent);">new ideas</div>
+          <div class="dataflow-item" style="border-color: var(--accent);">updated clusters</div>
+          <div class="dataflow-item" style="border-color: var(--accent);">coverage matrix</div>
+          <div class="dataflow-item" style="border-color: var(--cyan);">gen snapshot</div>
+        </div>
+        <div class="dataflow-arrow-col">&rarr;</div>
+        <div class="dataflow-col">
+          <div class="dataflow-col-title">Outputs</div>
+          <div class="dataflow-item" style="border-color: var(--blue);">population/</div>
+          <div class="dataflow-item" style="border-color: var(--accent);">knowledge/</div>
+          <div class="dataflow-item" style="border-color: var(--red);">feedback/</div>
+          <div class="dataflow-item" style="border-color: var(--cyan);">history/</div>
+        </div>
+      </div>
+    </div>
+  </div>

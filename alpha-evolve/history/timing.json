@@ -1,0 +1,23 @@
+{
+  "generations": {
+    "gen001": {
+      "architect": 138.2,
+      "agent_explore_1_work": 458.2,
+      "agent_research_1_work": 600.1,
+      "agent_research_1_wrap_up": 63.4,
+      "agent_research_1": 663.5,
+      "agent_full_1_work": 900.1,
+      "agent_full_1_wrap_up": 160.7,
+      "agent_full_1_debrief": 266.6,
+      "agent_full_1": 1166.7,
+      "agent_explore_2_work": 1200.2,
+      "agent_explore_1_wrap_up": 900.1,
+      "agent_explore_1_debrief": 1028.7,
+      "agent_explore_1": 1486.9,
+      "agent_explore_2_wrap_up": 900.1,
+      "agent_explore_2_debrief": 973.8,
+      "agent_explore_2": 2174.0,
+      "evaluator": 554.8
+    }
+  }
+}

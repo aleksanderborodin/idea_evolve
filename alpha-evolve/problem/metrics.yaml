@@ -1,0 +1,36 @@
+# =============================================================================
+# Problem Metrics — defines how solutions are scored and compared
+# =============================================================================
+# This file is problem-specific. Replace it when changing problems.
+# The orchestrator reads this to determine fitness direction, formatting,
+# target score, and what to show agents.
+
+# Target score for the primary metric. The run stops when this is reached.
+# For higher-is-better: stop when score >= target
+# For lower-is-better: stop when score <= target
+target_score: 1.5053
+
+# Metric specifications. Each key must match a field returned by validate().
+# Exactly one metric should have is_primary: true.
+specs:
+  fitness:
+    description: C constant in first autocorrelation inequality
+    decimals: 4                    # Decimal places for all score formatting
+    is_primary: true               # Primary metric — drives rankings and target comparison
+    higher_is_better: false        # false = minimize (lower C is better)
+    lower_bound: 1.28              # Theoretical best achievable (for agent context)
+    upper_bound: 5.0               # Worst expected for valid solutions (for agent context)
+    include_in_prompts: true       # Show this metric in agent evaluation instructions
+    significant_change: 0.0001     # Minimum delta to consider a meaningful improvement
+    sentinel_value: 1000.0         # Returned on evaluation error (must be clearly invalid)
+
+  is_valid:
+    description: Whether the program is valid (1 valid, 0 invalid)
+    decimals: 0
+    is_primary: false
+    higher_is_better: true
+    lower_bound: 0.0
+    upper_bound: 1.0
+    include_in_prompts: true
+    significant_change: 1.0
+    sentinel_value: 0

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alpha Evolve — Dashboard</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<!-- ==================== HEADER ==================== -->
+<header class="header">
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 32 32" fill="none">
+        <path d="M16 2L28 9v14l-12 7L4 23V9L16 2z" stroke="var(--accent)" stroke-width="1.5" fill="none"/>
+        <path d="M16 6l8 4.5v9L16 24l-8-4.5v-9L16 6z" stroke="var(--accent)" stroke-width="1" fill="var(--accent-glow)" opacity="0.5"/>
+        <circle cx="16" cy="15" r="3" fill="var(--accent)" opacity="0.8"/>
+      </svg>
+    </div>
+    <div class="logo-text">Alpha <span>Evolve</span></div>
+  </div>
+
+  <nav class="nav">
+    <button class="nav-tab active" data-tab="overview">
+      <span class="tab-icon">&#9632;</span>
+      <span class="tab-label">Overview</span>
+    </button>
+    <button class="nav-tab" data-tab="pipeline">
+      <span class="tab-icon">&#9654;</span>
+      <span class="tab-label">Pipeline</span>
+    </button>
+    <button class="nav-tab" data-tab="architecture">
+      <span class="tab-icon">&#9783;</span>
+      <span class="tab-label">Architecture</span>
+    </button>
+    <button class="nav-tab" data-tab="solutions">
+      <span class="tab-icon">&#9733;</span>
+      <span class="tab-label">Solutions</span>
+    </button>
+    <button class="nav-tab" data-tab="knowledge">
+      <span class="tab-icon">&#9673;</span>
+      <span class="tab-label">Knowledge</span>
+    </button>
+    <button class="nav-tab" data-tab="reports">
+      <span class="tab-icon">&#9776;</span>
+      <span class="tab-label">Reports</span>
+    </button>
+  </nav>
+
+  <div class="header-right">
+    <div class="status-beacon" id="statusBeacon"></div>
+    <span class="header-label" id="lastUpdate">--:--:--</span>
+  </div>
+</header>
+
+<!-- ==================== MAIN ==================== -->
+<main class="main">
+  {% include 'tabs/overview.html' %}
+  {% include 'tabs/pipeline.html' %}
+  {% include 'tabs/architecture.html' %}
+  {% include 'tabs/solutions.html' %}
+  {% include 'tabs/knowledge.html' %}
+  {% include 'tabs/reports.html' %}
+</main>
+
+<!-- ==================== KNOWLEDGE DETAIL MODAL ==================== -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-panel" id="modalPanel">
+    <div class="modal-header">
+      <div class="modal-header-left">
+        <span class="modal-kind-badge" id="modalKindBadge"></span>
+        <span class="modal-title" id="modalTitle"></span>
+      </div>
+      <button class="modal-close" id="modalClose">&times;</button>
+    </div>
+    <div class="modal-meta" id="modalMeta"></div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-footer" id="modalFooter"></div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

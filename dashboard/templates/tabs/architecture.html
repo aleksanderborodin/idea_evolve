@@ -1,0 +1,118 @@
+  <!-- ===== ARCHITECTURE ===== -->
+  <div class="tab-content" id="tab-architecture">
+    <div class="arch-grid">
+      <div class="file-tree-section">
+        <div class="section-header">
+          <span class="section-title">File System</span>
+        </div>
+        <div id="fileTree">
+          <div class="empty-state" style="padding: 30px">
+            <div class="empty-icon">&#128193;</div>
+            <div class="empty-title">Loading file tree...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hierarchy-section">
+        <div class="section-header">
+          <span class="section-title">Knowledge Hierarchy</span>
+        </div>
+
+        <div class="hierarchy">
+          <div class="hierarchy-level">
+            <div class="hierarchy-node l0">
+              <div class="hierarchy-node-label">Layer 0</div>
+              <div class="hierarchy-node-title">State of Affairs</div>
+            </div>
+          </div>
+
+          <div class="hierarchy-connector"><div class="hierarchy-vline"></div></div>
+
+          <div class="hierarchy-level">
+            <div class="hierarchy-node l1">
+              <div class="hierarchy-node-label">Layer 1</div>
+              <div class="hierarchy-node-title">Clusters</div>
+            </div>
+          </div>
+
+          <div class="hierarchy-connector"><div class="hierarchy-vline"></div></div>
+
+          <div class="hierarchy-level" style="gap: 16px;">
+            <div class="hierarchy-node l2">
+              <div class="hierarchy-node-label">Layer 2</div>
+              <div class="hierarchy-node-title">Ideas</div>
+            </div>
+            <div class="hierarchy-node l2">
+              <div class="hierarchy-node-label">Layer 2</div>
+              <div class="hierarchy-node-title">Patterns</div>
+            </div>
+            <div class="hierarchy-node l2f">
+              <div class="hierarchy-node-label">Global</div>
+              <div class="hierarchy-node-title">Facts</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lifecycle diagram -->
+        <div style="margin-top: 32px;">
+          <div class="section-header">
+            <span class="section-title">Idea Lifecycle</span>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: center; gap: 0; padding: 20px 0; flex-wrap: wrap;">
+            <div style="text-align: center; padding: 8px 12px;">
+              <span class="lifecycle-badge lc-active" style="font-size: 0.72rem;">Active</span>
+            </div>
+            <span style="color: var(--text-ghost); padding: 0 4px;">&rarr;</span>
+            <div style="text-align: center; padding: 8px 12px;">
+              <span class="lifecycle-badge lc-established" style="font-size: 0.72rem;">Established</span>
+            </div>
+            <span style="color: var(--text-ghost); padding: 0 8px; font-size: 0.7rem;">or</span>
+            <div style="text-align: center; padding: 8px 12px;">
+              <span class="lifecycle-badge lc-disputed" style="font-size: 0.72rem;">Disputed</span>
+            </div>
+            <span style="color: var(--text-ghost); padding: 0 4px;">&rarr;</span>
+            <div style="text-align: center; padding: 8px 12px;">
+              <span class="lifecycle-badge lc-debunked" style="font-size: 0.72rem;">Debunked</span>
+            </div>
+            <span style="color: var(--text-ghost); padding: 0 4px;">&rarr;</span>
+            <div style="text-align: center; padding: 8px 12px;">
+              <span class="lifecycle-badge lc-archived" style="font-size: 0.72rem;">Archived</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Directory purpose map -->
+        <div style="margin-top: 24px;">
+          <div class="section-header">
+            <span class="section-title">Directory Purposes</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px;">
+            <div class="dataflow-item" style="border-left: 3px solid var(--blue); text-align: left;">
+              <strong style="color: var(--blue);">population/</strong><br>
+              <span style="font-size: 0.65rem; color: var(--text-ghost);">All solutions by gen/agent</span>
+            </div>
+            <div class="dataflow-item" style="border-left: 3px solid var(--accent); text-align: left;">
+              <strong style="color: var(--accent);">knowledge/</strong><br>
+              <span style="font-size: 0.65rem; color: var(--text-ghost);">Ideas, facts, patterns, clusters</span>
+            </div>
+            <div class="dataflow-item" style="border-left: 3px solid var(--amber); text-align: left;">
+              <strong style="color: var(--amber);">reports/</strong><br>
+              <span style="font-size: 0.65rem; color: var(--text-ghost);">Agent debrief reports</span>
+            </div>
+            <div class="dataflow-item" style="border-left: 3px solid var(--purple); text-align: left;">
+              <strong style="color: var(--purple);">briefs/</strong><br>
+              <span style="font-size: 0.65rem; color: var(--text-ghost);">Manifests + per-agent briefs</span>
+            </div>
+            <div class="dataflow-item" style="border-left: 3px solid var(--red); text-align: left;">
+              <strong style="color: var(--red);">feedback/</strong><br>
+              <span style="font-size: 0.65rem; color: var(--text-ghost);">Critic recommendations, gaps</span>
+            </div>
+            <div class="dataflow-item" style="border-left: 3px solid var(--cyan); text-align: left;">
+              <strong style="color: var(--cyan);">history/</strong><br>
+              <span style="font-size: 0.65rem; color: var(--text-ghost);">Snapshots, score progression</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>

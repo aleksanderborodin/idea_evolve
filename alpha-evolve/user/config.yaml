@@ -1,0 +1,104 @@
+# =============================================================================
+# Alpha Evolve — Configuration
+# =============================================================================
+
+# --- Evolution parameters ---
+generations: 30                    # Maximum number of generations to run
+# NOTE: target_score and fitness direction are in problem/metrics.yaml (problem-specific)
+
+# --- Agent types ---
+# Each type can be enabled/disabled and limited in how many instances
+# the Architect may launch per generation.
+agents:
+  explore:
+    enabled: true
+    max_instances: 3               # Broad search agents — try new approaches
+  exploit:
+    enabled: true
+    max_instances: 3               # Refine existing top solutions
+  genetic:
+    enabled: true
+    max_instances: 3               # Cross two parent solutions
+    parents_per_instance: 2        # Always 2 parents for crossover
+  full:
+    enabled: true
+    max_instances: 3               # End-to-end solution builders
+  research:
+    enabled: true
+    max_instances: 3               # Domain research, no code output
+  experimentator:
+    enabled: true
+    max_instances: 3               # Controlled experiments to answer questions
+
+# --- Analysis phases ---
+# These run after agents finish each generation.
+analysis:
+  evaluator:
+    enabled: true
+    model: opus                    # Evaluator needs high reasoning quality
+  system_critic:
+    enabled: true
+    model: sonnet                  # Critic is lighter-weight analysis
+
+# --- Timeouts (seconds) ---
+# Three-phase timeout: work → wrap-up → debrief recovery.
+# Phase 1 (work): agent runs normally with its timeout.
+# Phase 2 (wrap-up): if work timed out, a new session (same model) continues
+#   the actual work — finishing solutions, running evaluations, producing results.
+# Phase 3 (debrief): if wrap-up also failed and no report.md exists, a lightweight
+#   sonnet session writes a report capturing what was produced.
+#
+# The Architect can override agent_default per agent via manifest.yaml timeout field.
+timeouts:
+  architect: 600                   # Architect planning session
+  agent_default: 900               # Default work phase for solution agents
+  evaluator: 900                   # Evaluator analysis phase
+  system_critic: 600               # System critic analysis phase
+  consistency_reviewer: 900        # Consistency review phase
+  wrap_up: 900                     # Wrap-up session (continue work after timeout)
+  debrief_recovery: 300            # Debrief recovery (report only, after wrap-up fails)
+
+# --- Turn budgets ---
+# How many tool-call turns each agent type gets. Higher = more iterations
+# but more context pressure and cost. The Architect cannot override these.
+max_turns:
+  architect: 200                   # Planning only
+  wrap_up: 500                     # Wrap-up session to finish the work
+  debrief_recovery: 50             # Debrief recovery (report writing only)
+  explore: 500                     # Timeout is the real limit, not turns
+  exploit: 500
+  full: 500
+  genetic: 500
+  experimentator: 500
+  research: 500
+  evaluator: 500
+  system_critic: 200
+  consistency_reviewer: 500
+
+# --- Models ---
+default_model: sonnet              # Default model for agents (Architect overrides per-agent)
+architect_model: opus              # Architect always uses highest reasoning model
+
+# --- Parallelism ---
+max_parallel_sessions: 10          # Max concurrent Claude Code sessions
+
+# --- Knowledge management (advisory — passed to agents as guidance, not enforced) ---
+knowledge_hierarchy:
+  state_of_affairs_max_tokens: 1500   # Layer 0 should be concise
+  cluster_max_tokens: 400             # Each cluster summary
+  max_clusters: 20                    # Limit to prevent sprawl
+  merge_threshold: 0.7                # Similarity threshold for cluster merging
+
+# --- Idea lifecycle (advisory — evaluator sees these as guidance text) ---
+idea_limits:
+  max_ideas: 100                   # Soft cap on total ideas
+  threshold_30: good               # Under 30: add if good
+  threshold_50: very_good          # 30-50: add only if very good
+  threshold_100: revolutionary     # 50-100: add only if revolutionary
+
+staleness_threshold: 5             # Generations without confirmation before flagging stale
+
+# --- Consistency review ---
+consistency_review_interval: 3     # Run consistency review every N generations
+emergency_review_on_strategic_shift: true  # Also run on evaluator strategic_shift flag
+

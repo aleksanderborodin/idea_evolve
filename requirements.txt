@@ -1,0 +1,16 @@
+# Alpha Evolve — Python dependencies
+# Install: source venv/bin/activate && pip install -r requirements.txt
+
+# Core (orchestrator + problem evaluation)
+PyYAML>=6.0
+numpy>=1.26
+scipy>=1.12
+jax>=0.4
+jaxlib>=0.4
+optax>=0.2
+
+# Dashboard
+Flask>=3.0
+
+# ML dtypes (JAX dependency)
+ml_dtypes>=0.4

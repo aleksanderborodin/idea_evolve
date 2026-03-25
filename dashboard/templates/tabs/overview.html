@@ -1,0 +1,87 @@
+  <div class="tab-content active" id="tab-overview">
+
+    <div class="metrics-row" id="metricsRow">
+      <div class="metric-card score-card">
+        <div class="score-gauge">
+          <svg viewBox="0 0 90 90" id="scoreGauge">
+            <circle cx="45" cy="45" r="38" fill="none" stroke="var(--bg-hover)" stroke-width="5"/>
+            <circle cx="45" cy="45" r="38" fill="none" stroke="var(--accent)" stroke-width="5"
+              stroke-dasharray="239" stroke-dashoffset="239" stroke-linecap="round"
+              transform="rotate(-90 45 45)" id="gaugeArc"/>
+            <text x="45" y="43" text-anchor="middle" font-family="var(--font-display)" font-weight="800"
+              font-size="18" fill="var(--accent)" id="gaugeText">0</text>
+            <text x="45" y="57" text-anchor="middle" font-family="var(--font-mono)" font-size="7"
+              fill="var(--text-ghost)">/ <tspan id="gaugeTarget">593</tspan></text>
+          </svg>
+        </div>
+        <div class="score-info">
+          <div class="metric-label">Best Fitness Score</div>
+          <div class="metric-value score" id="bestScoreVal">0</div>
+          <div class="score-bar-track">
+            <div class="score-bar-fill" id="scoreBar" style="width: 0%"></div>
+          </div>
+          <div class="metric-sub" id="scorePercent">0% of target</div>
+        </div>
+      </div>
+      <div class="metric-card gen-card">
+        <div class="metric-label">Generations</div>
+        <div class="metric-value gen" id="genVal">0</div>
+        <div class="metric-sub" id="genSub">of 30</div>
+      </div>
+      <div class="metric-card sol-card">
+        <div class="metric-label">Solutions</div>
+        <div class="metric-value sol" id="solVal">0</div>
+        <div class="metric-sub" id="solSub">0 valid</div>
+      </div>
+      <div class="metric-card idea-card">
+        <div class="metric-label">Active Ideas</div>
+        <div class="metric-value idea" id="ideaVal">0</div>
+        <div class="metric-sub" id="ideaSub">0 facts</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Knowledge</div>
+        <div class="metric-value" id="knowVal" style="color: var(--cyan)">0</div>
+        <div class="metric-sub" id="knowSub">clusters &middot; patterns</div>
+      </div>
+    </div>
+
+    <!-- Phase Strip -->
+    <div class="phase-strip" id="phaseStrip">
+      <span class="phase-strip-label">Current Phase</span>
+      <div class="phase-step" data-phase="planned">Architect</div>
+      <span class="phase-arrow">&rarr;</span>
+      <div class="phase-step" data-phase="agents_done">Agent Work</div>
+      <span class="phase-arrow">&rarr;</span>
+      <div class="phase-step" data-phase="evaluator_done">Evaluator</div>
+      <span class="phase-arrow">&rarr;</span>
+      <div class="phase-step" data-phase="critic_done">Sys Critic</div>
+      <span class="phase-arrow">&rarr;</span>
+      <div class="phase-step" data-phase="consistency_done">Consistency</div>
+      <span class="phase-arrow">&rarr;</span>
+      <div class="phase-step" data-phase="complete">Finalize</div>
+    </div>
+
+    <!-- Chart -->
+    <div class="chart-section">
+      <div class="section-header">
+        <span class="section-title">Score Progression</span>
+        <span class="section-title" style="font-size: 0.7rem; color: var(--text-ghost)">Fitness over generations</span>
+      </div>
+      <div class="chart-container">
+        <canvas id="progressionChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Generation Timeline -->
+    <div class="chart-section">
+      <div class="section-header">
+        <span class="section-title">Generation Timeline</span>
+      </div>
+      <div class="gen-timeline" id="genTimeline"></div>
+      <div class="empty-state" id="genTimelineEmpty" style="display:none; padding: 30px">
+        <div class="empty-icon">&#9201;</div>
+        <div class="empty-title">No generations yet</div>
+        <div class="empty-desc">Run the orchestrator to start evolving solutions</div>
+      </div>
+    </div>
+  </div>

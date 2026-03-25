@@ -1,0 +1,113 @@
+"""Shared helpers for parsing Alpha Evolve files."""
+
+import hashlib
+import json
+from pathlib import Path
+
+import yaml
+
+
+def _eval_cache() -> dict:
+    """Load the evaluation cache (content-hash -> result)."""
+    cache_path = Path(__file__).resolve().parent.parent.parent / "alpha-evolve" / "history" / "eval_cache.json"
+    try:
+        return json.loads(cache_path.read_text()) if cache_path.exists() else {}
+    except Exception:
+        return {}
+
+
+def read_frontmatter(filepath: Path) -> dict:
+    """Parse YAML frontmatter from a markdown file."""
+    try:
+        text = filepath.read_text()
+        if not text.startswith("---"):
+            return {}
+        end = text.index("---", 3)
+        fm = yaml.safe_load(text[3:end])
+        return fm if isinstance(fm, dict) else {}
+    except Exception:
+        return {}
+
+
+def read_body(filepath: Path) -> str:
+    """Read content after YAML frontmatter."""
+    try:
+        text = filepath.read_text()
+        if text.startswith("---"):
+            end = text.index("---", 3)
+            return text[end + 3:].strip()
+        return text.strip()
+    except Exception:
+        return ""
+
+
+def extract_score(sol_path: Path) -> dict | None:
+    """Extract fitness score from a solution file (mirrors orchestrator logic).
+
+    Checks .score sidecar file first, then parses header comments.
+    Returns dict with at least 'fitness' key, or None.
+    """
+    score_file = sol_path.with_suffix(".score")
+    if score_file.exists():
+        try:
+            data = json.loads(score_file.read_text())
+            if isinstance(data, dict) and "fitness" in data:
+                return data
+        except Exception:
+            pass
+
+    # Fallback: check eval cache by file content hash
+    try:
+        content = sol_path.read_bytes()
+        sha = hashlib.sha256(content).hexdigest()
+        cache = _eval_cache()
+        if sha in cache:
+            return cache[sha]
+    except Exception:
+        pass
+
+    # Last resort: parse header comments
+    try:
+        text = sol_path.read_text()
+        for line in text.split("\n")[:10]:
+            if "fitness:" in line.lower():
+                parts = line.split(":")
+                for part in parts[1:]:
+                    try:
+                        val = float(part.strip().split()[0])
+                        return {"fitness": val}
+                    except (ValueError, IndexError):
+                        continue
+    except Exception:
+        pass
+    return None
+
+
+def get_metrics_config() -> dict:
+    """Read problem/metrics.yaml and return primary metric config."""
+    metrics_path = Path(__file__).resolve().parent.parent.parent / "alpha-evolve" / "problem" / "metrics.yaml"
+    try:
+        data = yaml.safe_load(metrics_path.read_text())
+        specs = data.get("specs", {})
+        for name, spec in specs.items():
+            if spec.get("is_primary"):
+                return {
+                    "name": name,
+                    "higher_is_better": spec.get("higher_is_better", True),
+                    "target_score": data.get("target_score"),
+                    "decimals": spec.get("decimals", 4),
+                    "lower_bound": spec.get("lower_bound"),
+                    "upper_bound": spec.get("upper_bound"),
+                }
+        return {}
+    except Exception:
+        return {}
+
+
+def format_size(size_bytes: int) -> str:
+    """Human-readable file size."""
+    if size_bytes > 1048576:
+        return f"{size_bytes / 1048576:.1f}M"
+    if size_bytes > 1024:
+        return f"{size_bytes / 1024:.1f}K"
+    return f"{size_bytes}B"

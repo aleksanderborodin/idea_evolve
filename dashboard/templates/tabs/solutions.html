@@ -1,0 +1,37 @@
+  <!-- ===== SOLUTIONS ===== -->
+  <div class="tab-content" id="tab-solutions">
+    <div class="solutions-controls">
+      <div class="filter-group">
+        <span class="filter-label">Gen</span>
+        <select class="filter-select" id="solFilterGen"><option value="all">All</option></select>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">Agent</span>
+        <select class="filter-select" id="solFilterAgent"><option value="all">All</option></select>
+      </div>
+      <div style="margin-left: auto;">
+        <span class="sol-count-info" id="solCountInfo"></span>
+      </div>
+    </div>
+    <div class="sol-table-wrap">
+      <table class="sol-table" id="solTable">
+        <thead>
+          <tr>
+            <th data-sort="gen">Gen <span class="sort-arrow"></span></th>
+            <th data-sort="agent_type">Agent <span class="sort-arrow"></span></th>
+            <th data-sort="file">File <span class="sort-arrow"></span></th>
+            <th data-sort="score" class="sort-active">Score <span class="sort-arrow">&#9660;</span></th>
+            <th data-sort="is_valid">Valid <span class="sort-arrow"></span></th>
+            <th data-sort="size">Size <span class="sort-arrow"></span></th>
+            <th data-sort="modified">Modified <span class="sort-arrow"></span></th>
+          </tr>
+        </thead>
+        <tbody id="solTableBody"></tbody>
+      </table>
+      <div class="empty-state" id="solEmpty" style="display:none; padding: 30px">
+        <div class="empty-icon">&#128200;</div>
+        <div class="empty-title">No solutions yet</div>
+        <div class="empty-desc">Solutions appear after agents complete their work sessions</div>
+      </div>
+    </div>
+  </div>

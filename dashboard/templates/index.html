@@ -1,0 +1,2482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alpha Evolve — Mission Control</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg-abyss: #f5f7fa;
+  --bg-deep: #ffffff;
+  --bg-mid: #f0f2f5;
+  --bg-surface: #ffffff;
+  --bg-raised: #f5f7fa;
+  --bg-hover: #ebeef3;
+
+  --accent: #059669;
+  --accent-dim: #047857;
+  --accent-glow: rgba(5, 150, 105, 0.1);
+  --accent-glow-strong: rgba(5, 150, 105, 0.18);
+
+  --blue: #2563eb;
+  --blue-dim: #1d4ed8;
+  --blue-glow: rgba(37, 99, 235, 0.1);
+
+  --amber: #d97706;
+  --amber-dim: #b45309;
+  --amber-glow: rgba(217, 119, 6, 0.1);
+
+  --red: #dc2626;
+  --red-dim: #b91c1c;
+  --red-glow: rgba(220, 38, 38, 0.1);
+
+  --purple: #7c3aed;
+  --purple-glow: rgba(124, 58, 237, 0.1);
+
+  --cyan: #0891b2;
+  --cyan-glow: rgba(8, 145, 178, 0.1);
+
+  --text-primary: #1e293b;
+  --text-secondary: #475569;
+  --text-tertiary: #64748b;
+  --text-ghost: #94a3b8;
+
+  --border: #e2e8f0;
+  --border-bright: #cbd5e1;
+
+  --radius: 6px;
+  --radius-lg: 10px;
+
+  --font-display: 'Outfit', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+html { font-size: 14px; }
+body {
+  background: var(--bg-abyss);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* === SUBTLE TEXTURE === */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: none;
+}
+
+/* === HEADER === */
+.header {
+  background: var(--bg-deep);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  height: 56px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(12px);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-right: 40px;
+  flex-shrink: 0;
+}
+
+.logo-icon {
+  width: 32px;
+  height: 32px;
+  position: relative;
+}
+
+.logo-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.logo-text {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.15rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.logo-text span {
+  color: var(--accent);
+}
+
+.nav {
+  display: flex;
+  gap: 2px;
+  height: 100%;
+  align-items: stretch;
+}
+
+.nav-tab {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0 18px;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-tab:hover { color: var(--text-secondary); }
+
+.nav-tab.active {
+  color: var(--accent);
+}
+
+.nav-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 18px;
+  right: 18px;
+  height: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow-strong);
+}
+
+.nav-tab .tab-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.status-beacon {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  animation: beacon-pulse 2s ease-in-out infinite;
+}
+
+@keyframes beacon-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px var(--accent); }
+  50% { opacity: 0.4; box-shadow: 0 0 2px var(--accent); }
+}
+
+.header-label {
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  letter-spacing: 0.06em;
+}
+
+/* === MAIN CONTENT === */
+.main {
+  padding: 24px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.tab-content {
+  display: none;
+  animation: fadeIn 0.3s ease;
+}
+
+.tab-content.active { display: block; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* === OVERVIEW TAB === */
+
+/* Metrics Row */
+.metrics-row {
+  display: grid;
+  grid-template-columns: 2fr repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.metric-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.03);
+}
+
+.metric-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+.metric-card.score-card::before { background: linear-gradient(90deg, transparent, var(--accent), transparent); }
+.metric-card.gen-card::before { background: linear-gradient(90deg, transparent, var(--blue), transparent); }
+.metric-card.sol-card::before { background: linear-gradient(90deg, transparent, var(--cyan), transparent); }
+.metric-card.idea-card::before { background: linear-gradient(90deg, transparent, var(--purple), transparent); }
+
+.metric-label {
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.metric-value {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 2.2rem;
+  line-height: 1;
+}
+
+.metric-value.score { color: var(--accent); }
+.metric-value.gen { color: var(--blue); }
+.metric-value.sol { color: var(--cyan); }
+.metric-value.idea { color: var(--purple); }
+
+.metric-sub {
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  margin-top: 6px;
+}
+
+/* Score Card special */
+.score-card {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.score-gauge {
+  width: 90px;
+  height: 90px;
+  flex-shrink: 0;
+}
+
+.score-info { flex: 1; }
+
+.score-bar-track {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-hover);
+  border-radius: 3px;
+  margin-top: 12px;
+  overflow: hidden;
+}
+
+.score-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--red), var(--amber), var(--accent));
+  transition: width 0.8s ease;
+}
+
+/* Phase Indicator */
+.phase-strip {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 24px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px 16px;
+  align-items: center;
+}
+
+.phase-strip-label {
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-right: 16px;
+  flex-shrink: 0;
+}
+
+.phase-step {
+  flex: 1;
+  text-align: center;
+  padding: 8px 4px;
+  border-radius: var(--radius);
+  font-size: 0.68rem;
+  color: var(--text-ghost);
+  position: relative;
+  transition: all 0.3s;
+}
+
+.phase-step.completed {
+  color: var(--accent-dim);
+  background: var(--accent-glow);
+}
+
+.phase-step.active {
+  color: var(--accent);
+  background: var(--accent-glow-strong);
+  box-shadow: 0 0 12px var(--accent-glow);
+  animation: phase-glow 2s ease-in-out infinite;
+}
+
+@keyframes phase-glow {
+  0%, 100% { box-shadow: 0 0 8px var(--accent-glow); }
+  50% { box-shadow: 0 0 20px var(--accent-glow-strong); }
+}
+
+.phase-step.pending {
+  color: var(--text-ghost);
+}
+
+.phase-arrow {
+  color: var(--text-ghost);
+  font-size: 0.7rem;
+  flex-shrink: 0;
+  padding: 0 2px;
+}
+
+/* Chart Area */
+.chart-section {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.03);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.section-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.85rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.chart-container {
+  width: 100%;
+  height: 220px;
+  position: relative;
+}
+
+.chart-container canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Generation Timeline */
+.gen-timeline {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.gen-timeline::-webkit-scrollbar { height: 4px; }
+.gen-timeline::-webkit-scrollbar-track { background: var(--bg-deep); }
+.gen-timeline::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+
+.gen-card {
+  flex-shrink: 0;
+  width: 100px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  text-align: center;
+  cursor: default;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.gen-card:hover {
+  border-color: var(--border-bright);
+  background: var(--bg-raised);
+}
+
+.gen-card .gen-num {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin-bottom: 6px;
+}
+
+.gen-card .gen-status {
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 3px;
+  display: inline-block;
+  margin-bottom: 6px;
+}
+
+.gen-status.complete { background: var(--accent-glow); color: var(--accent); }
+.gen-status.agents_running { background: var(--amber-glow); color: var(--amber); }
+.gen-status.agents_done { background: var(--blue-glow); color: var(--blue); }
+.gen-status.evaluator_done { background: var(--cyan-glow); color: var(--cyan); }
+.gen-status.critic_done { background: var(--purple-glow); color: var(--purple); }
+.gen-status.consistency_done { background: var(--purple-glow); color: var(--purple); }
+.gen-status.planned { background: var(--amber-glow); color: var(--amber); }
+.gen-status.not_started { background: var(--bg-hover); color: var(--text-ghost); }
+
+.gen-card .gen-score {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.gen-card .gen-sols {
+  font-size: 0.65rem;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+/* === PIPELINE TAB === */
+.pipeline-container {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 32px 24px;
+  margin-bottom: 24px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.03);
+}
+
+/* Subtle grid background */
+.pipeline-container::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 0.3;
+}
+
+.pipeline-flow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  position: relative;
+  z-index: 1;
+  flex-wrap: nowrap;
+}
+
+.pipeline-node {
+  background: var(--bg-deep);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-lg);
+  padding: 16px 14px;
+  text-align: center;
+  min-width: 130px;
+  max-width: 150px;
+  position: relative;
+  transition: all 0.3s;
+}
+
+.pipeline-node:hover {
+  border-color: var(--text-ghost);
+  background: var(--bg-mid);
+}
+
+.pipeline-node.active-phase {
+  border-color: var(--accent);
+  box-shadow: 0 0 20px var(--accent-glow), inset 0 0 20px var(--accent-glow);
+}
+
+.pipeline-node.completed-phase {
+  border-color: var(--accent-dim);
+}
+
+.pipeline-node.completed-phase .node-icon {
+  color: var(--accent-dim);
+}
+
+.node-icon {
+  font-size: 1.5rem;
+  margin-bottom: 8px;
+  color: var(--text-tertiary);
+  transition: color 0.3s;
+}
+
+.pipeline-node.active-phase .node-icon { color: var(--accent); }
+
+.node-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.78rem;
+  margin-bottom: 4px;
+  letter-spacing: 0.03em;
+}
+
+.node-desc {
+  font-size: 0.62rem;
+  color: var(--text-tertiary);
+  line-height: 1.4;
+}
+
+.pipeline-arrow {
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  position: relative;
+}
+
+.pipeline-arrow .arrow-line {
+  width: 32px;
+  height: 2px;
+  background: var(--border-bright);
+  position: relative;
+}
+
+.pipeline-arrow .arrow-line::after {
+  content: '';
+  position: absolute;
+  right: -4px;
+  top: -4px;
+  border: 5px solid transparent;
+  border-left-color: var(--border-bright);
+}
+
+.pipeline-arrow.flow-active .arrow-line {
+  background: var(--accent-dim);
+}
+
+.pipeline-arrow.flow-active .arrow-line::after {
+  border-left-color: var(--accent-dim);
+}
+
+/* Particle animation on active arrows */
+.pipeline-arrow.flow-active .arrow-line::before {
+  content: '';
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  top: -2px;
+  animation: particle-flow 1.5s linear infinite;
+}
+
+@keyframes particle-flow {
+  0% { left: -6px; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
+}
+
+/* Agent Cards */
+.agents-section {
+  margin-top: 24px;
+}
+
+.agents-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.agent-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  transition: border-color 0.2s;
+}
+
+.agent-card:hover { border-color: var(--border-bright); }
+
+.agent-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.agent-type-badge {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 3px;
+}
+
+.badge-explore { background: var(--accent-glow); color: var(--accent); }
+.badge-exploit { background: var(--blue-glow); color: var(--blue); }
+.badge-genetic { background: var(--purple-glow); color: var(--purple); }
+.badge-full { background: var(--amber-glow); color: var(--amber); }
+.badge-research { background: var(--cyan-glow); color: var(--cyan); }
+.badge-experimentator { background: var(--red-glow); color: var(--red); }
+
+.agent-stat {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  padding: 3px 0;
+}
+
+.agent-stat-val {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* Data Flow Diagram */
+.dataflow-section {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  margin-top: 24px;
+}
+
+.dataflow {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0;
+  padding: 20px 0;
+  position: relative;
+}
+
+.dataflow-col {
+  text-align: center;
+  padding: 12px 16px;
+  min-width: 120px;
+}
+
+.dataflow-col-title {
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 10px;
+}
+
+.dataflow-item {
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  font-size: 0.7rem;
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+}
+
+.dataflow-arrow-col {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  color: var(--text-ghost);
+  font-size: 1.2rem;
+}
+
+/* === ARCHITECTURE TAB === */
+.arch-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.file-tree-section {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+.tree-dir {
+  margin-bottom: 4px;
+}
+
+.tree-dir-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s;
+  user-select: none;
+}
+
+.tree-dir-header:hover { background: var(--bg-hover); }
+
+.tree-toggle {
+  font-size: 0.65rem;
+  color: var(--text-ghost);
+  transition: transform 0.2s;
+  width: 12px;
+  text-align: center;
+}
+
+.tree-dir.open > .tree-dir-header .tree-toggle { transform: rotate(90deg); }
+
+.tree-dir-icon { font-size: 0.9rem; }
+
+.tree-dir-name {
+  font-weight: 600;
+  font-size: 0.78rem;
+  flex: 1;
+}
+
+.tree-dir-count {
+  font-size: 0.65rem;
+  color: var(--text-ghost);
+  background: var(--bg-deep);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.tree-files {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+  padding-left: 32px;
+}
+
+.tree-dir.open > .tree-files {
+  max-height: 2000px;
+}
+
+.tree-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  font-size: 0.68rem;
+  color: var(--text-tertiary);
+  border-radius: var(--radius);
+  transition: background 0.15s;
+}
+
+.tree-file:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.tree-file-size {
+  margin-left: auto;
+  font-size: 0.62rem;
+  color: var(--text-ghost);
+}
+
+/* Dir colors */
+.dir-population .tree-dir-name { color: var(--blue); }
+.dir-knowledge .tree-dir-name { color: var(--accent); }
+.dir-reports .tree-dir-name { color: var(--amber); }
+.dir-briefs .tree-dir-name { color: var(--purple); }
+.dir-feedback .tree-dir-name { color: var(--red); }
+.dir-history .tree-dir-name { color: var(--cyan); }
+.dir-agents .tree-dir-name { color: var(--text-secondary); }
+.dir-problem .tree-dir-name { color: var(--text-secondary); }
+.dir-user .tree-dir-name { color: var(--text-secondary); }
+
+/* Knowledge Hierarchy Diagram */
+.hierarchy-section {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+}
+
+.hierarchy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding: 20px 0;
+}
+
+.hierarchy-level {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  position: relative;
+}
+
+.hierarchy-node {
+  background: var(--bg-deep);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius);
+  padding: 12px 20px;
+  text-align: center;
+  min-width: 140px;
+}
+
+.hierarchy-node-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-ghost);
+  margin-bottom: 4px;
+}
+
+.hierarchy-node-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
+.hierarchy-node.l0 { border-color: var(--accent-dim); }
+.hierarchy-node.l0 .hierarchy-node-title { color: var(--accent); }
+.hierarchy-node.l1 { border-color: var(--blue-dim); }
+.hierarchy-node.l1 .hierarchy-node-title { color: var(--blue); }
+.hierarchy-node.l2 { border-color: var(--purple); }
+.hierarchy-node.l2 .hierarchy-node-title { color: var(--purple); }
+.hierarchy-node.l2f { border-color: var(--amber); }
+.hierarchy-node.l2f .hierarchy-node-title { color: var(--amber); }
+
+.hierarchy-connector {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.hierarchy-vline {
+  width: 2px;
+  height: 24px;
+  background: var(--border-bright);
+}
+
+.hierarchy-branch {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  position: relative;
+  padding-top: 8px;
+}
+
+.hierarchy-branch::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 25%;
+  right: 25%;
+  height: 2px;
+  background: var(--border-bright);
+}
+
+.hierarchy-branch-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.hierarchy-branch-item .hierarchy-vline {
+  height: 8px;
+}
+
+/* === SOLUTIONS TAB === */
+.solutions-controls {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.filter-label {
+  font-size: 0.68rem;
+  color: var(--text-tertiary);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.filter-select, .filter-input {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.filter-select:focus, .filter-input:focus {
+  border-color: var(--accent-dim);
+}
+
+.filter-select option {
+  background: var(--bg-deep);
+}
+
+.sol-table-wrap {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.sol-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.sol-table th {
+  background: var(--bg-raised);
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: color 0.2s;
+}
+
+.sol-table th:hover { color: var(--text-secondary); }
+.sol-table th.sort-active { color: var(--accent); }
+
+.sol-table th .sort-arrow {
+  font-size: 0.6rem;
+  margin-left: 4px;
+}
+
+.sol-table td {
+  padding: 8px 14px;
+  font-size: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.sol-table tr:hover td {
+  background: var(--bg-raised);
+}
+
+.score-cell {
+  font-weight: 600;
+  font-family: var(--font-display);
+}
+
+.score-high { color: var(--accent); }
+.score-mid { color: var(--amber); }
+.score-low { color: var(--red); }
+.score-none { color: var(--text-ghost); }
+
+.valid-badge {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.valid-yes { background: var(--accent); box-shadow: 0 0 4px var(--accent-glow); }
+.valid-no { background: var(--red-dim); }
+
+.sol-count-info {
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+
+/* === KNOWLEDGE TAB === */
+.knowledge-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+}
+
+.soa-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  position: relative;
+}
+
+.soa-panel::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+}
+
+.soa-content {
+  font-size: 0.78rem;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+}
+
+.soa-meta {
+  display: flex;
+  gap: 16px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.soa-meta-item {
+  font-size: 0.68rem;
+  color: var(--text-tertiary);
+}
+
+.soa-meta-item span {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* Ideas Grid */
+.ideas-controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.lc-filter-btn {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  padding: 5px 12px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.lc-filter-btn:hover { border-color: var(--border-bright); color: var(--text-secondary); }
+.lc-filter-btn.active { border-color: var(--accent-dim); color: var(--accent); background: var(--accent-glow); }
+
+.ideas-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.idea-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  transition: border-color 0.2s;
+}
+
+.idea-card:hover { border-color: var(--border-bright); }
+
+.idea-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.idea-id {
+  font-size: 0.65rem;
+  color: var(--text-ghost);
+}
+
+.lifecycle-badge {
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+.lc-active { background: var(--accent-glow); color: var(--accent); }
+.lc-established { background: var(--blue-glow); color: var(--blue); }
+.lc-disputed { background: var(--amber-glow); color: var(--amber); }
+.lc-debunked { background: var(--red-glow); color: var(--red); }
+.lc-archived { background: var(--bg-hover); color: var(--text-ghost); }
+
+.idea-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.82rem;
+  margin-bottom: 6px;
+  line-height: 1.3;
+}
+
+.idea-body {
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+  max-height: 60px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(180deg, black 60%, transparent);
+  mask-image: linear-gradient(180deg, black 60%, transparent);
+}
+
+.idea-stats {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.idea-stat {
+  font-size: 0.65rem;
+  color: var(--text-ghost);
+}
+
+.idea-stat span {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* Facts */
+.facts-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.fact-item {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.fact-icon {
+  font-size: 0.9rem;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.fact-content { flex: 1; }
+
+.fact-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.8rem;
+  margin-bottom: 4px;
+}
+
+.fact-body {
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
+
+.fact-critical {
+  border-color: var(--red-dim);
+}
+
+/* === REPORTS TAB === */
+.reports-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.report-item {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.report-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+  user-select: none;
+}
+
+.report-header:hover { background: var(--bg-raised); }
+
+.report-toggle {
+  color: var(--text-ghost);
+  font-size: 0.65rem;
+  transition: transform 0.2s;
+  width: 12px;
+}
+
+.report-item.open > .report-header .report-toggle {
+  transform: rotate(90deg);
+}
+
+.report-gen-badge {
+  font-size: 0.65rem;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+.report-agent-name {
+  font-size: 0.78rem;
+  font-weight: 500;
+  flex: 1;
+}
+
+.report-size {
+  font-size: 0.65rem;
+  color: var(--text-ghost);
+}
+
+.report-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.4s ease;
+}
+
+.report-item.open > .report-content {
+  max-height: 5000px;
+}
+
+.report-body {
+  padding: 0 16px 16px 40px;
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+/* === EMPTY STATES === */
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-ghost);
+}
+
+.empty-icon {
+  font-size: 2.5rem;
+  margin-bottom: 12px;
+  opacity: 0.4;
+}
+
+.empty-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text-tertiary);
+  margin-bottom: 6px;
+}
+
+.empty-desc {
+  font-size: 0.75rem;
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 1100px) {
+  .metrics-row { grid-template-columns: 1fr 1fr; }
+  .arch-grid { grid-template-columns: 1fr; }
+  .pipeline-flow { flex-wrap: wrap; justify-content: center; gap: 8px; }
+  .pipeline-arrow { display: none; }
+}
+
+@media (max-width: 700px) {
+  .metrics-row { grid-template-columns: 1fr; }
+  .nav-tab { padding: 0 10px; font-size: 0.7rem; }
+  .nav-tab .tab-label { display: none; }
+  .main { padding: 12px; }
+  .header { padding: 0 12px; }
+}
+
+/* === SCROLLBAR === */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-raised); }
+::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-ghost); }
+
+/* === LOADING === */
+.loading-shimmer {
+  background: linear-gradient(90deg, var(--bg-surface) 25%, var(--bg-raised) 50%, var(--bg-surface) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius);
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+</style>
+</head>
+<body>
+
+<!-- ==================== HEADER ==================== -->
+<header class="header">
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 32 32" fill="none">
+        <path d="M16 2L28 9v14l-12 7L4 23V9L16 2z" stroke="var(--accent)" stroke-width="1.5" fill="none"/>
+        <path d="M16 6l8 4.5v9L16 24l-8-4.5v-9L16 6z" stroke="var(--accent)" stroke-width="1" fill="var(--accent-glow)" opacity="0.5"/>
+        <circle cx="16" cy="15" r="3" fill="var(--accent)" opacity="0.8"/>
+      </svg>
+    </div>
+    <div class="logo-text">Alpha <span>Evolve</span></div>
+  </div>
+
+  <nav class="nav">
+    <button class="nav-tab active" data-tab="overview">
+      <span class="tab-icon">&#9632;</span>
+      <span class="tab-label">Overview</span>
+    </button>
+    <button class="nav-tab" data-tab="pipeline">
+      <span class="tab-icon">&#9654;</span>
+      <span class="tab-label">Pipeline</span>
+    </button>
+    <button class="nav-tab" data-tab="architecture">
+      <span class="tab-icon">&#9783;</span>
+      <span class="tab-label">Architecture</span>
+    </button>
+    <button class="nav-tab" data-tab="solutions">
+      <span class="tab-icon">&#9733;</span>
+      <span class="tab-label">Solutions</span>
+    </button>
+    <button class="nav-tab" data-tab="knowledge">
+      <span class="tab-icon">&#9673;</span>
+      <span class="tab-label">Knowledge</span>
+    </button>
+    <button class="nav-tab" data-tab="reports">
+      <span class="tab-icon">&#9776;</span>
+      <span class="tab-label">Reports</span>
+    </button>
+  </nav>
+
+  <div class="header-right">
+    <div class="status-beacon" id="statusBeacon"></div>
+    <span class="header-label" id="lastUpdate">--:--:--</span>
+  </div>
+</header>
+
+<!-- ==================== MAIN ==================== -->
+<main class="main">
+
+  <!-- ===== OVERVIEW ===== -->
+  <div class="tab-content active" id="tab-overview">
+
+    <div class="metrics-row" id="metricsRow">
+      <div class="metric-card score-card">
+        <div class="score-gauge">
+          <svg viewBox="0 0 90 90" id="scoreGauge">
+            <circle cx="45" cy="45" r="38" fill="none" stroke="var(--bg-hover)" stroke-width="5"/>
+            <circle cx="45" cy="45" r="38" fill="none" stroke="var(--accent)" stroke-width="5"
+              stroke-dasharray="239" stroke-dashoffset="239" stroke-linecap="round"
+              transform="rotate(-90 45 45)" id="gaugeArc"/>
+            <text x="45" y="43" text-anchor="middle" font-family="var(--font-display)" font-weight="800"
+              font-size="18" fill="var(--accent)" id="gaugeText">0</text>
+            <text x="45" y="57" text-anchor="middle" font-family="var(--font-mono)" font-size="7"
+              fill="var(--text-ghost)">/ <tspan id="gaugeTarget">593</tspan></text>
+          </svg>
+        </div>
+        <div class="score-info">
+          <div class="metric-label">Best Fitness Score</div>
+          <div class="metric-value score" id="bestScoreVal">0</div>
+          <div class="score-bar-track">
+            <div class="score-bar-fill" id="scoreBar" style="width: 0%"></div>
+          </div>
+          <div class="metric-sub" id="scorePercent">0% of target</div>
+        </div>
+      </div>
+      <div class="metric-card gen-card">
+        <div class="metric-label">Generations</div>
+        <div class="metric-value gen" id="genVal">0</div>
+        <div class="metric-sub" id="genSub">of 30</div>
+      </div>
+      <div class="metric-card sol-card">
+        <div class="metric-label">Solutions</div>
+        <div class="metric-value sol" id="solVal">0</div>
+        <div class="metric-sub" id="solSub">0 valid</div>
+      </div>
+      <div class="metric-card idea-card">
+        <div class="metric-label">Active Ideas</div>
+        <div class="metric-value idea" id="ideaVal">0</div>
+        <div class="metric-sub" id="ideaSub">0 facts</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Knowledge</div>
+        <div class="metric-value" id="knowVal" style="color: var(--cyan)">0</div>
+        <div class="metric-sub" id="knowSub">clusters &middot; patterns</div>
+      </div>
+    </div>
+
+    <!-- Phase Strip -->
+    <div class="phase-strip" id="phaseStrip">
+      <span class="phase-strip-label">Current Phase</span>
+      <div class="phase-step" data-phase="planned">Architect</div>
+      <span class="phase-arrow">&rarr;</span>
+      <div class="phase-step" data-phase="agents_done">Agent Work</div>
+      <span class="phase-arrow">&rarr;</span>
+      <div class="phase-step" data-phase="evaluator_done">Evaluator</div>
+      <span class="phase-arrow">&rarr;</span>
+      <div class="phase-step" data-phase="critic_done">Sys Critic</div>
+      <span class="phase-arrow">&rarr;</span>
+      <div class="phase-step" data-phase="consistency_done">Consistency</div>
+      <span class="phase-arrow">&rarr;</span>
+      <div class="phase-step" data-phase="complete">Finalize</div>
+    </div>
+
+    <!-- Chart -->
+    <div class="chart-section">
+      <div class="section-header">
+        <span class="section-title">Score Progression</span>
+        <span class="section-title" style="font-size: 0.7rem; color: var(--text-ghost)">Fitness over generations</span>
+      </div>
+      <div class="chart-container">
+        <canvas id="progressionChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Generation Timeline -->
+    <div class="chart-section">
+      <div class="section-header">
+        <span class="section-title">Generation Timeline</span>
+      </div>
+      <div class="gen-timeline" id="genTimeline"></div>
+      <div class="empty-state" id="genTimelineEmpty" style="display:none; padding: 30px">
+        <div class="empty-icon">&#9201;</div>
+        <div class="empty-title">No generations yet</div>
+        <div class="empty-desc">Run the orchestrator to start evolving solutions</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== PIPELINE ===== -->
+  <div class="tab-content" id="tab-pipeline">
+
+    <div class="pipeline-container">
+      <div class="section-header" style="position: relative; z-index:1;">
+        <span class="section-title">Generation Pipeline</span>
+        <span class="section-title" style="font-size: 0.7rem; color: var(--text-ghost)">6-phase evolutionary loop</span>
+      </div>
+
+      <div class="pipeline-flow" id="pipelineFlow">
+        <div class="pipeline-node" data-pipe-phase="planned" id="pn-architect">
+          <div class="node-icon">&#9998;</div>
+          <div class="node-title">Architect</div>
+          <div class="node-desc">Reads state, writes manifest + agent briefs</div>
+        </div>
+        <div class="pipeline-arrow" id="pa-1"><div class="arrow-line"></div></div>
+
+        <div class="pipeline-node" data-pipe-phase="agents_done" id="pn-agents">
+          <div class="node-icon">&#9881;</div>
+          <div class="node-title">Agent Work</div>
+          <div class="node-desc">Parallel sessions: explore, exploit, genetic, research</div>
+        </div>
+        <div class="pipeline-arrow" id="pa-2"><div class="arrow-line"></div></div>
+
+        <div class="pipeline-node" data-pipe-phase="evaluator_done" id="pn-evaluator">
+          <div class="node-icon">&#9878;</div>
+          <div class="node-title">Evaluator</div>
+          <div class="node-desc">Verify scores, extract knowledge, update clusters</div>
+        </div>
+        <div class="pipeline-arrow" id="pa-3"><div class="arrow-line"></div></div>
+
+        <div class="pipeline-node" data-pipe-phase="critic_done" id="pn-critic">
+          <div class="node-icon">&#9888;</div>
+          <div class="node-title">System Critic</div>
+          <div class="node-desc">Identify pipeline problems, write recommendations</div>
+        </div>
+        <div class="pipeline-arrow" id="pa-4"><div class="arrow-line"></div></div>
+
+        <div class="pipeline-node" data-pipe-phase="consistency_done" id="pn-consistency">
+          <div class="node-icon">&#9881;</div>
+          <div class="node-title">Consistency</div>
+          <div class="node-desc">Audit knowledge, rewrite State of Affairs (every 3rd gen)</div>
+        </div>
+        <div class="pipeline-arrow" id="pa-5"><div class="arrow-line"></div></div>
+
+        <div class="pipeline-node" data-pipe-phase="complete" id="pn-finalize">
+          <div class="node-icon">&#10003;</div>
+          <div class="node-title">Finalize</div>
+          <div class="node-desc">Update rankings, detect interventions, snapshot</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Agent Types -->
+    <div class="agents-section">
+      <div class="section-header">
+        <span class="section-title">Agent Types</span>
+        <span class="section-title" style="font-size: 0.7rem; color: var(--text-ghost)">Configured worker agents</span>
+      </div>
+      <div class="agents-grid" id="agentsGrid">
+        <!-- Dynamically rendered from /api/overview agent_types -->
+      </div>
+    </div>
+
+    <!-- Data Flow -->
+    <div class="dataflow-section" style="margin-top: 24px;">
+      <div class="section-header">
+        <span class="section-title">Data Flow</span>
+      </div>
+      <div class="dataflow">
+        <div class="dataflow-col">
+          <div class="dataflow-col-title">Inputs</div>
+          <div class="dataflow-item" style="border-color: var(--purple);">manifest.yaml</div>
+          <div class="dataflow-item" style="border-color: var(--purple);">agent briefs</div>
+          <div class="dataflow-item" style="border-color: var(--accent);">knowledge/</div>
+          <div class="dataflow-item" style="border-color: var(--blue);">population/top/</div>
+        </div>
+        <div class="dataflow-arrow-col">&rarr;</div>
+        <div class="dataflow-col">
+          <div class="dataflow-col-title">Agent Work</div>
+          <div class="dataflow-item" style="border-color: var(--amber);">sol*.py</div>
+          <div class="dataflow-item" style="border-color: var(--amber);">observations.md</div>
+          <div class="dataflow-item" style="border-color: var(--amber);">report.md</div>
+          <div class="dataflow-item" style="border-color: var(--amber);">findings.md</div>
+        </div>
+        <div class="dataflow-arrow-col">&rarr;</div>
+        <div class="dataflow-col">
+          <div class="dataflow-col-title">Evaluator</div>
+          <div class="dataflow-item" style="border-color: var(--accent);">new ideas</div>
+          <div class="dataflow-item" style="border-color: var(--accent);">updated clusters</div>
+          <div class="dataflow-item" style="border-color: var(--accent);">coverage matrix</div>
+          <div class="dataflow-item" style="border-color: var(--cyan);">gen snapshot</div>
+        </div>
+        <div class="dataflow-arrow-col">&rarr;</div>
+        <div class="dataflow-col">
+          <div class="dataflow-col-title">Outputs</div>
+          <div class="dataflow-item" style="border-color: var(--blue);">population/</div>
+          <div class="dataflow-item" style="border-color: var(--accent);">knowledge/</div>
+          <div class="dataflow-item" style="border-color: var(--red);">feedback/</div>
+          <div class="dataflow-item" style="border-color: var(--cyan);">history/</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== ARCHITECTURE ===== -->
+  <div class="tab-content" id="tab-architecture">
+    <div class="arch-grid">
+      <div class="file-tree-section">
+        <div class="section-header">
+          <span class="section-title">File System</span>
+        </div>
+        <div id="fileTree">
+          <div class="empty-state" style="padding: 30px">
+            <div class="empty-icon">&#128193;</div>
+            <div class="empty-title">Loading file tree...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hierarchy-section">
+        <div class="section-header">
+          <span class="section-title">Knowledge Hierarchy</span>
+        </div>
+
+        <div class="hierarchy">
+          <div class="hierarchy-level">
+            <div class="hierarchy-node l0">
+              <div class="hierarchy-node-label">Layer 0</div>
+              <div class="hierarchy-node-title">State of Affairs</div>
+            </div>
+          </div>
+
+          <div class="hierarchy-connector"><div class="hierarchy-vline"></div></div>
+
+          <div class="hierarchy-level">
+            <div class="hierarchy-node l1">
+              <div class="hierarchy-node-label">Layer 1</div>
+              <div class="hierarchy-node-title">Clusters</div>
+            </div>
+          </div>
+
+          <div class="hierarchy-connector"><div class="hierarchy-vline"></div></div>
+
+          <div class="hierarchy-level" style="gap: 16px;">
+            <div class="hierarchy-node l2">
+              <div class="hierarchy-node-label">Layer 2</div>
+              <div class="hierarchy-node-title">Ideas</div>
+            </div>
+            <div class="hierarchy-node l2">
+              <div class="hierarchy-node-label">Layer 2</div>
+              <div class="hierarchy-node-title">Patterns</div>
+            </div>
+            <div class="hierarchy-node l2f">
+              <div class="hierarchy-node-label">Global</div>
+              <div class="hierarchy-node-title">Facts</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lifecycle diagram -->
+        <div style="margin-top: 32px;">
+          <div class="section-header">
+            <span class="section-title">Idea Lifecycle</span>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: center; gap: 0; padding: 20px 0; flex-wrap: wrap;">
+            <div style="text-align: center; padding: 8px 12px;">
+              <span class="lifecycle-badge lc-active" style="font-size: 0.72rem;">Active</span>
+            </div>
+            <span style="color: var(--text-ghost); padding: 0 4px;">&rarr;</span>
+            <div style="text-align: center; padding: 8px 12px;">
+              <span class="lifecycle-badge lc-established" style="font-size: 0.72rem;">Established</span>
+            </div>
+            <span style="color: var(--text-ghost); padding: 0 8px; font-size: 0.7rem;">or</span>
+            <div style="text-align: center; padding: 8px 12px;">
+              <span class="lifecycle-badge lc-disputed" style="font-size: 0.72rem;">Disputed</span>
+            </div>
+            <span style="color: var(--text-ghost); padding: 0 4px;">&rarr;</span>
+            <div style="text-align: center; padding: 8px 12px;">
+              <span class="lifecycle-badge lc-debunked" style="font-size: 0.72rem;">Debunked</span>
+            </div>
+            <span style="color: var(--text-ghost); padding: 0 4px;">&rarr;</span>
+            <div style="text-align: center; padding: 8px 12px;">
+              <span class="lifecycle-badge lc-archived" style="font-size: 0.72rem;">Archived</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Directory purpose map -->
+        <div style="margin-top: 24px;">
+          <div class="section-header">
+            <span class="section-title">Directory Purposes</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px;">
+            <div class="dataflow-item" style="border-left: 3px solid var(--blue); text-align: left;">
+              <strong style="color: var(--blue);">population/</strong><br>
+              <span style="font-size: 0.65rem; color: var(--text-ghost);">All solutions by gen/agent</span>
+            </div>
+            <div class="dataflow-item" style="border-left: 3px solid var(--accent); text-align: left;">
+              <strong style="color: var(--accent);">knowledge/</strong><br>
+              <span style="font-size: 0.65rem; color: var(--text-ghost);">Ideas, facts, patterns, clusters</span>
+            </div>
+            <div class="dataflow-item" style="border-left: 3px solid var(--amber); text-align: left;">
+              <strong style="color: var(--amber);">reports/</strong><br>
+              <span style="font-size: 0.65rem; color: var(--text-ghost);">Agent debrief reports</span>
+            </div>
+            <div class="dataflow-item" style="border-left: 3px solid var(--purple); text-align: left;">
+              <strong style="color: var(--purple);">briefs/</strong><br>
+              <span style="font-size: 0.65rem; color: var(--text-ghost);">Manifests + per-agent briefs</span>
+            </div>
+            <div class="dataflow-item" style="border-left: 3px solid var(--red); text-align: left;">
+              <strong style="color: var(--red);">feedback/</strong><br>
+              <span style="font-size: 0.65rem; color: var(--text-ghost);">Critic recommendations, gaps</span>
+            </div>
+            <div class="dataflow-item" style="border-left: 3px solid var(--cyan); text-align: left;">
+              <strong style="color: var(--cyan);">history/</strong><br>
+              <span style="font-size: 0.65rem; color: var(--text-ghost);">Snapshots, score progression</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SOLUTIONS ===== -->
+  <div class="tab-content" id="tab-solutions">
+    <div class="solutions-controls">
+      <div class="filter-group">
+        <span class="filter-label">Gen</span>
+        <select class="filter-select" id="solFilterGen"><option value="all">All</option></select>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">Agent</span>
+        <select class="filter-select" id="solFilterAgent"><option value="all">All</option></select>
+      </div>
+      <div style="margin-left: auto;">
+        <span class="sol-count-info" id="solCountInfo"></span>
+      </div>
+    </div>
+    <div class="sol-table-wrap">
+      <table class="sol-table" id="solTable">
+        <thead>
+          <tr>
+            <th data-sort="gen">Gen <span class="sort-arrow"></span></th>
+            <th data-sort="agent_type">Agent <span class="sort-arrow"></span></th>
+            <th data-sort="instance">Inst <span class="sort-arrow"></span></th>
+            <th data-sort="file">File <span class="sort-arrow"></span></th>
+            <th data-sort="score" class="sort-active">Score <span class="sort-arrow">&#9660;</span></th>
+            <th data-sort="is_valid">Valid <span class="sort-arrow"></span></th>
+            <th data-sort="size">Size <span class="sort-arrow"></span></th>
+            <th data-sort="modified">Modified <span class="sort-arrow"></span></th>
+          </tr>
+        </thead>
+        <tbody id="solTableBody"></tbody>
+      </table>
+      <div class="empty-state" id="solEmpty" style="display:none; padding: 30px">
+        <div class="empty-icon">&#128200;</div>
+        <div class="empty-title">No solutions yet</div>
+        <div class="empty-desc">Solutions appear after agents complete their work sessions</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== KNOWLEDGE ===== -->
+  <div class="tab-content" id="tab-knowledge">
+    <div class="knowledge-layout">
+
+      <div class="soa-panel">
+        <div class="section-header">
+          <span class="section-title">State of Affairs</span>
+          <span class="section-title" style="font-size: 0.7rem; color: var(--text-ghost)">Layer 0 &mdash; Global Summary</span>
+        </div>
+        <div class="soa-content" id="soaContent">Loading...</div>
+        <div class="soa-meta" id="soaMeta"></div>
+      </div>
+
+      <!-- Ideas -->
+      <div>
+        <div class="section-header">
+          <span class="section-title">Ideas</span>
+        </div>
+        <div class="ideas-controls" id="ideasControls">
+          <button class="lc-filter-btn active" data-lc="all">All</button>
+          <button class="lc-filter-btn" data-lc="active">Active</button>
+          <button class="lc-filter-btn" data-lc="established">Established</button>
+          <button class="lc-filter-btn" data-lc="disputed">Disputed</button>
+          <button class="lc-filter-btn" data-lc="debunked">Debunked</button>
+          <button class="lc-filter-btn" data-lc="archived">Archived</button>
+        </div>
+        <div class="ideas-grid" id="ideasGrid"></div>
+        <div class="empty-state" id="ideasEmpty" style="display:none; padding: 30px">
+          <div class="empty-icon">&#128161;</div>
+          <div class="empty-title">No ideas yet</div>
+        </div>
+      </div>
+
+      <!-- Facts -->
+      <div>
+        <div class="section-header">
+          <span class="section-title">Facts</span>
+        </div>
+        <div class="facts-list" id="factsList"></div>
+      </div>
+
+      <!-- Patterns & Clusters -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+        <div>
+          <div class="section-header"><span class="section-title">Patterns</span></div>
+          <div class="facts-list" id="patternsList"></div>
+          <div class="empty-state" id="patternsEmpty" style="display:none; padding:20px">
+            <div class="empty-desc">No patterns extracted yet</div>
+          </div>
+        </div>
+        <div>
+          <div class="section-header"><span class="section-title">Clusters</span></div>
+          <div class="facts-list" id="clustersList"></div>
+          <div class="empty-state" id="clustersEmpty" style="display:none; padding:20px">
+            <div class="empty-desc">No clusters formed yet</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== REPORTS ===== -->
+  <div class="tab-content" id="tab-reports">
+    <div class="section-header">
+      <span class="section-title">Agent Reports</span>
+    </div>
+    <div class="reports-list" id="reportsList"></div>
+    <div class="empty-state" id="reportsEmpty" style="display:none; padding: 40px">
+      <div class="empty-icon">&#128220;</div>
+      <div class="empty-title">No reports yet</div>
+      <div class="empty-desc">Agent debrief reports appear after each generation</div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ======================================================================
+// Alpha Evolve Dashboard — Client Logic
+// ======================================================================
+
+const PHASE_ORDER = ['not_started', 'planned', 'agents_running', 'agents_done', 'evaluator_done', 'critic_done', 'consistency_done', 'complete'];
+
+let overviewData = null;
+let solutionsData = null;
+let knowledgeData = null;
+let reportsData = null;
+let filesData = null;
+
+let solSort = { key: 'score', dir: -1 };
+let solFilterGen = 'all';
+let solFilterAgent = 'all';
+let ideaFilterLc = 'all';
+
+let refreshTimer = null;
+
+// ----- Tab Navigation -----
+document.querySelectorAll('.nav-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    const tab = btn.dataset.tab;
+    document.getElementById('tab-' + tab).classList.add('active');
+
+    // Load data for tab if needed
+    if (tab === 'overview') loadOverview();
+    if (tab === 'solutions') loadSolutions();
+    if (tab === 'knowledge') loadKnowledge();
+    if (tab === 'reports') loadReports();
+    if (tab === 'architecture') loadFiles();
+
+    // Auto-refresh only on overview
+    clearInterval(refreshTimer);
+    if (tab === 'overview') {
+      refreshTimer = setInterval(loadOverview, 10000);
+    }
+  });
+});
+
+// ----- API Fetch -----
+async function apiFetch(url) {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(r.status);
+    return await r.json();
+  } catch (e) {
+    console.error('API error:', url, e);
+    return null;
+  }
+}
+
+// ----- Overview -----
+async function loadOverview() {
+  const data = await apiFetch('/api/overview');
+  if (!data) return;
+  overviewData = data;
+  const s = data.stats;
+  const c = data.config;
+
+  document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+
+  // Metrics
+  const pct = c.target_score > 0 ? Math.min(100, (s.best_score / c.target_score) * 100) : 0;
+  document.getElementById('bestScoreVal').textContent = Math.round(s.best_score);
+  document.getElementById('scoreBar').style.width = pct + '%';
+  document.getElementById('scorePercent').textContent = pct.toFixed(1) + '% of target';
+  document.getElementById('gaugeTarget').textContent = c.target_score;
+
+  // Gauge arc
+  const arc = document.getElementById('gaugeArc');
+  const circumference = 2 * Math.PI * 38;
+  const offset = circumference - (pct / 100) * circumference;
+  arc.setAttribute('stroke-dasharray', circumference);
+  arc.setAttribute('stroke-dashoffset', offset);
+  document.getElementById('gaugeText').textContent = Math.round(s.best_score);
+
+  // Gauge color
+  const gaugeColor = pct > 80 ? 'var(--accent)' : pct > 40 ? 'var(--amber)' : 'var(--red)';
+  arc.setAttribute('stroke', gaugeColor);
+  document.getElementById('gaugeText').setAttribute('fill', gaugeColor);
+  document.getElementById('bestScoreVal').style.color = gaugeColor;
+
+  document.getElementById('genVal').textContent = s.completed_gens;
+  document.getElementById('genSub').textContent = 'of ' + c.total_generations;
+  document.getElementById('solVal').textContent = s.total_solutions;
+  document.getElementById('solSub').textContent = s.valid_solutions + ' valid';
+  document.getElementById('ideaVal').textContent = s.total_ideas;
+  document.getElementById('ideaSub').textContent = s.total_facts + ' facts';
+  document.getElementById('knowVal').textContent = s.total_clusters + s.total_patterns;
+  document.getElementById('knowSub').textContent = s.total_clusters + ' clusters \u00b7 ' + s.total_patterns + ' patterns';
+
+  // Phase strip — map agents_running to agents_done step for display
+  const currentPhase = s.current_phase;
+  const phaseIdx = PHASE_ORDER.indexOf(currentPhase);
+  document.querySelectorAll('.phase-step').forEach(el => {
+    const elPhase = el.dataset.phase;
+    const elIdx = PHASE_ORDER.indexOf(elPhase);
+    el.classList.remove('completed', 'active', 'pending');
+    if (elPhase === 'agents_done' && currentPhase === 'agents_running') {
+      el.classList.add('active');
+    } else if (elIdx < phaseIdx) el.classList.add('completed');
+    else if (elIdx === phaseIdx) el.classList.add('active');
+    else el.classList.add('pending');
+  });
+
+  // Pipeline (if visible)
+  updatePipeline(currentPhase);
+
+  // Agent type cards (dynamic from config)
+  renderAgentCards(data.agent_types || []);
+
+  // Generation timeline
+  const timeline = document.getElementById('genTimeline');
+  const emptyTl = document.getElementById('genTimelineEmpty');
+  if (data.generations.length === 0) {
+    timeline.style.display = 'none';
+    emptyTl.style.display = 'block';
+  } else {
+    timeline.style.display = 'flex';
+    emptyTl.style.display = 'none';
+    timeline.innerHTML = data.generations.map(g => `
+      <div class="gen-card">
+        <div class="gen-num">Gen ${g.gen}</div>
+        <span class="gen-status ${g.status}">${g.status.replace(/_/g, ' ')}</span>
+        <div class="gen-score">${g.best_score !== null ? g.best_score.toFixed(4) : '--'}</div>
+        <div class="gen-sols">${g.solutions} sol${g.solutions !== 1 ? 's' : ''}</div>
+      </div>
+    `).join('');
+  }
+
+  // Chart
+  drawChart(data.progression, c.target_score);
+}
+
+function updatePipeline(currentPhase) {
+  const phaseIdx = PHASE_ORDER.indexOf(currentPhase);
+  document.querySelectorAll('.pipeline-node').forEach(node => {
+    const nodePhase = node.dataset.pipePhase;
+    const nodeIdx = PHASE_ORDER.indexOf(nodePhase);
+    node.classList.remove('active-phase', 'completed-phase');
+    if (nodeIdx < phaseIdx) node.classList.add('completed-phase');
+    else if (nodeIdx === phaseIdx) node.classList.add('active-phase');
+  });
+
+  // Arrows
+  for (let i = 1; i <= 5; i++) {
+    const arrow = document.getElementById('pa-' + i);
+    if (!arrow) continue;
+    const prevPhaseIdx = i; // arrow i connects node i to node i+1
+    if (prevPhaseIdx < phaseIdx) {
+      arrow.classList.add('flow-active');
+    } else {
+      arrow.classList.remove('flow-active');
+    }
+  }
+}
+
+function renderAgentCards(agentTypes) {
+  const grid = document.getElementById('agentsGrid');
+  if (!grid || agentTypes.length === 0) return;
+  grid.innerHTML = agentTypes.map(a => {
+    const label = a.type.charAt(0).toUpperCase() + a.type.slice(1);
+    return `
+      <div class="agent-card${a.enabled ? '' : ' disabled'}">
+        <div class="agent-card-header"><span class="agent-type-badge badge-${a.type}">${label}</span></div>
+        <div class="agent-stat"><span>Max Instances</span><span class="agent-stat-val">${a.max_instances}</span></div>
+        <div class="agent-stat"><span>Max Turns</span><span class="agent-stat-val">${a.max_turns}</span></div>
+        <div class="agent-stat"><span>Model</span><span class="agent-stat-val">${a.model}</span></div>
+        <div class="agent-stat"><span>Purpose</span><span class="agent-stat-val" style="color:var(--text-tertiary)">${a.purpose}</span></div>
+      </div>`;
+  }).join('');
+}
+
+// ----- Chart (Canvas) -----
+function drawChart(progression, target) {
+  const canvas = document.getElementById('progressionChart');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+
+  ctx.clearRect(0, 0, W, H);
+
+  const pad = { top: 20, right: 20, bottom: 30, left: 50 };
+  const chartW = W - pad.left - pad.right;
+  const chartH = H - pad.top - pad.bottom;
+
+  if (!progression || progression.length === 0) {
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '12px JetBrains Mono, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('No data yet \u2014 waiting for first generation', W / 2, H / 2);
+    return;
+  }
+
+  const maxGen = Math.max(...progression.map(p => p.gen), 5);
+  const maxScore = Math.max(target, ...progression.map(p => p.best_fitness)) * 1.1;
+
+  function x(gen) { return pad.left + (gen / maxGen) * chartW; }
+  function y(score) { return pad.top + chartH - (score / maxScore) * chartH; }
+
+  // Grid lines
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 5; i++) {
+    const yy = pad.top + (i / 5) * chartH;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, yy);
+    ctx.lineTo(W - pad.right, yy);
+    ctx.stroke();
+
+    const scoreLabel = Math.round(maxScore * (1 - i / 5));
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '10px JetBrains Mono, monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(scoreLabel, pad.left - 8, yy + 3);
+  }
+
+  // X axis labels
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#475569';
+  for (let g = 0; g <= maxGen; g += Math.max(1, Math.floor(maxGen / 10))) {
+    ctx.fillText('G' + g, x(g), H - 8);
+  }
+
+  // Target line
+  ctx.strokeStyle = 'rgba(5, 150, 105, 0.35)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  ctx.moveTo(pad.left, y(target));
+  ctx.lineTo(W - pad.right, y(target));
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = 'rgba(5, 150, 105, 0.6)';
+  ctx.font = '10px JetBrains Mono, monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText('TARGET ' + target, W - pad.right - 70, y(target) - 5);
+
+  // Data line
+  if (progression.length > 1) {
+    // Gradient fill
+    const grad = ctx.createLinearGradient(0, y(maxScore), 0, y(0));
+    grad.addColorStop(0, 'rgba(5, 150, 105, 0.15)');
+    grad.addColorStop(1, 'rgba(5, 150, 105, 0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(x(progression[0].gen), y(0));
+    progression.forEach(p => ctx.lineTo(x(p.gen), y(p.best_fitness)));
+    ctx.lineTo(x(progression[progression.length - 1].gen), y(0));
+    ctx.closePath();
+    ctx.fill();
+
+    // Line
+    ctx.strokeStyle = '#059669';
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    progression.forEach((p, i) => {
+      if (i === 0) ctx.moveTo(x(p.gen), y(p.best_fitness));
+      else ctx.lineTo(x(p.gen), y(p.best_fitness));
+    });
+    ctx.stroke();
+  }
+
+  // Points
+  progression.forEach(p => {
+    ctx.fillStyle = '#059669';
+    ctx.beginPath();
+    ctx.arc(x(p.gen), y(p.best_fitness), 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(x(p.gen), y(p.best_fitness), 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+// Resize chart on window resize
+window.addEventListener('resize', () => {
+  if (overviewData) drawChart(overviewData.progression, overviewData.config.target_score);
+});
+
+// ----- Solutions -----
+async function loadSolutions() {
+  if (!solutionsData) {
+    solutionsData = await apiFetch('/api/solutions');
+  }
+  renderSolutions();
+}
+
+function renderSolutions() {
+  const data = solutionsData || [];
+  const tbody = document.getElementById('solTableBody');
+  const empty = document.getElementById('solEmpty');
+  const info = document.getElementById('solCountInfo');
+
+  // Populate filter dropdowns
+  const gens = [...new Set(data.map(s => s.gen))].sort((a, b) => a - b);
+  const agents = [...new Set(data.map(s => s.agent_type))].sort();
+  const genSel = document.getElementById('solFilterGen');
+  const agentSel = document.getElementById('solFilterAgent');
+
+  if (genSel.options.length <= 1) {
+    gens.forEach(g => { const o = new Option('Gen ' + g, g); genSel.add(o); });
+  }
+  if (agentSel.options.length <= 1) {
+    agents.forEach(a => { const o = new Option(a, a); agentSel.add(o); });
+  }
+
+  let filtered = data;
+  if (solFilterGen !== 'all') filtered = filtered.filter(s => s.gen == solFilterGen);
+  if (solFilterAgent !== 'all') filtered = filtered.filter(s => s.agent_type === solFilterAgent);
+
+  // Sort
+  filtered.sort((a, b) => {
+    let av = a[solSort.key], bv = b[solSort.key];
+    if (av == null) av = -99999;
+    if (bv == null) bv = -99999;
+    if (typeof av === 'string') return av.localeCompare(bv) * solSort.dir;
+    return (av - bv) * solSort.dir;
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    info.textContent = '';
+    return;
+  }
+
+  empty.style.display = 'none';
+  info.textContent = filtered.length + ' solution' + (filtered.length !== 1 ? 's' : '');
+
+  tbody.innerHTML = filtered.map(s => {
+    const scoreClass = s.score == null ? 'score-none' :
+      s.score > 400 ? 'score-high' : s.score > 200 ? 'score-mid' : 'score-low';
+    const scoreText = s.score != null ? Math.round(s.score) : '--';
+    const validClass = s.is_valid ? 'valid-yes' : 'valid-no';
+    const sizeStr = s.size > 1024 ? (s.size / 1024).toFixed(1) + 'K' : s.size + 'B';
+    const badgeClass = 'badge-' + s.agent_type;
+
+    return `<tr>
+      <td>${s.gen}</td>
+      <td><span class="agent-type-badge ${badgeClass}">${s.agent_type}</span></td>
+      <td>${s.instance}</td>
+      <td>${s.file}</td>
+      <td class="score-cell ${scoreClass}">${scoreText}</td>
+      <td><span class="valid-badge ${validClass}"></span></td>
+      <td>${sizeStr}</td>
+      <td style="color: var(--text-ghost)">${s.modified || ''}</td>
+    </tr>`;
+  }).join('');
+}
+
+// Sort handlers
+document.querySelectorAll('.sol-table th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.sort;
+    if (solSort.key === key) solSort.dir *= -1;
+    else { solSort.key = key; solSort.dir = key === 'score' ? -1 : 1; }
+
+    document.querySelectorAll('.sol-table th').forEach(h => {
+      h.classList.remove('sort-active');
+      h.querySelector('.sort-arrow').textContent = '';
+    });
+    th.classList.add('sort-active');
+    th.querySelector('.sort-arrow').textContent = solSort.dir > 0 ? '\u25B2' : '\u25BC';
+    renderSolutions();
+  });
+});
+
+document.getElementById('solFilterGen').addEventListener('change', e => { solFilterGen = e.target.value; renderSolutions(); });
+document.getElementById('solFilterAgent').addEventListener('change', e => { solFilterAgent = e.target.value; renderSolutions(); });
+
+// ----- Knowledge -----
+async function loadKnowledge() {
+  const data = await apiFetch('/api/knowledge');
+  if (!data) return;
+  knowledgeData = data;
+
+  // State of Affairs
+  document.getElementById('soaContent').textContent = data.state_of_affairs || 'No state of affairs written yet.';
+  const meta = data.state_of_affairs_meta || {};
+  document.getElementById('soaMeta').innerHTML = [
+    meta.generation != null ? `<span class="soa-meta-item">Gen: <span>${meta.generation}</span></span>` : '',
+    meta.best_score != null ? `<span class="soa-meta-item">Best: <span>${meta.best_score}</span></span>` : '',
+    meta.trajectory ? `<span class="soa-meta-item">Trajectory: <span>${meta.trajectory}</span></span>` : '',
+  ].join('');
+
+  renderIdeas();
+
+  // Facts
+  const factsList = document.getElementById('factsList');
+  if (data.facts.length === 0) {
+    factsList.innerHTML = '<div class="empty-state" style="padding:20px"><div class="empty-desc">No facts recorded</div></div>';
+  } else {
+    factsList.innerHTML = data.facts.map(f => `
+      <div class="fact-item ${f.critical ? 'fact-critical' : ''}">
+        <div class="fact-icon">${f.critical ? '&#9888;' : '&#9679;'}</div>
+        <div class="fact-content">
+          <div class="fact-title">${esc(f.title)}</div>
+          <div class="fact-body">${esc(f.body)}</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // Patterns
+  const patList = document.getElementById('patternsList');
+  const patEmpty = document.getElementById('patternsEmpty');
+  if (data.patterns.length === 0) {
+    patList.innerHTML = '';
+    patEmpty.style.display = 'block';
+  } else {
+    patEmpty.style.display = 'none';
+    patList.innerHTML = data.patterns.map(p => `
+      <div class="fact-item">
+        <div class="fact-icon">&#9670;</div>
+        <div class="fact-content">
+          <div class="fact-title">${esc(p.title)} <span class="lifecycle-badge lc-${p.lifecycle}">${p.lifecycle}</span></div>
+          <div class="fact-body">${esc(p.body)}</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // Clusters
+  const cluList = document.getElementById('clustersList');
+  const cluEmpty = document.getElementById('clustersEmpty');
+  if (data.clusters.length === 0) {
+    cluList.innerHTML = '';
+    cluEmpty.style.display = 'block';
+  } else {
+    cluEmpty.style.display = 'none';
+    cluList.innerHTML = data.clusters.map(c => `
+      <div class="fact-item">
+        <div class="fact-icon" style="color: var(--blue)">&#9673;</div>
+        <div class="fact-content">
+          <div class="fact-title">${esc(c.title)}</div>
+          <div class="fact-body">${esc(c.body)}</div>
+        </div>
+      </div>
+    `).join('');
+  }
+}
+
+function renderIdeas() {
+  if (!knowledgeData) return;
+  const grid = document.getElementById('ideasGrid');
+  const empty = document.getElementById('ideasEmpty');
+
+  let ideas = knowledgeData.ideas;
+  if (ideaFilterLc !== 'all') ideas = ideas.filter(i => i.lifecycle === ideaFilterLc);
+
+  if (ideas.length === 0) {
+    grid.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+
+  empty.style.display = 'none';
+  grid.innerHTML = ideas.map(i => `
+    <div class="idea-card">
+      <div class="idea-card-top">
+        <span class="idea-id">${esc(i.id)}</span>
+        <span class="lifecycle-badge lc-${i.lifecycle}">${i.lifecycle}</span>
+      </div>
+      <div class="idea-title">${esc(i.title)}</div>
+      <div class="idea-body">${esc(i.body)}</div>
+      <div class="idea-stats">
+        <span class="idea-stat">certainty: <span>${i.certainty}</span></span>
+        <span class="idea-stat">used: <span>${i.times_used}x</span></span>
+        <span class="idea-stat">top: <span>${i.top_score}</span></span>
+        <span class="idea-stat">gen: <span>${i.created_gen}</span></span>
+      </div>
+    </div>
+  `).join('');
+}
+
+// Idea lifecycle filter
+document.getElementById('ideasControls').addEventListener('click', e => {
+  if (!e.target.classList.contains('lc-filter-btn')) return;
+  document.querySelectorAll('.lc-filter-btn').forEach(b => b.classList.remove('active'));
+  e.target.classList.add('active');
+  ideaFilterLc = e.target.dataset.lc;
+  renderIdeas();
+});
+
+// ----- Reports -----
+async function loadReports() {
+  const data = await apiFetch('/api/reports');
+  if (!data) return;
+  reportsData = data;
+
+  const list = document.getElementById('reportsList');
+  const empty = document.getElementById('reportsEmpty');
+
+  if (data.length === 0) {
+    list.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+
+  empty.style.display = 'none';
+
+  // Group by generation
+  const byGen = {};
+  data.forEach(r => {
+    if (!byGen[r.gen]) byGen[r.gen] = [];
+    byGen[r.gen].push(r);
+  });
+
+  let html = '';
+  Object.keys(byGen).sort((a, b) => b - a).forEach(gen => {
+    byGen[gen].forEach(r => {
+      const agentType = r.agent.split('_')[0];
+      const badgeClass = 'badge-' + agentType;
+      const sizeStr = r.size > 1024 ? (r.size / 1024).toFixed(1) + 'K' : r.size + 'B';
+
+      html += `
+        <div class="report-item">
+          <div class="report-header" onclick="this.parentElement.classList.toggle('open')">
+            <span class="report-toggle">&#9654;</span>
+            <span class="report-gen-badge">Gen ${r.gen}</span>
+            <span class="agent-type-badge ${badgeClass}" style="font-size:0.62rem">${agentType}</span>
+            <span class="report-agent-name">${esc(r.agent)}</span>
+            <span class="report-size">${sizeStr}</span>
+          </div>
+          <div class="report-content">
+            <div class="report-body">${esc(r.content)}</div>
+          </div>
+        </div>
+      `;
+    });
+  });
+  list.innerHTML = html;
+}
+
+// ----- Files -----
+async function loadFiles() {
+  const data = await apiFetch('/api/files');
+  if (!data) return;
+  filesData = data;
+
+  const tree = document.getElementById('fileTree');
+  const dirColors = {
+    population: 'dir-population',
+    knowledge: 'dir-knowledge',
+    reports: 'dir-reports',
+    briefs: 'dir-briefs',
+    feedback: 'dir-feedback',
+    history: 'dir-history',
+    agents: 'dir-agents',
+    problem: 'dir-problem',
+    user: 'dir-user',
+  };
+
+  const dirIcons = {
+    population: '&#128202;',
+    knowledge: '&#128218;',
+    reports: '&#128220;',
+    briefs: '&#128231;',
+    feedback: '&#128172;',
+    history: '&#128197;',
+    agents: '&#129302;',
+    problem: '&#128300;',
+    user: '&#128100;',
+  };
+
+  let html = '';
+  for (const [dirName, files] of Object.entries(data)) {
+    const colorClass = dirColors[dirName] || '';
+
+    // Group files by subdirectory
+    const subDirs = {};
+    files.forEach(f => {
+      const parts = f.path.split('/');
+      const sub = parts.length > 2 ? parts.slice(1, -1).join('/') : '.';
+      if (!subDirs[sub]) subDirs[sub] = [];
+      subDirs[sub].push(f);
+    });
+
+    html += `
+      <div class="tree-dir ${colorClass}">
+        <div class="tree-dir-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="tree-toggle">&#9654;</span>
+          <span class="tree-dir-icon">${dirIcons[dirName] || '&#128193;'}</span>
+          <span class="tree-dir-name">${dirName}/</span>
+          <span class="tree-dir-count">${files.length} file${files.length !== 1 ? 's' : ''}</span>
+        </div>
+        <div class="tree-files">
+    `;
+
+    for (const [sub, subFiles] of Object.entries(subDirs)) {
+      if (sub !== '.') {
+        html += `<div style="font-size:0.65rem;color:var(--text-ghost);padding:6px 0 2px;margin-top:4px;border-top:1px solid var(--border);">${sub}/</div>`;
+      }
+      subFiles.forEach(f => {
+        const sizeStr = f.size > 1024 ? (f.size / 1024).toFixed(1) + 'K' : f.size + 'B';
+        html += `<div class="tree-file">
+          <span style="color: var(--text-ghost)">&#9702;</span>
+          <span>${esc(f.name)}</span>
+          <span class="tree-file-size">${sizeStr}</span>
+        </div>`;
+      });
+    }
+
+    html += `</div></div>`;
+  }
+
+  tree.innerHTML = html || '<div class="empty-state" style="padding:20px"><div class="empty-desc">No files found</div></div>';
+}
+
+// ----- Utilities -----
+function esc(s) {
+  if (s == null) return '';
+  const d = document.createElement('div');
+  d.textContent = String(s);
+  return d.innerHTML;
+}
+
+// ----- Init -----
+loadOverview();
+refreshTimer = setInterval(loadOverview, 10000);
+</script>
+</body>
+</html>

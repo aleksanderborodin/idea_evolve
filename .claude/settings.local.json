@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(timeout 10 npx @anthropic-ai/claude-code --print --allowedTools Read --allowedTools Write --max-turns 1)",
+      "Bash(timeout 30 npx @anthropic-ai/claude-code --print --allowedTools Read --allowedTools Write --max-turns 5)",
+      "Read(//tmp/**)",
+      "Bash(rm -f /tmp/test_tools_output.txt)",
+      "Bash(python3 orchestrator.py . --dry-run)",
+      "Bash(python3 orchestrator.py . --single)",
+      "Bash(python3 orchestrator.py .)",
+      "Bash(python3 -m json.tool)",
+      "Bash(for ws:*)",
+      "Bash(do echo:*)",
+      "Read(//home/sasha/Desktop/project_alpha/$ws/**)",
+      "Bash(done)",
+      "Bash(rm -rf workspace/ population/ reports/ briefs/ history/ feedback/)",
+      "Bash(rm -rf knowledge/ideas/active/*.md knowledge/ideas/established/*.md knowledge/ideas/disputed/*.md knowledge/ideas/debunked/*.md knowledge/ideas/archived/*.md)",
+      "Bash(rm -rf knowledge/clusters/ knowledge/patterns/active/*.md knowledge/patterns/confirmed/*.md knowledge/research/ knowledge/experiments/)",
+      "Bash(rm -f knowledge/state_of_affairs.md)",
+      "Read(//home/sasha/Desktop/project_alpha/**)",
+      "Bash(xargs -r kill -9)",
+      "Bash(rm -rf __pycache__/)",
+      "Bash(source /home/sasha/Desktop/project_alpha/venv/bin/activate)",
+      "Bash(npx @anthropic-ai/claude-code --help)",
+      "Bash(head -5 /home/sasha/Desktop/project_alpha/alpha-evolve/problem/initial_programs/*.py)",
+      "Bash(ls /home/sasha/Desktop/project_alpha/alpha-evolve/problem/initial_programs/*.score)",
+      "Bash(python3 -c \"import py_compile; py_compile.compile\\(''orchestrator.py'', doraise=True\\)\")",
+      "Bash(curl -s http://localhost:5000/api/overview)",
+      "Bash(chmod +x /home/sasha/Desktop/project_alpha/alpha-evolve/papers/download.sh)",
+      "Bash(bash papers/download.sh 2311.13645)",
+      "Bash(source ../venv/bin/activate)",
+      "Bash(python3 papers/manage.py add 2312.04268 --by \"test\")",
+      "Bash(python3 papers/manage.py list)",
+      "Bash(python3 papers/manage.py status)",
+      "Bash(python3 -c \"from dashboard.routes.api import api_bp; print\\(''API routes OK''\\)\")",
+      "Bash(python3 -c \"from dashboard.app import create_app; app = create_app\\(\\); print\\(''App created OK''\\); print\\(''Routes:''\\); [print\\(f''  {r.rule}''\\) for r in app.url_map.iter_rules\\(\\) if r.rule.startswith\\(''/api''\\)]\")"
+    ],
+    "additionalDirectories": [
+      "/home/sasha/Desktop/project_alpha/alpha-evolve/papers/pdf"
+    ]
+  }
+}

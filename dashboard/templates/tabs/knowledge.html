@@ -1,0 +1,60 @@
+  <!-- ===== KNOWLEDGE ===== -->
+  <div class="tab-content" id="tab-knowledge">
+    <div class="knowledge-layout">
+
+      <div class="soa-panel">
+        <div class="section-header">
+          <span class="section-title">State of Affairs</span>
+          <span class="section-title" style="font-size: 0.7rem; color: var(--text-ghost)">Layer 0 &mdash; Global Summary</span>
+        </div>
+        <div class="soa-content" id="soaContent">Loading...</div>
+        <div class="soa-meta" id="soaMeta"></div>
+      </div>
+
+      <!-- Ideas -->
+      <div>
+        <div class="section-header">
+          <span class="section-title">Ideas</span>
+        </div>
+        <div class="ideas-controls" id="ideasControls">
+          <button class="lc-filter-btn active" data-lc="all">All</button>
+          <button class="lc-filter-btn" data-lc="active">Active</button>
+          <button class="lc-filter-btn" data-lc="established">Established</button>
+          <button class="lc-filter-btn" data-lc="disputed">Disputed</button>
+          <button class="lc-filter-btn" data-lc="debunked">Debunked</button>
+          <button class="lc-filter-btn" data-lc="archived">Archived</button>
+        </div>
+        <div class="ideas-grid" id="ideasGrid"></div>
+        <div class="empty-state" id="ideasEmpty" style="display:none; padding: 30px">
+          <div class="empty-icon">&#128161;</div>
+          <div class="empty-title">No ideas yet</div>
+        </div>
+      </div>
+
+      <!-- Facts -->
+      <div>
+        <div class="section-header">
+          <span class="section-title">Facts</span>
+        </div>
+        <div class="facts-list" id="factsList"></div>
+      </div>
+
+      <!-- Patterns & Clusters -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+        <div>
+          <div class="section-header"><span class="section-title">Patterns</span></div>
+          <div class="facts-list" id="patternsList"></div>
+          <div class="empty-state" id="patternsEmpty" style="display:none; padding:20px">
+            <div class="empty-desc">No patterns extracted yet</div>
+          </div>
+        </div>
+        <div>
+          <div class="section-header"><span class="section-title">Clusters</span></div>
+          <div class="facts-list" id="clustersList"></div>
+          <div class="empty-state" id="clustersEmpty" style="display:none; padding:20px">
+            <div class="empty-desc">No clusters formed yet</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
