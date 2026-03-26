@@ -33,10 +33,12 @@ Implement `def entrypoint():` that returns a 1D NumPy array:
 - Numerical instabilities from FFT precision
 
 ## Helper Functions
-- `helper.py` provides `compute_c(f_values)` → float (JAX-based, differentiable)
+- `helpers/core.py` provides `compute_c(f_values)` → float (JAX-based, differentiable)
+  - Import: `from helpers.core import compute_c`
   - Input: (N,) array of non-negative function values on domain [-1/4, 1/4]
   - Computes autoconvolution (f ★ f) via FFT
   - Returns C = max(f ★ f) / (∫f)²
+- See `helpers/README.md` for all available helpers (built-in + experimentator-created)
 
 ## Problem Complexity
 This is a non-convex functional optimization problem in high-dimensional space. The objective involves finding the maximum of autoconvolution normalized by squared integral, creating complex interactions between function shape and convolution structure. The problem arises in additive combinatorics (Sidon sets) and requires balancing autoconvolution peak height with integral magnitude.

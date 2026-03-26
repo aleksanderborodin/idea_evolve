@@ -15,9 +15,9 @@ on [-1/4, 1/4] with uniform grid spacing dx = 0.5/N where N is array length.
 C = max(f*f * dx) / (sum(f)*dx)^2.
 
 ## fact_004: Available tools
-JAX with optax is available for gradient-based optimization. helper.py provides
-a differentiable compute_c function. The initial program uses Adam optimizer
-with warmup cosine schedule for 40000 steps.
+JAX with optax is available for gradient-based optimization. helpers/core.py provides
+a differentiable compute_c function (import: `from helpers.core import compute_c`).
+The initial program uses Adam optimizer with warmup cosine schedule for 40000 steps.
 
 ## fact_005: Solution format
 Solutions must implement def entrypoint() returning a 1D NumPy float array of

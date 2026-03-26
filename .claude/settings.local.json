@@ -63,10 +63,35 @@
       "Bash(find /home/sasha/Desktop/project_alpha/alpha-evolve/reports -name *critic* -o -name *system*)",
       "Bash(python3 -c \"from dashboard.data import get_feedback; import json; d = get_feedback\\(\\); print\\(json.dumps\\({k: \\(v[:80] + ''...'' if isinstance\\(v, str\\) else v\\) for k,v in d.items\\(\\)}, indent=2, default=str\\)\\)\")",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d, indent=2\\)\\)\")",
-      "Bash(python3 -c \"import ast; ast.parse\\(open\\(''/home/sasha/Desktop/project_alpha/alpha-evolve/orchestrator.py''\\).read\\(\\)\\); print\\(''OK''\\)\")"
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\(''/home/sasha/Desktop/project_alpha/alpha-evolve/orchestrator.py''\\).read\\(\\)\\); print\\(''OK''\\)\")",
+      "Bash(python3 -c \"from dashboard.data.scanner import get_generation_status; import json; gs = get_generation_status\\(\\); print\\(json.dumps\\([\\(g[''gen''], g[''status'']\\) for g in gs]\\)\\)\")",
+      "Bash(python3 -c \"import json,sys;d=json.load\\(sys.stdin\\);print\\(f''''fitness={d[\"\"fitness\"\"]}''''\\)\")",
+      "Bash(kill 396179)",
+      "Bash(pkill -f claude-code)",
+      "Bash(pkill -f npx.*claude)",
+      "Bash(python3 alpha-evolve/problem/evaluate.py alpha-evolve/problem/initial_programs/optimize.py)",
+      "Bash(grep -l \"idea_013\" /home/sasha/Desktop/project_alpha/alpha-evolve/knowledge/ideas/*/idea_003.md)",
+      "Bash(grep -l \"idea_014\\\\|idea_016\" /home/sasha/Desktop/project_alpha/alpha-evolve/knowledge/ideas/*/idea_006.md)",
+      "Bash(grep \"last_confirmed_gen\" /home/sasha/Desktop/project_alpha/alpha-evolve/knowledge/ideas/*/idea_008.md)",
+      "Bash(grep \"last_confirmed_gen\" /home/sasha/Desktop/project_alpha/alpha-evolve/knowledge/ideas/*/idea_009.md)",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\(''alpha-evolve/orchestrator.py''\\).read\\(\\)\\); print\\(''Syntax OK''\\)\")",
+      "Bash(ls -la /home/sasha/Desktop/project_alpha/alpha-evolve/agents/*.md)",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\(''''orchestrator.py''''\\).read\\(\\)\\); print\\(''''orchestrator.py: OK''''\\)\")",
+      "Bash(pkill -f \"python3 orchestrator.py\")",
+      "Bash(rm -rf briefs/gen004)",
+      "Bash(rm -rf workspace/gen004_*)",
+      "Bash(rm -rf population/gen004)",
+      "Bash(rm -rf reports/gen004)",
+      "Bash(rm -rf knowledge/research/gen004)",
+      "Bash(find /home/sasha/Desktop/project_alpha/alpha-evolve -name *gen004* -o -name *gen4*)",
+      "Bash(find /home/sasha/Desktop/project_alpha/alpha-evolve -path */gen004*)",
+      "Bash(grep -v __pycache__ find /home/sasha/Desktop/project_alpha/alpha-evolve/feedback -newer /home/sasha/Desktop/project_alpha/alpha-evolve/reports/gen003 -type f 2)",
+      "Bash(/dev/null find:*)",
+      "Bash(python3 -c \"import sys; sys.path.insert\\(0, ''problem''\\); from helpers.core import compute_c; print\\(''helpers.core import OK''\\); from helper import compute_c as cc; print\\(''helper shim import OK''\\)\")"
     ],
     "additionalDirectories": [
-      "/home/sasha/Desktop/project_alpha/alpha-evolve/papers/pdf"
+      "/home/sasha/Desktop/project_alpha/alpha-evolve/papers/pdf",
+      "/home/sasha/Desktop/project_alpha/alpha-evolve/workspace"
     ]
   }
 }

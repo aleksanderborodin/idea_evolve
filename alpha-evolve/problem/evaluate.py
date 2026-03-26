@@ -16,6 +16,7 @@ import hashlib
 import importlib.util
 import json
 import sys
+import time
 import traceback
 from pathlib import Path
 
@@ -80,7 +81,7 @@ def load_solution(filepath: str):
     """Dynamically load a solution module and call entrypoint()."""
     spec = importlib.util.spec_from_file_location("solution", filepath)
     module = importlib.util.module_from_spec(spec)
-    # Add problem dir to sys.path so solutions can import helper.py
+    # Add problem dir to sys.path so solutions can import from helpers/ (e.g. helpers.core)
     if str(PROBLEM_ROOT) not in sys.path:
         sys.path.insert(0, str(PROBLEM_ROOT))
     spec.loader.exec_module(module)
@@ -106,10 +107,26 @@ def main():
             print(json.dumps(cached))
             return
 
+        # Check if time tracking is enabled
+        track_time = False
+        metrics_path = PROBLEM_ROOT / "metrics.yaml"
+        if metrics_path.exists():
+            try:
+                import yaml
+                metrics = yaml.safe_load(metrics_path.read_text())
+                track_time = metrics.get("track_eval_time", False)
+            except Exception:
+                pass
+
+        t0 = time.perf_counter()
         output = load_solution(solution_path)
         result = validate(output)
+        elapsed = time.perf_counter() - t0
 
-        # Cache the result (thread-safe)
+        if track_time:
+            result["eval_time_s"] = round(elapsed, 4)
+
+        # Cache the result (thread-safe) — stores eval_time_s too
         _cached_store(content_hash, result)
 
         print(json.dumps(result))

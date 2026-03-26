@@ -104,6 +104,10 @@ parallel_groups:
 Each agent instance receives its own brief file. Every brief has two mandatory sections:
 
 ```markdown
+## Current Population Status
+Best solution: `population/best.py` → C = 1.5032
+Second best: `population/top/rank02_1.5032.py`
+
 ## Read first
 - `{project_root}/knowledge/clusters/gradient_methods.md`
 - `{project_root}/knowledge/clusters/regularization.md`
@@ -169,6 +173,23 @@ When previous generation reports or consistency reviews flag unresolved question
 
 - Launch experimentator instances to answer them. Each experimentator gets one specific question.
 - Experimentators run controlled tests and produce evidence, not solutions. Their findings feed into the next generation's clusters.
+- **Experimentators can also create shared helper tools.** If multiple agents are struggling with the same utility task (e.g., SA calibration, visualization, data transformation), assign an experimentator to build a reusable helper. The helper is validated by the orchestrator and deployed to `problem/helpers/` for all future agents to use. Experimentators default to opus for this reason.
+
+### Recurring Helper Needs — Mandatory Experimentator
+
+If `feedback/system_recommendations.md` contains a recommendation to create or add a helper
+function/tool (e.g. "add X to helpers/", "create a calibration utility", "build a shared
+tool"), **and that recommendation has appeared in 2 or more consecutive generations without
+being resolved**, you MUST include an experimentator instance to build it. Do not defer it
+again. The helper should be written to `output/helpers/<name>.py` so the orchestrator can
+validate and deploy it to `problem/helpers/`. Agents import it as
+`from helpers.<module> import <function>`.
+
+Note: `problem/helpers/core.py` is the built-in problem-specific helper (`compute_c`),
+imported as `from helpers.core import compute_c`. Additional shared helpers created by
+experimentator agents also live in `problem/helpers/` and are documented in `helpers/README.md`.
+Do not tell agents to modify any file in `problem/helpers/` directly — helpers are deployed
+by the orchestrator after experimentator validation.
 
 ### General Balancing
 
@@ -195,12 +216,23 @@ These rules are mandatory. Violating them degrades system performance.
    - **The question** — a single, falsifiable question.
    - **Methodology suggestion** — how to test it.
    - **Relevant files** — solutions, configs, or data files needed for the experiment.
+   - Optionally: if the experiment should produce a **shared helper tool**, say so explicitly in the directive. Example: "If your calibration routine works, package it as a helper in `output/helpers/sa_calibration.py`."
 
 6. **For explore instances:** Name the direction explicitly. State what is off-limits (to prevent overlap with other explores and with known-saturated areas). Reference the coverage matrix.
 
 7. **For research instances:** Define the research scope and expected deliverables.
 
 8. **For full instances:** Describe the complete solution approach to attempt. A full instance builds end-to-end, so the brief should outline the overall strategy.
+
+9. **Include population status in every brief.** Every brief must start with a "Current Population Status" section before "Read first":
+
+   ```
+   ## Current Population Status
+   Best solution: `population/best.py` → C = X.XXXX
+   Second best: `population/top/rank02_X.XXXX.py`
+   ```
+
+   Extract this from `history/all_scores.json` or `population/summary.md`. Agents should never need to search for the current best — tell them upfront.
 
 ---
 

@@ -78,6 +78,7 @@ max_turns:
 # --- Models ---
 default_model: sonnet              # Default model for agents (Architect overrides per-agent)
 architect_model: opus              # Architect always uses highest reasoning model
+experimentator_model: opus         # Experimentator creates shared tools, needs high reasoning
 
 # --- Parallelism ---
 max_parallel_sessions: 10          # Max concurrent Claude Code sessions

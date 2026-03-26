@@ -2,28 +2,29 @@
 type: cluster
 id: cluster_001
 name: "Optimization algorithms and techniques"
-member_ideas: [idea_001, idea_005, idea_007, idea_008, idea_009, idea_010, idea_011]
-best_score: 1.5091
-best_solution: gen002_explore_1_sol03
+member_ideas: [idea_001, idea_005, idea_007, idea_008, idea_009, idea_010, idea_011, idea_015]
+best_score: 1.5090
+best_solution: gen003_explore_2_sol01
 status: active
-last_updated: generation_2
+last_updated: generation_3
 ---
 
 This cluster groups all ideas related to HOW the optimization is performed:
 which optimizer (Adam, Lion, L-BFGS), what objective modification (smooth-max),
-what reparameterization (softplus), and what search strategy (multi-seed restart).
+what reparameterization (softplus), and what search strategy (multi-seed restart,
+DCT perturbation).
 
-The dominant combination is smooth-max (idea_007) + multi-seed (idea_008) + Adam
-(idea_001) + coarse-to-fine (idea_004, from cluster_002). The new best of 1.5091
-was achieved via coarse-to-fine + warm smooth-max + 12 restarts (gen002_explore_1_sol03).
+**Gen 3 update:**
+- idea_010 (L-BFGS) DEBUNKED: zero effect in all gen 3 tests. Confidence 0.1.
+- idea_015 (DCT perturbation) added: 10 perturbation configs all return to same 1.509 basin. Shows basin depth but not useful for escaping.
+- Best score marginally improved: 1.5091 -> 1.5090 via arcsine init (explore_2/sol01).
+- Ultra-low temperature polish confirmed useless (0.000025 improvement).
 
-**Gen 2 findings within this cluster:**
-- L-BFGS (idea_010) confirmed ineffective after smooth-max convergence. Confidence lowered.
-- More restarts beyond 8 show hard diminishing returns (16→1.5107, 20→1.5108).
-- Extended temperature phases (T=0.0001) provide negligible benefit.
-- SA at N=600 (fine grid) is a dead end — basin is too sticky.
+**The cluster is approaching exhaustion for our gradient pipeline.** All tested
+optimization variations converge to the ~1.509 basin. The only path to C < 1.505
+within this cluster would be a fundamentally different optimizer (LP-guided, etc.).
 
 **Unexplored within this cluster:**
-- Coarse-scale SA (N=30-80) before upsampling — the actual Boyer et al. approach
-- Lion warmup + coarse-to-fine + smooth-max
-- Warm-start from existing 1.5091 solution with tighter annealing
+- Warm-start smooth-max from published 1.5032 solution (idea_014, cluster_003)
+- Lion warmup + coarse-to-fine (still untested)
+- Coordinate descent on best solution

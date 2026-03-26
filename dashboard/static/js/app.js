@@ -154,14 +154,26 @@ async function loadOverview() {
   } else {
     timeline.style.display = 'flex';
     emptyTl.style.display = 'none';
-    timeline.innerHTML = data.generations.map(g => `
+    const statusLabels = {
+      not_started: 'waiting', planned: 'planned',
+      agents_running: 'agents running', agents_done: 'agents done',
+      evaluator_running: 'evaluator', evaluator_done: 'evaluator done',
+      critic_running: 'critic', critic_done: 'critic done',
+      consistency_running: 'consistency', consistency_done: 'consistency done',
+      complete: 'complete',
+    };
+    timeline.innerHTML = data.generations.map(g => {
+      const statusText = statusLabels[g.status] || g.status.replace(/_/g, ' ');
+      const isRunning = g.status.endsWith('_running') || g.status === 'planned';
+      const statusClass = isRunning ? 'agents_running' : g.status;
+      return `
       <div class="gen-card">
         <div class="gen-num">Gen ${g.gen}</div>
-        <span class="gen-status ${g.status}">${g.status.replace(/_/g, ' ')}</span>
+        <span class="gen-status ${statusClass}">${statusText}</span>
         <div class="gen-score">${g.best_score !== null ? g.best_score.toFixed(4) : '--'}</div>
         <div class="gen-sols">${g.solutions} sol${g.solutions !== 1 ? 's' : ''}</div>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
   }
 
   // Chart — eagerly load solutions for scatter plot, then redraw

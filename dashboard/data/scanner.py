@@ -120,8 +120,9 @@ def get_generation_status() -> list[dict]:
         has_pop = (root / "population" / gen_str).exists()
         has_reports = (root / "reports" / gen_str).exists()
         has_snapshot = (root / "history" / "generations" / f"{gen_str}.md").exists()
+        has_workspace = any((root / "workspace").glob(f"{gen_str}_*")) if (root / "workspace").exists() else False
 
-        if not any([has_briefs, has_pop, has_reports, has_snapshot]):
+        if not any([has_briefs, has_pop, has_reports, has_snapshot, has_workspace]):
             break
 
         status = get_phase_status(gen)

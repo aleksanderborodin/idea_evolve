@@ -5,8 +5,8 @@ name: "Softplus reparameterization for non-negativity"
 lifecycle: active
 confidence: 0.6
 first_seen: generation_1
-last_updated: generation_1
-last_confirmed_gen: 1
+last_updated: generation_3
+last_confirmed_gen: 3
 supported_by: [gen001_full_1_sol03, gen001_full_1_sol04]
 contradicted_by: []
 related_ideas: [idea_005, idea_001]
@@ -27,3 +27,9 @@ smooth gradients everywhere.
 The evidence is suggestive but not conclusive: sol03's advantage over sol05 could
 be due to smooth-max rather than softplus. A controlled experiment isolating softplus
 vs relu with the same optimizer would clarify.
+
+**Gen 2-3 update:** Softplus is now standard in all top solutions across gens 2-3.
+Never isolated as an independent variable. The DCT perturbation experiment (gen 3)
+confirmed that perturbing in f-space (post-softplus) causes NaN due to near-zero
+regions, while perturbing in raw_params space (pre-softplus) is clean — validating
+the softplus parameterization's numerical benefits.

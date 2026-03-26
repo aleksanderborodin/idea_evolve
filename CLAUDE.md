@@ -16,14 +16,21 @@ All commands below assume the venv is active. Dependencies: `requirements.txt` a
 
 ## Running
 
+**IMPORTANT: always `cd alpha-evolve` first.** The orchestrator takes `.` as the project root
+argument. Running it from the repo root passes the wrong root and fails preflight checks
+(all required files appear missing). Log output to a file so you can monitor without blocking:
+
 ```bash
 source venv/bin/activate
 cd alpha-evolve
-python3 orchestrator.py .            # full run
-python3 orchestrator.py . --single   # one generation only
+python3 orchestrator.py . --single >> /tmp/gen4.log 2>&1 &   # background, one generation
+python3 orchestrator.py .            # full run (foreground)
+python3 orchestrator.py . --single   # one generation only (foreground)
 python3 orchestrator.py . --start-gen 5  # resume from gen 5
 python3 orchestrator.py . --dry-run  # show plan without launching agents
 ```
+
+Monitor a background run: `cat /tmp/gen4.log` (or `tail -f /tmp/gen4.log`).
 
 Current problem: **First Autocorrelation Inequality** (functional optimization, target C ≤ 1.5053, lower is better).
 Baseline score: **1.5185** (`problem/initial_programs/optimize.py`).
@@ -79,8 +86,13 @@ alpha-evolve/
 │   ├── constraints.md
 │   ├── evaluate.py          # Problem-agnostic evaluator (loads validate.py, caches results)
 │   ├── validate.py          # Problem-specific validation logic
-│   ├── helper.py            # Problem-specific helper functions
-│   └── metrics.yaml         # Fitness direction, bounds, sentinel values
+│   ├── helper.py            # Backward-compat shim only — re-exports from helpers/core.py
+│   ├── helpers/             # ALL helpers live here (core + experimentator-created)
+│   │   ├── __init__.py
+│   │   ├── core.py          # Problem-specific helper: compute_c (import: from helpers.core import compute_c)
+│   │   ├── README.md        # Index of all available helpers
+│   │   └── <name>.py        # Experimentator-created helpers (validated/deployed by orchestrator)
+│   └── metrics.yaml         # Fitness direction, bounds, sentinel values, eval time tracking
 ├── agents/                  # Prompt templates (read-only, 10 files)
 │   ├── architect.md, explore.md, exploit.md, genetic.md, full.md
 │   ├── research.md, experimentator.md, evaluator.md
@@ -139,6 +151,18 @@ alpha-evolve/
 - **Agent failure logging.** Failure reports written to `reports/` so next Architect knows.
 - **Idea limits + staleness.** Evaluator gets current idea count + thresholds. Consistency Reviewer gets staleness config.
 - **experiment_requests collection.** Full agent requests → `feedback/experiment_requests/` → Architect prompt.
+- **Unified helpers directory.** All helpers live in `problem/helpers/`. The built-in problem
+  helper (`compute_c`) is in `helpers/core.py` — import as `from helpers.core import compute_c`.
+  Experimentator agents write new helpers to `output/helpers/`; the orchestrator validates
+  (syntax, import blocklist, no top-level side effects) and deploys to `problem/helpers/`.
+  All solution agents see available helpers via `_helpers_section()` in their prompt.
+  `problem/helper.py` is a backward-compat shim that re-exports `compute_c` from `helpers/core.py`
+  — old solutions still work, but new solutions should use `from helpers.core import compute_c`.
+  See `problem/helpers/README.md` for the full index.
+- **Evaluation time tracking.** `metrics.yaml` flag `track_eval_time: true` causes `evaluate.py`
+  to measure wall-clock time of `load_solution()` + `validate()` and include `eval_time_s` in
+  the JSON result. Stored in `.score` files and eval cache. Cached results return the original
+  measured time, not re-measure.
 
 ---
 
@@ -326,6 +350,29 @@ agents. Fixed: now reads manifest to count planned agents, checks each one has o
 Returns `planned` (triggering re-run) if some agents are incomplete. Falls back to old
 behavior only if manifest is missing/corrupt.
 
+### [BUG-43] ~~`move_research_outputs()` didn't copy solutions to population~~ — FIXED
+Research agents that produced solutions (`sol*.py` + `.score`) had them routed only to
+`knowledge/research/` — not to `population/`. Rankings and dashboard never saw them.
+Fixed: now copies all `.py`, `.score`, and `.md` files to `population/genNNN/research_N/`.
+
+### [BUG-44] ~~`move_evaluator_outputs()` missing `mkdir` for clusters and generations dirs~~ — FIXED
+On first run, `knowledge/clusters/` and `history/generations/` didn't exist. `shutil.copy2()`
+to nonexistent dirs raised `FileNotFoundError`. Fixed: added `mkdir(parents=True, exist_ok=True)`
+before copying to clusters dir and generations dir.
+
+### [BUG-45] ~~Orphaned architect writes partial manifest; restarted orchestrator uses it~~ — FIXED
+If the orchestrator is killed mid-architect-session, the architect process becomes an orphan
+and keeps running. It may have already written an intermediate `manifest.yaml` (e.g. with only
+one agent in group 1). On restart, `phase_status()` sees the manifest and returns `"planned"`,
+skipping the architect entirely. `run_agents()` then reads the partial manifest and launches
+fewer agents than intended — all remaining agents in later sequential groups never run until
+group 1 finishes. Meanwhile the orphaned architect may overwrite the manifest again, leaving
+the on-disk version looking correct and making the bug invisible after the fact.
+Fixed: `run_architect()` now touches `briefs/genNNN/.architect_done` after the session
+completes and all post-processing finishes. `phase_status()` checks for this sentinel before
+trusting the manifest — if manifest exists but `.architect_done` is absent, returns
+`"not_started"` so the architect re-runs cleanly.
+
 ## SCALING — surfaces after gen 10-15
 
 ### [SCALE-1] ~~Evaluator turn budget exhaustion~~ — FIXED
@@ -439,6 +486,16 @@ Could trigger API rate limits depending on tier, causing sessions to fail or deg
 Gen 1 has no clusters, no coverage matrix, no solution-idea map, no population summary.
 All agents get "no data yet" placeholders. The Evaluator must create all knowledge structures
 from scratch with no examples. Gen 1-2 knowledge quality may be poor and set a bad foundation.
+
+### [DESIGN-11] ~~Architect skips experimentator for recurring helper requests~~ — MITIGATED
+When `system_recommendations.md` asks for a shared helper (e.g. SA calibration utility),
+the Architect treats it as advisory and consistently deprioritizes it in favour of immediate
+exploitation ROI. The helper never gets built, and agents struggle with the same utility task
+generation after generation. Previously compounded by confusion between `problem/helper.py`
+(backward-compat shim) and `problem/helpers/` (unified helpers directory).
+Mitigated: `agents/architect.md` now has a **Recurring Helper Needs** section that makes
+launching an experimentator mandatory when a helper recommendation has appeared 2+ consecutive
+generations unresolved. The helper system is now unified under `problem/helpers/` (see above).
 
 ### [DESIGN-10] ~~Agents can't iterate as fast as spec envisions~~ — MITIGATED
 Turn limits raised to 150 for solution agents. Agent prompts now enforce evaluate-immediately

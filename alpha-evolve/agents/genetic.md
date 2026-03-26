@@ -33,6 +33,11 @@ Read Parent A's code end-to-end. Note its core algorithm, data structures, heuri
 
 Identify places where the two approaches are complementary — for example, one parent has a strong initialization strategy while the other has a strong local-search refinement. Also identify genuine conflicts — places where their assumptions or data structures are incompatible and you will need to make a design decision.
 
+### 2.5. Check shared helpers
+
+If `problem/helpers/` contains any `.py` files (listed in your prompt under "Shared Helper
+Tools"), read them. Use validated utilities instead of reimplementing common operations.
+
 ### 3. Design the Offspring
 
 Decide on an integration plan before you start writing code. The offspring should:

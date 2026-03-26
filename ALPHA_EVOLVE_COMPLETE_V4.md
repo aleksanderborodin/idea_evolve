@@ -362,16 +362,16 @@ The Experimentator runs all code inside a `sandbox/` subdirectory within its wor
 
 ## 4.7 Research — Knowledge Gatherer
 
-The Research agent investigates techniques, algorithms, and approaches relevant to the problem. It does not produce solutions — it produces knowledge. It has **internet access** (WebSearch, WebFetch) and a **paper management pipeline** for downloading, extracting, and summarizing academic papers.
+The Research agent investigates techniques, algorithms, and approaches relevant to the problem. It primarily produces knowledge but may also produce solutions (e.g., retrieving known-good arrays from published repositories). It has **internet access** (WebSearch, WebFetch) and a **paper management pipeline** for downloading, extracting, and summarizing academic papers.
 
 **Paper pipeline:** Research agents search for relevant papers online, download them via `papers/manage.py add <arxiv_id>`, read the auto-extracted text from `papers/md/`, and write structured summaries to `papers/summaries/`. These summaries include key results, relevance assessment, and actionable techniques. All future agents can read summaries from `papers/summaries/` without re-downloading.
 
 **Prompt template:** `agents/research.md`
 **Tools:** Read, Write, Bash, Glob, Grep, **WebSearch, WebFetch**
 **Reads:** Layer 0 always. All Layer 1 clusters. Layer 2 as needed. Agent gap reports. `papers/summaries/` (existing paper summaries).
-**Writes to output/:** Findings (`findings.md`), debrief report (`report.md`).
+**Writes to output/:** Findings (`findings.md`), optionally solutions (`sol*.py` + `.score`), debrief report (`report.md`).
 **Writes to papers/:** Downloaded PDFs (`pdf/`), extracted text (`md/`), summaries (`summaries/`), updated `index.yaml`.
-**Orchestrator moves to:** `knowledge/research/{generation}/research_{instance}/`
+**Orchestrator moves to:** `knowledge/research/{generation}/research_{instance}/` AND `population/{generation}/research_{instance}/` (solutions, findings, observations).
 
 ## 4.8 Evaluator Agent — Knowledge Extraction and Layer 1 Maintenance
 
@@ -560,13 +560,13 @@ specs:
 
 **Problem-agnostic design:** The orchestrator never hardcodes metric names, directions, or formatting. Everything flows from `metrics.yaml`. To change the problem:
 
-1. Replace `problem/description.md`, `constraints.md`, `validate.py`, `helper.py`, `initial_programs/`
+1. Replace `problem/description.md`, `constraints.md`, `validate.py`, `helpers/core.py`, `initial_programs/`
 2. Replace `problem/metrics.yaml` with the new metric definitions
 3. Update `user/config.yaml` `target_score` to match the new target
 4. Clear old state: `knowledge/`, `population/`, `history/`, `reports/`, `feedback/`, `briefs/`
 5. Update `user/initial_ideas.md` and `user/initial_facts.md`
 
-**`evaluate.py` is also problem-agnostic:** It dynamically loads `validate.py` from its own directory using `importlib`. On error, it reads `metrics.yaml` to return the correct sentinel value for every metric. Solutions can `import helper` because `evaluate.py` adds the problem directory to `sys.path`.
+**`evaluate.py` is also problem-agnostic:** It dynamically loads `validate.py` from its own directory using `importlib`. On error, it reads `metrics.yaml` to return the correct sentinel value for every metric. Solutions can `from helpers.core import compute_c` (and other helpers) because `evaluate.py` adds the problem directory to `sys.path`, making the `helpers/` package directly importable.
 
 ---
 
@@ -647,7 +647,11 @@ alpha-evolve/
 │   ├── constraints.md                # Hard/soft constraints
 │   ├── evaluate.py                   # Problem-agnostic evaluator (loads validate.py, caches)
 │   ├── validate.py                   # Problem-specific validation (returns {metric: value} dict)
-│   ├── helper.py                     # Problem-specific helpers (e.g., differentiable objective)
+│   ├── helper.py                     # Backward-compat shim (re-exports from helpers/core.py)
+│   ├── helpers/                      # Unified helpers directory
+│   │   ├── core.py                   # Problem-specific helper (compute_c); import: from helpers.core import compute_c
+│   │   ├── README.md                 # Index of all helpers
+│   │   └── <name>.py                 # Experimentator-created helpers (deployed by orchestrator)
 │   ├── metrics.yaml                  # Metric definitions: direction, decimals, sentinels
 │   └── initial_programs/             # Baseline solutions for agents to study
 │

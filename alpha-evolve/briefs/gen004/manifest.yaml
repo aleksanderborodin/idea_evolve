@@ -1,0 +1,25 @@
+generation: 4
+strategy_summary: "Warm-start exploitation of AlphaEvolve 1.5032 array is top priority; retrieve additional published arrays; one calibrated coarse-SA attempt"
+agents:
+  - type: exploit
+    instance: 1
+    model: opus
+    brief: "briefs/gen004/exploit_1.md"
+    timeout: 1500
+  - type: exploit
+    instance: 2
+    model: opus
+    brief: "briefs/gen004/exploit_2.md"
+    timeout: 1500
+  - type: research
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen004/research_1.md"
+    timeout: 900
+  - type: explore
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen004/explore_1.md"
+    timeout: 1200
+parallel_groups:
+  - ["exploit_1", "exploit_2", "research_1", "explore_1"]

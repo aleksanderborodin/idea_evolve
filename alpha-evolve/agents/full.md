@@ -49,6 +49,12 @@ Decide what approach you will take for this session. Options include but are not
 - **Contrarian exploration**: Deliberately try an approach the population has not explored, even if it seems unlikely to work. Sometimes the search space has undiscovered regions.
 - **Resurrection**: Find an idea that was tried early, scored poorly, but might work better with refinements or in combination with later discoveries.
 
+### 2.5. Check shared helpers
+
+If `problem/helpers/` contains any `.py` files (listed in your prompt under "Shared Helper
+Tools"), read them. Use validated utilities instead of reimplementing common operations like
+SA calibration, visualization, or data transformations.
+
 ### 3. Implement ONE solution, then IMMEDIATELY evaluate it
 
 Write your solution as a clean `sol*.py` file. Quality matters — clean code is easier to debug, easier for future agents to learn from, and less likely to contain subtle errors that tank the score.

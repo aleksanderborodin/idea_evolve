@@ -5,11 +5,11 @@ name: "Asymmetry exploitation"
 lifecycle: established
 confidence: 0.9
 first_seen: generation_1
-last_updated: generation_1
-last_confirmed_gen: 1
-supported_by: [gen001_explore_2_sol09, gen001_explore_1_sol05, gen001_full_1_sol03]
+last_updated: generation_3
+last_confirmed_gen: 3
+supported_by: [gen001_explore_2_sol09, gen001_explore_1_sol05, gen001_full_1_sol03, gen003_explore_2_sol01]
 contradicted_by: []
-related_ideas: [idea_003, idea_006]
+related_ideas: [idea_003, idea_006, idea_013]
 cluster: cluster_002
 tags: [asymmetry, symmetry-breaking, mathematical]
 ---
@@ -27,8 +27,9 @@ break symmetry.
   that symmetric starts are suboptimal.
 - Hann window (symmetric): C = 3.0.
 
+**Gen 3 update:** Arcsine init on biased subinterval (idea_013) is intrinsically
+asymmetric and dominates other init families. The AlphaEvolve solution (C=1.5032)
+is strongly asymmetric with mass concentrated at one end of the domain.
+
 **Implication:** Initializations should be deliberately asymmetric or at minimum
-include sufficient noise to break symmetry quickly. Symmetric initializations
-waste optimization steps breaking symmetry before making real progress.
-However, explore_2 noted that the symmetric box init (baseline) breaks symmetry
-efficiently via the gradient — the steepest descent direction is along asymmetry.
+include sufficient noise to break symmetry quickly.

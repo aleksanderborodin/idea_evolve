@@ -8,6 +8,7 @@ inspecting which files exist.
 """
 
 import argparse
+import ast
 import fcntl
 import hashlib
 import json
@@ -116,6 +117,8 @@ REQUIRED_FILES = [
     "prompts/debrief_instructions.md",
     "prompts/analysis_debrief.md",
     "prompts/debrief_recovery.md",
+    "problem/helpers/__init__.py",
+    "problem/helpers/core.py",
 ]
 
 
@@ -287,7 +290,15 @@ def phase_status(project_root: Path, gen: int) -> str:
 
     # Agents are done if ALL manifest agents have produced output or report.
     # Check manifest to know how many agents were planned.
+    # IMPORTANT: only trust the manifest if the architect session completed cleanly
+    # (.architect_done sentinel). Without it, the manifest may be an intermediate write
+    # from an orphaned architect process (written before the orchestrator was killed).
     manifest_path = project_root / "briefs" / gen_str / "manifest.yaml"
+    architect_done = project_root / "briefs" / gen_str / ".architect_done"
+    if manifest_path.exists() and not architect_done.exists():
+        # Manifest exists but architect didn't finish cleanly — treat as not started
+        # so the orchestrator re-runs the architect and gets a complete manifest.
+        return "not_started"
     if manifest_path.exists():
         try:
             with open(manifest_path) as f:
@@ -506,6 +517,7 @@ def create_workspace(project_root: Path, gen: int, agent_type: str, instance: in
 
     if agent_type == "experimentator":
         (output_path / "sandbox").mkdir(exist_ok=True)
+        (output_path / "helpers").mkdir(exist_ok=True)
 
     return ws_path
 
@@ -589,12 +601,65 @@ def move_research_outputs(project_root: Path, gen: int, instance: int):
         elif f.is_file():
             shutil.copy2(f, dest / f.name)
 
-    # Also put a reference in population/ so the evaluator sees it
+    # Also copy solutions and findings to population/ so rankings and dashboard see them
     pop_dest = project_root / "population" / gen_str / f"research_{instance}"
     pop_dest.mkdir(parents=True, exist_ok=True)
-    findings = ws_output / "findings.md"
-    if findings.exists():
-        shutil.copy2(findings, pop_dest / "findings.md")
+    for f in ws_output.iterdir():
+        if f.name == "report.md":
+            continue  # Already moved to reports/
+        if f.is_file() and (f.suffix in (".py", ".score", ".md")):
+            shutil.copy2(f, pop_dest / f.name)
+
+
+def _validate_helper(filepath: Path) -> tuple[bool, str]:
+    """Validate a helper file is safe for shared use by all agents.
+
+    Checks: valid Python syntax, no blocked imports, no top-level side effects.
+    Returns (ok, reason).
+    """
+    content = filepath.read_text()
+
+    # 1. Syntax check
+    try:
+        tree = ast.parse(content)
+    except SyntaxError as e:
+        return False, f"Syntax error: {e}"
+
+    # 2. Import blocklist
+    BLOCKED_MODULES = {
+        "subprocess", "shutil", "sys", "socket", "http",
+        "requests", "urllib", "ctypes", "multiprocessing",
+    }
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                mod = alias.name.split(".")[0]
+                if mod in BLOCKED_MODULES:
+                    return False, f"Blocked import: {mod}"
+                if mod == "os" and alias.name != "os.path":
+                    return False, f"Blocked import: {alias.name} (only os.path allowed)"
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                mod = node.module.split(".")[0]
+                if mod in BLOCKED_MODULES:
+                    return False, f"Blocked import from: {mod}"
+                if mod == "os" and node.module != "os.path":
+                    return False, f"Blocked import from: {node.module}"
+
+    # 3. No top-level side effects (only defs, imports, assignments, docstrings)
+    ALLOWED_TOP = (
+        ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef,
+        ast.Import, ast.ImportFrom, ast.Assign, ast.AnnAssign,
+        ast.Constant, ast.Pass,
+    )
+    for node in tree.body:
+        if not isinstance(node, ALLOWED_TOP):
+            # Allow Expr nodes that are just string constants (docstrings)
+            if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                continue
+            return False, f"Top-level side effect: {type(node).__name__} at line {node.lineno}"
+
+    return True, "ok"
 
 
 def move_experiment_outputs(project_root: Path, gen: int, instance: int):
@@ -612,6 +677,23 @@ def move_experiment_outputs(project_root: Path, gen: int, instance: int):
             reports_dir = project_root / "reports" / gen_str
             reports_dir.mkdir(parents=True, exist_ok=True)
             shutil.copy2(f, reports_dir / f"experimentator_{instance}.md")
+        elif f.is_dir() and f.name == "helpers":
+            # Validate and deploy helper tools to problem/helpers/
+            helpers_dest = project_root / "problem" / "helpers"
+            helpers_dest.mkdir(parents=True, exist_ok=True)
+            for hf in f.iterdir():
+                if hf.suffix == ".py" and hf.name != "__init__.py":
+                    ok, reason = _validate_helper(hf)
+                    if ok:
+                        shutil.copy2(hf, helpers_dest / hf.name)
+                        print(f"    Deployed helper: {hf.name}")
+                    else:
+                        print(f"    REJECTED helper {hf.name}: {reason}")
+            # Also copy helpers dir to experiment archive for reference
+            target = dest / f.name
+            if target.exists():
+                shutil.rmtree(target)
+            shutil.copytree(f, target)
         elif f.is_file():
             shutil.copy2(f, dest / f.name)
         elif f.is_dir():
@@ -1425,13 +1507,14 @@ For deeper context, you can read any file in the project. The knowledge hierarch
 
 **Paper library:** `{project_root}/papers/summaries/` contains structured summaries of
 relevant academic papers (downloaded by research agents). Check if any exist before solving.
-
+{_helpers_section(project_root)}
 ## Evaluation
 
 ```bash
 python3 {project_root}/problem/evaluate.py {ws_path}/output/sol01.py
 ```
 Output: JSON with at minimum `{{"fitness": <value>, "is_valid": 1}}`
+If time tracking is enabled: also includes `"eval_time_s"` (wall-clock seconds for evaluation).
 {_fitness_description(project_root)}
 
 ## MANDATORY WORKFLOW: Evaluate Every Solution Immediately
@@ -1630,6 +1713,35 @@ Write all output to: `{ws_path}/output/`
 """
 
 
+def _helpers_section(project_root: Path) -> str:
+    """Generate a prompt section listing available shared helper tools."""
+    helpers_dir = project_root / "problem" / "helpers"
+    if not helpers_dir.exists():
+        return ""
+    helper_files = sorted(f for f in helpers_dir.glob("*.py") if f.name != "__init__.py")
+    if not helper_files:
+        return ""
+    lines = ["\n## Shared Helper Tools\n",
+             "The following helper tools are available in `problem/helpers/`:\n"]
+    for hf in helper_files:
+        # Try to extract module docstring
+        doc = ""
+        try:
+            tree = ast.parse(hf.read_text())
+            if (tree.body and isinstance(tree.body[0], ast.Expr)
+                    and isinstance(tree.body[0].value, ast.Constant)
+                    and isinstance(tree.body[0].value.value, str)):
+                doc = f" — {tree.body[0].value.value.split(chr(10))[0]}"
+        except Exception:
+            pass
+        lines.append(f"- `{hf}`{doc}")
+    lines.append(f"\nImport in solution files: `from helpers.<module> import <function>`")
+    lines.append(f"Examples: `from helpers.core import compute_c`  |  `from helpers.sa_calibration import calibrate_sa_temperature`")
+    lines.append(f"(`evaluate.py` adds `problem/` to sys.path, so `helpers/` is directly importable)")
+    lines.append(f"See `problem/helpers/README.md` for full index and documentation.\n")
+    return "\n".join(lines)
+
+
 def _fitness_description(project_root: Path) -> str:
     """Generate a description of ALL metrics from metrics.yaml for agent prompts."""
     all_specs = load_metrics(project_root)
@@ -1801,6 +1913,11 @@ def run_architect(project_root: Path, gen: int, config: dict):
     # BUG-4: Post-process briefs to convert relative paths to absolute
     _absolutize_brief_paths(project_root, briefs_dir)
 
+    # Mark architect phase as cleanly complete. phase_status() checks for this sentinel
+    # before trusting the manifest. Without it, an orphaned architect (killed mid-session)
+    # could leave a partial manifest that a restarted orchestrator would blindly use.
+    (briefs_dir / ".architect_done").touch()
+
 
 def _create_default_manifest(project_root: Path, gen: int, config: dict):
     gen_str = f"gen{gen:03d}"
@@ -1873,7 +1990,12 @@ def _run_agent_group(project_root: Path, gen: int, config: dict,
     def run_single_agent(agent_spec):
         atype = agent_spec["type"]
         instance = agent_spec["instance"]
-        model = agent_spec.get("model", config.get("default_model", "sonnet"))
+        # Experimentator defaults to opus (creates shared tools); others default to sonnet
+        if atype == "experimentator":
+            default_model = config.get("experimentator_model", config.get("default_model", "sonnet"))
+        else:
+            default_model = config.get("default_model", "sonnet")
+        model = agent_spec.get("model", default_model)
         brief_path = agent_spec.get("brief", "")
         # Architect can override timeout per-agent via manifest; falls back to config
         work_timeout = agent_spec.get("timeout", get_timeout(config, "agent_default"))

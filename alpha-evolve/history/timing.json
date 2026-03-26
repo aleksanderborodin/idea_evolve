@@ -42,7 +42,41 @@
       "total": 4230.3
     },
     "gen003": {
-      "architect": 242.8
+      "architect": 242.8,
+      "agent_research_1_work": 600.2,
+      "agent_research_1_wrap_up": 123.4,
+      "agent_research_1": 723.6,
+      "agent_exploit_1_work": 1200.1,
+      "agent_explore_2_work": 1200.1,
+      "agent_explore_2_wrap_up": 108.6,
+      "agent_explore_2": 1308.7,
+      "agent_exploit_1_wrap_up": 111.7,
+      "agent_exploit_1": 1311.7,
+      "agent_explore_1_work": 1500.1,
+      "agent_explore_1_wrap_up": 90.6,
+      "agent_explore_1": 1590.7,
+      "evaluator": 460.4,
+      "evaluator_debrief": 27.0,
+      "system_critic": 346.7,
+      "consistency_reviewer": 354.7,
+      "consistency_reviewer_debrief": 24.2,
+      "total": 3046.6
+    },
+    "gen004": {
+      "architect": 237.3,
+      "agent_research_1_work": 900.7,
+      "agent_research_1_wrap_up": 105.8,
+      "agent_research_1": 1006.5,
+      "agent_explore_1_work": 1200.4,
+      "agent_exploit_1_work": 1499.8,
+      "agent_exploit_2_work": 1499.9,
+      "agent_exploit_2_wrap_up": 104.1,
+      "agent_exploit_2": 1604.1,
+      "agent_explore_1_wrap_up": 899.8,
+      "agent_exploit_1_wrap_up": 643.6,
+      "agent_exploit_1": 2143.4,
+      "agent_explore_1_debrief": 995.6,
+      "agent_explore_1": 2196.0
     }
   }
 }

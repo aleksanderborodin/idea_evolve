@@ -5,10 +5,14 @@
 # The orchestrator reads this to determine fitness direction, formatting,
 # target score, and what to show agents.
 
+# Include eval_time_s (wall-clock seconds) in evaluation results.
+# Time is stored in .score files and eval cache alongside fitness.
+track_eval_time: true
+
 # Target score for the primary metric. The run stops when this is reached.
 # For higher-is-better: stop when score >= target
 # For lower-is-better: stop when score <= target
-target_score: 1.5053
+target_score: 1.50261
 
 # Metric specifications. Each key must match a field returned by validate().
 # Exactly one metric should have is_primary: true.

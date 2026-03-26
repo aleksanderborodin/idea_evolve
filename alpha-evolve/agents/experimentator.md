@@ -96,6 +96,80 @@ the experiment completes. Directory structure:
 - `output/sandbox/notes.md` — any observations made during execution
 - `output/report.md` — debrief report (written per the debrief instructions appended to your prompt)
 
+## Tool Creation (Optional)
+
+You have the ability to create **shared helper tools** that all future agents can use.
+If your experiment reveals a reusable function (calibration routine, visualization,
+data transformation), you can package it as a helper.
+
+### How to create a helper
+
+1. Write the helper as a standalone `.py` file in `output/helpers/`
+2. The file must contain ONLY: function/class definitions, imports, and constant assignments
+3. No top-level side effects (no `print()`, no function calls, no file I/O at import time)
+4. Allowed imports: `jax`, `jax.numpy`, `numpy`, `scipy`, `math`, `functools`, `itertools`, `typing`
+5. Blocked imports: `subprocess`, `os` (except `os.path`), `shutil`, `sys`, `socket`, `http`
+6. Include a module-level docstring explaining what the helper provides
+7. Include docstrings on all public functions with usage examples
+
+### Example
+
+```python
+"""SA temperature calibration helpers for simulated annealing experiments."""
+
+import jax.numpy as jnp
+
+
+def calibrate_sa_temperature(objective_fn, current_params, sigma, n_trials=20):
+    """
+    Estimate Metropolis acceptance rate for given perturbation scale.
+
+    Args:
+        objective_fn: callable(params) -> float score
+        current_params: current parameter array
+        sigma: perturbation standard deviation
+        n_trials: number of trial perturbations
+
+    Returns:
+        acceptance_rate: float in [0, 1]. Target range: 0.20-0.40.
+        If > 0.70: reduce sigma. If < 0.10: increase sigma.
+    """
+    ...
+```
+
+The orchestrator validates your helper files for safety before making them available.
+If a file fails validation, it will be logged but not deployed. Write clean, safe code.
+
+### Testing requirements — THIS IS CRITICAL
+
+Your helpers will be used by every future agent across all generations. A buggy helper
+propagates bad results silently. Before writing a helper to `output/helpers/`:
+
+1. **Write the function in `output/sandbox/` first.** Develop and iterate there.
+2. **Write explicit tests.** Create `output/sandbox/test_<helper_name>.py` that exercises
+   every function with known inputs and expected outputs. Include edge cases.
+3. **Run the tests.** Every test must pass. If a test fails, fix the helper, don't delete the test.
+4. **Verify correctness against ground truth.** If the helper computes something (e.g., acceptance
+   rate, gradient, score), compare its output against a manual calculation or known result.
+5. **Only then** copy the validated, tested function to `output/helpers/<name>.py`.
+6. **Document what you tested** in your experiment report. Future agents and reviewers need
+   to trust that you verified correctness.
+
+Be honest: if you are not confident a function does what its docstring claims, do NOT
+ship it as a helper. A missing helper is harmless. A wrong helper poisons the entire pipeline.
+
+### Where helpers end up
+
+Validated helpers are copied to `problem/helpers/`. All agents in future generations
+can import them in solution files. Examples:
+- `from helpers.core import compute_c` (built-in problem helper)
+- `from helpers.sa_calibration import calibrate_sa_temperature` (experimentator-created)
+
+`evaluate.py` adds `problem/` to `sys.path`, so `helpers/` is directly importable.
+See `problem/helpers/README.md` for an index of all available helpers.
+
+---
+
 ## Principles
 
 1. **Controlled experiments: change ONE variable at a time.**

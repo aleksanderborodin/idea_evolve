@@ -5,11 +5,11 @@ name: "Function shape priors"
 lifecycle: active
 confidence: 0.5
 first_seen: generation_0
-last_updated: generation_1
-last_confirmed_gen: 1
+last_updated: generation_3
+last_confirmed_gen: 3
 supported_by: [gen001_explore_1_sol05, gen001_full_1_sol03]
 contradicted_by: [gen001_explore_1_sol01, gen001_explore_2_sol01, gen001_explore_2_sol07]
-related_ideas: [idea_006, idea_008]
+related_ideas: [idea_006, idea_008, idea_013]
 cluster: cluster_002
 tags: [initialization, shape, prior, gaussian, hann]
 ---
@@ -29,3 +29,7 @@ points for optimization rather than flat/random initialization.
 
 Key insight: No single shape prior is reliably better than flat+noise. The value
 is in diversity of initializations across multiple restarts.
+
+**Gen 3 update:** Arcsine initialization (idea_013) emerged as the best single
+shape prior at coarse scale, but the advantage over Gaussian is marginal (1.5090
+vs 1.5091). All init families converge to the same ~1.509 attractor basin.

@@ -43,6 +43,13 @@ Understand what exists:
 - What the coverage map marks as "thoroughly explored."
 - What appears in the debunked ideas list and why.
 
+### 2.5. Check shared helpers
+
+If `problem/helpers/` contains any `.py` files (listed in your prompt under "Shared Helper
+Tools"), read them before writing code. These are tested, validated utilities created by
+experimentator agents — use them instead of reimplementing common operations like SA
+calibration, visualization, or data transformations.
+
 ### 3. Write ONE solution, then IMMEDIATELY evaluate it
 
 Build something that is structurally or conceptually different from what the
