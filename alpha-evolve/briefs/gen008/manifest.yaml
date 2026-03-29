@@ -1,0 +1,28 @@
+generation: 8
+strategy_summary: "Mandatory coord descent helper + interleaved triplet/coord cycles + momentum triplets + quadruplet extension + diagnostic divergent exploration"
+agents:
+  - type: experimentator
+    instance: 1
+    model: opus
+    brief: "briefs/gen008/experimentator_1.md"
+    timeout: 900
+  - type: exploit
+    instance: 1
+    model: opus
+    brief: "briefs/gen008/exploit_1.md"
+    timeout: 1800
+  - type: exploit
+    instance: 2
+    model: sonnet
+    brief: "briefs/gen008/exploit_2.md"
+    timeout: 1500
+  - type: explore
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen008/explore_1.md"
+    timeout: 1200
+  - type: explore
+    instance: 2
+    model: sonnet
+    brief: "briefs/gen008/explore_2.md"
+    timeout: 900

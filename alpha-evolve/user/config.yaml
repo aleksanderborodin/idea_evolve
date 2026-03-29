@@ -50,30 +50,31 @@ analysis:
 #
 # The Architect can override agent_default per agent via manifest.yaml timeout field.
 timeouts:
-  architect: 600                   # Architect planning session
-  agent_default: 900               # Default work phase for solution agents
-  evaluator: 900                   # Evaluator analysis phase
-  system_critic: 600               # System critic analysis phase
-  consistency_reviewer: 900        # Consistency review phase
-  wrap_up: 900                     # Wrap-up session (continue work after timeout)
-  debrief_recovery: 300            # Debrief recovery (report only, after wrap-up fails)
+  architect: 1800                  # Architect planning session
+  architect_wrapup: 600            # Architect wrap-up if planning session timed out
+  agent_default: 2700              # Default work phase for solution agents
+  evaluator: 2700                  # Evaluator analysis phase
+  system_critic: 1800              # System critic analysis phase
+  consistency_reviewer: 2700       # Consistency review phase
+  wrap_up: 2700                    # Wrap-up session (continue work after timeout)
+  debrief_recovery: 900            # Debrief recovery (report only, after wrap-up fails)
 
 # --- Turn budgets ---
 # How many tool-call turns each agent type gets. Higher = more iterations
 # but more context pressure and cost. The Architect cannot override these.
 max_turns:
-  architect: 200                   # Planning only
-  wrap_up: 500                     # Wrap-up session to finish the work
-  debrief_recovery: 50             # Debrief recovery (report writing only)
-  explore: 500                     # Timeout is the real limit, not turns
-  exploit: 500
-  full: 500
-  genetic: 500
-  experimentator: 500
-  research: 500
-  evaluator: 500
-  system_critic: 200
-  consistency_reviewer: 500
+  architect: 600                   # Planning only
+  wrap_up: 1500                    # Wrap-up session to finish the work
+  debrief_recovery: 150            # Debrief recovery (report writing only)
+  explore: 1500                    # Timeout is the real limit, not turns
+  exploit: 1500
+  full: 1500
+  genetic: 1500
+  experimentator: 1500
+  research: 1500
+  evaluator: 1500
+  system_critic: 600
+  consistency_reviewer: 1500
 
 # --- Models ---
 default_model: sonnet              # Default model for agents (Architect overrides per-agent)
@@ -100,6 +101,6 @@ idea_limits:
 staleness_threshold: 5             # Generations without confirmation before flagging stale
 
 # --- Consistency review ---
-consistency_review_interval: 3     # Run consistency review every N generations
+consistency_review_interval: 1     # Run consistency review every N generations
 emergency_review_on_strategic_shift: true  # Also run on evaluator strategic_shift flag
 

@@ -1,0 +1,28 @@
+generation: 10
+strategy_summary: "Determine precision floor via geometric delta CD, test minimax perturbation (idea_023), run A/B ordering experiment, build plateau_analyzer helper, integrate batch evaluator into perturbation loop"
+agents:
+  - type: exploit
+    instance: 1
+    model: opus
+    brief: "briefs/gen010/exploit_1.md"
+    timeout: 2700
+  - type: exploit
+    instance: 2
+    model: opus
+    brief: "briefs/gen010/exploit_2.md"
+    timeout: 2700
+  - type: explore
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen010/explore_1.md"
+    timeout: 1800
+  - type: explore
+    instance: 2
+    model: sonnet
+    brief: "briefs/gen010/explore_2.md"
+    timeout: 1800
+  - type: experimentator
+    instance: 1
+    model: opus
+    brief: "briefs/gen010/experimentator_1.md"
+    timeout: 900

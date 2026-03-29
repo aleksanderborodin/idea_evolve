@@ -16,6 +16,7 @@ from dashboard.data import (
     get_manifest,
     get_phase_status,
     get_reports,
+    get_run_state,
     get_score_progression,
     get_solution_idea_map,
     get_solutions,
@@ -35,6 +36,7 @@ def overview():
     timing = get_timing_data()
     cache_stats = get_eval_cache_stats()
     initial_scores = get_initial_scores()
+    run_state = get_run_state()
 
     # Compute stats from generations — respect fitness direction
     higher_is_better = metrics.get("higher_is_better", True)
@@ -54,6 +56,12 @@ def overview():
     completed_gens = sum(1 for g in generations if g["status"] == "complete")
     current_gen = generations[-1]["gen"] if generations else 0
     current_phase = generations[-1]["status"] if generations else "not_started"
+
+    # Prefer run_state phase when orchestrator is actively running (more accurate)
+    if run_state.get("is_running") and run_state.get("current_phase"):
+        current_phase = run_state["current_phase"]
+        if run_state.get("current_gen"):
+            current_gen = run_state["current_gen"]
 
     # Quick knowledge counts (avoid full scan — just count files)
     from dashboard.data.config import get_project_root
@@ -139,6 +147,7 @@ def overview():
         "timing": timing,
         "eval_cache": cache_stats,
         "initial_scores": initial_scores,
+        "run_state": run_state,
     })
 
 

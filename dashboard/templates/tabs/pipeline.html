@@ -39,7 +39,7 @@
         <div class="pipeline-node" data-pipe-phase="consistency_done" id="pn-consistency">
           <div class="node-icon">&#9881;</div>
           <div class="node-title">Consistency</div>
-          <div class="node-desc">Audit knowledge, rewrite State of Affairs (every 3rd gen)</div>
+          <div class="node-desc">Audit knowledge, rewrite State of Affairs (every gen)</div>
         </div>
         <div class="pipeline-arrow" id="pa-5"><div class="arrow-line"></div></div>
 
@@ -50,6 +50,9 @@
         </div>
       </div>
     </div>
+
+    <!-- Run State Agents (from orchestrator) -->
+    <div class="run-state-agents-section" id="runStateAgents" style="display:none"></div>
 
     <!-- Live Agents -->
     <div class="live-agents-section">
@@ -75,6 +78,14 @@
       <div class="agents-grid" id="agentsGrid">
         <!-- Dynamically rendered from /api/overview agent_types -->
       </div>
+    </div>
+
+    <!-- Pipeline Errors -->
+    <div id="pipelineErrors" class="pipeline-errors-section" style="display:none">
+      <div class="section-header">
+        <span class="section-title">Recent Errors</span>
+      </div>
+      <div id="pipelineErrorsList"></div>
     </div>
 
     <!-- Data Flow -->

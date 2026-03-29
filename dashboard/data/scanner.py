@@ -5,7 +5,8 @@ structured data. No caching — reads fresh on each call.
 """
 
 import json
-from datetime import datetime
+import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .config import get_project_root
@@ -39,6 +40,62 @@ def _is_valid_score(result: dict | None) -> bool:
     if _is_sentinel(score):
         return False
     return True
+
+
+# ---------------------------------------------------------------------------
+# Run State
+# ---------------------------------------------------------------------------
+
+def get_run_state() -> dict:
+    """Read orchestrator's run_state.json and add derived liveness fields."""
+    root = _root()
+    state_path = root / "history" / "run_state.json"
+    if not state_path.exists():
+        return {"available": False}
+
+    try:
+        state = json.loads(state_path.read_text())
+    except Exception:
+        return {"available": False}
+
+    state["available"] = True
+
+    # PID liveness check
+    pid = state.get("pid")
+    if pid:
+        try:
+            os.kill(pid, 0)
+            state["pid_alive"] = True
+        except (OSError, ProcessLookupError):
+            state["pid_alive"] = False
+    else:
+        state["pid_alive"] = False
+
+    # Staleness check
+    last_updated = state.get("last_updated")
+    if last_updated:
+        try:
+            lu = datetime.fromisoformat(last_updated)
+            if lu.tzinfo is None:
+                lu = lu.replace(tzinfo=timezone.utc)
+            age_s = (datetime.now(timezone.utc) - lu).total_seconds()
+            state["age_seconds"] = round(age_s, 1)
+            state["is_stale"] = age_s > 120
+        except Exception:
+            state["age_seconds"] = None
+            state["is_stale"] = True
+    else:
+        state["age_seconds"] = None
+        state["is_stale"] = True
+
+    # Derived: is_running = pid alive AND not stale AND status is "running"
+    state["is_running"] = (
+        state.get("pid_alive", False)
+        and not state.get("is_stale", True)
+        and state.get("status") == "running"
+    )
+
+    return state
 
 
 # ---------------------------------------------------------------------------
@@ -444,7 +501,7 @@ def get_reports(gen: int | None = None) -> list[dict]:
             reports.append({
                 "gen": gen_num,
                 "agent": f.stem,
-                "content": f.read_text()[:5000],
+                "content": f.read_text(),
                 "size": f.stat().st_size,
             })
     return reports
@@ -614,6 +671,11 @@ def get_active_agents() -> list[dict]:
     if not ws_dir.exists():
         return agents
 
+    # Only show workspaces for the current generation to avoid stale gen artifacts
+    run_state = get_run_state()
+    current_gen = run_state.get("current_gen")
+    current_gen_str = f"gen{current_gen:03d}" if current_gen else None
+
     for ws in sorted(ws_dir.iterdir()):
         if not ws.is_dir():
             continue
@@ -622,6 +684,9 @@ def get_active_agents() -> list[dict]:
         if len(parts) < 2:
             continue
         gen_str = parts[0]
+        # Skip workspaces from past generations
+        if current_gen_str and gen_str != current_gen_str:
+            continue
         agent_id = parts[1]  # e.g. explore_1
 
         # Determine agent type and instance

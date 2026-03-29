@@ -2,27 +2,26 @@
 type: cluster
 id: cluster_003
 name: "Published solutions and warm-start approaches"
-member_ideas: [idea_014, idea_016]
-best_score: 1.5032
-best_solution: gen003_research_1_sol01
+member_ideas: [idea_014, idea_016, idea_018, idea_020]
+best_score: 1.5028628677925082
+best_solution: gen011_explore_1_sol01
 status: active
-last_updated: generation_3
+last_updated: generation_11
 ---
 
-NEW CLUSTER for generation 3. Groups ideas related to leveraging published
-solutions and alternative algorithms from the literature.
+Groups ideas related to leveraging published solutions and alternative algorithms
+from the literature. This cluster IS the frontier — all scores below 1.505 come from here.
+
+**Gen 11 update:**
+- idea_014 confirmed again — both scored solutions use TTT-Discover 30k derivatives.
+  19 supporting solutions across 9 generations, 0 contradictions.
+- Best score updated: **1.5028628677925082** (gen011_explore_1_sol01).
+- Critical finding: deadline-based entrypoints are non-reproducible (~6e-11 variance).
+  Must bake arrays as numpy literals (pattern_028).
+- idea_020 (LP refinement) remains DEBUNKED. Not retested.
 
 **Members:**
-- idea_014 (warm-start from published solutions): AlphaEvolve array at C=1.5032 retrieved. Multiple intermediate arrays available (C=1.5053 to 1.5032).
-- idea_016 (LP-guided memetic algorithm): AlphaEvolve's actual method. Not yet implemented but understood.
-
-**This cluster represents the new frontier.** The gradient-descent pipeline
-(clusters 1+2) has plateaued at C~1.509. The only path to C < 1.505 is either:
-1. Warm-starting from 1.5032 and polishing with smooth-max → may reach C < 1.503
-2. Implementing the LP-guided approach → significant engineering effort
-3. Finding the Yuksekgonul et al. (2026) array at C <= 1.5029
-
-**Priority experiments:**
-1. Warm-start smooth-max from sol01.py (C=1.5032): tighter schedule, 30k steps/phase
-2. Verify Cell 91 array (~50000 elements) — may be ThetaEvolve's 1.503133
-3. Search for Yuksekgonul 2026 paper and array
+- idea_014 (warm-start from published solutions): ESTABLISHED, confidence 0.95.
+- idea_016 (LP-guided memetic): ESTABLISHED, confidence 0.8.
+- idea_018 (TTT-Discover LLM+LP): ESTABLISHED, confidence 0.8.
+- idea_020 (LP-based refinement): DEBUNKED, confidence 0.05.

@@ -87,7 +87,19 @@
       "Bash(find /home/sasha/Desktop/project_alpha/alpha-evolve -path */gen004*)",
       "Bash(grep -v __pycache__ find /home/sasha/Desktop/project_alpha/alpha-evolve/feedback -newer /home/sasha/Desktop/project_alpha/alpha-evolve/reports/gen003 -type f 2)",
       "Bash(/dev/null find:*)",
-      "Bash(python3 -c \"import sys; sys.path.insert\\(0, ''problem''\\); from helpers.core import compute_c; print\\(''helpers.core import OK''\\); from helper import compute_c as cc; print\\(''helper shim import OK''\\)\")"
+      "Bash(python3 -c \"import sys; sys.path.insert\\(0, ''problem''\\); from helpers.core import compute_c; print\\(''helpers.core import OK''\\); from helper import compute_c as cc; print\\(''helper shim import OK''\\)\")",
+      "Bash(python3 -c \"import json; d=json.load\\(open\\(''/home/sasha/Desktop/project_alpha/alpha-evolve/history/timing.json''\\)\\); [print\\(k,v\\) for k,v in d.items\\(\\) if ''gen005'' in k or ''gen004'' in k]\")",
+      "Bash(python3 -m py_compile orchestrator.py)",
+      "Bash(curl -s http://localhost:5000/static/js/app.js)",
+      "Bash(find /home/sasha/Desktop/project_alpha/alpha-evolve -path *gen007* -exec rm -rf {} + 2)",
+      "Bash(/dev/null sleep:*)",
+      "Bash(find /home/sasha/Desktop/project_alpha/alpha-evolve/workspace/gen007_* -name *.score)",
+      "Bash(python3 -c \"import json,sys; s=json.load\\(sys.stdin\\); print\\(f''''status: {s[\"\"status\"\"]}, gen: {s[\"\"current_gen\"\"]}, phase: {s[\"\"current_phase\"\"]}''''\\)\")",
+      "Bash(kill -9 30798 30799 122105 122157 122167 125567)",
+      "Bash(find /home/sasha/Desktop/project_alpha -path */user/* -type f)",
+      "Bash(pstree -p 78205)",
+      "Bash(ps --ppid 78205)",
+      "Bash(for f:*)"
     ],
     "additionalDirectories": [
       "/home/sasha/Desktop/project_alpha/alpha-evolve/papers/pdf",

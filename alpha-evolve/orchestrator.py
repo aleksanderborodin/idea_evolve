@@ -22,6 +22,7 @@ import sys
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -32,18 +33,18 @@ import yaml
 # ---------------------------------------------------------------------------
 
 DEFAULT_MAX_TURNS = {
-    "architect": 50,
-    "explore": 135,
-    "exploit": 135,
-    "genetic": 100,
-    "full": 135,
-    "research": 70,
-    "experimentator": 100,
-    "evaluator": 200,
-    "system_critic": 50,
-    "consistency_reviewer": 70,
-    "wrap_up": 100,
-    "debrief_recovery": 25,
+    "architect": 200,
+    "explore": 540,
+    "exploit": 540,
+    "genetic": 400,
+    "full": 540,
+    "research": 280,
+    "experimentator": 400,
+    "evaluator": 800,
+    "system_critic": 200,
+    "consistency_reviewer": 280,
+    "wrap_up": 400,
+    "debrief_recovery": 100,
 }
 
 
@@ -83,6 +84,45 @@ def _record_timing(project_root: Path, gen: int, key: str, elapsed: float):
             fcntl.flock(lock, fcntl.LOCK_UN)
     except Exception:
         pass
+
+
+def _write_run_state(project_root: Path, **updates):
+    """Thread-safe update to run_state.json. Merges updates into existing state."""
+    state_path = project_root / "history" / "run_state.json"
+    lock_path = project_root / "history" / "run_state.json.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(lock_path, "w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            if state_path.exists():
+                state = json.loads(state_path.read_text())
+            else:
+                state = {"schema_version": 1, "errors": [], "completed_gens": []}
+            for k, v in updates.items():
+                if k == "agents" and isinstance(v, dict) and len(v) == 0:
+                    state["agents"] = {}
+                elif k == "agents" and "agents" in state and isinstance(v, dict):
+                    state.setdefault("agents", {}).update(v)
+                elif k == "error":
+                    state.setdefault("errors", []).append(v)
+                else:
+                    state[k] = v
+            state["last_updated"] = datetime.now(timezone.utc).isoformat()
+            state_path.write_text(json.dumps(state, indent=2))
+            fcntl.flock(lock, fcntl.LOCK_UN)
+    except Exception:
+        pass
+
+
+def _read_run_state(project_root: Path) -> dict:
+    """Read current run_state.json or return empty dict."""
+    state_path = project_root / "history" / "run_state.json"
+    if state_path.exists():
+        try:
+            return json.loads(state_path.read_text())
+        except Exception:
+            pass
+    return {}
 
 
 def _get_recent_timing(project_root: Path, current_gen: int, lookback: int = 3) -> dict:
@@ -222,13 +262,14 @@ def get_max_turns(config: dict, agent_type: str) -> int:
 
 
 DEFAULT_TIMEOUTS = {
-    "architect": 1020,
-    "agent_default": 1530,
-    "evaluator": 1530,
-    "system_critic": 1020,
-    "consistency_reviewer": 1530,
-    "wrap_up": 1530,
-    "debrief_recovery": 510,
+    "architect": 2040,
+    "architect_wrapup": 600,
+    "agent_default": 3060,
+    "evaluator": 3060,
+    "system_critic": 2040,
+    "consistency_reviewer": 3060,
+    "wrap_up": 3060,
+    "debrief_recovery": 1020,
 }
 
 
@@ -1855,6 +1896,73 @@ def _preconcat_prev_reports(project_root: Path, gen: int, briefs_dir: Path):
     (briefs_dir / "prev_gen_reports.md").write_text(dump)
 
 
+def _build_architect_wrapup_prompt(briefs_dir: Path, gen: int) -> str:
+    return f"""Your architect planning session timed out. You are being resumed to finish your work.
+
+You are the Architect for generation {gen}. Your session ran out of time.
+Briefs directory: {briefs_dir}
+
+PRIORITY ORDER — work from memory, do not re-read files:
+
+1. **Write `manifest.yaml`** to `{briefs_dir}/manifest.yaml` if not already done.
+   This is the most critical file. Without it, a minimal fallback manifest is used.
+
+2. **Write any missing brief files** listed in your manifest.
+
+3. **Write `architect_report.md`** to `{briefs_dir}/architect_report.md`:
+   - What you managed to plan before timing out
+   - What was cut off
+   - Confidence: Low (timeout) — explain what is incomplete
+   - Risks with the partial plan
+   - Open questions for the System Critic
+
+Write manifest.yaml FIRST. You have very little time.
+"""
+
+
+def _write_architect_failure_report(
+    reports_dir: Path, gen: int, failure_reason: str | None,
+    elapsed: float, timed_out: bool, used_fallback: bool,
+):
+    failure_type = "timeout + wrap-up failed" if timed_out else "crash"
+    reason_str = failure_reason or "unknown"
+
+    # Summarize what agents are actually running from the fallback manifest
+    fallback_summary = "unknown"
+    manifest_path = reports_dir.parent.parent / "briefs" / f"gen{gen:03d}" / "manifest.yaml"
+    if manifest_path.exists():
+        try:
+            with open(manifest_path) as f:
+                manifest = yaml.safe_load(f)
+            agents = manifest.get("agents", [])
+            fallback_summary = ", ".join(
+                f"{a['type']}_{a['instance']} ({a.get('model', '?')})" for a in agents
+            )
+        except Exception:
+            pass
+
+    (reports_dir / "architect.md").write_text(
+        f"# Architect Failure Report — Generation {gen}\n\n"
+        f"The Architect session failed. A fallback manifest was used.\n\n"
+        f"## Failure Details\n\n"
+        f"- **Type:** {failure_type} (elapsed: {elapsed:.1f}s)\n"
+        f"- **Error:** {reason_str}\n"
+        f"- **Fallback manifest used:** {'yes' if used_fallback else 'no'}\n\n"
+        f"## Agents Running on Fallback\n\n"
+        f"{fallback_summary}\n\n"
+        f"All agents received minimal briefs with no strategic direction. "
+        f"Coverage matrix, saturated areas, and cluster state were not consulted.\n\n"
+        f"## Impact\n\n"
+        f"- No strategic planning for this generation\n"
+        f"- Agents will likely revisit already-explored areas\n"
+        f"- Knowledge contribution from this generation may be low quality\n\n"
+        f"## Recommended Actions for System Critic\n\n"
+        f"1. Investigate why the architect failed (API error, prompt issue, session crash)\n"
+        f"2. Flag that this generation had no strategic plan\n"
+        f"3. Recommend the next Architect read gen {gen} reports carefully to compensate\n"
+    )
+
+
 def run_architect(project_root: Path, gen: int, config: dict):
     gen_str = f"gen{gen:03d}"
     print(f"\n{'='*60}")
@@ -1863,6 +1971,8 @@ def run_architect(project_root: Path, gen: int, config: dict):
 
     briefs_dir = project_root / "briefs" / gen_str
     briefs_dir.mkdir(parents=True, exist_ok=True)
+    reports_dir = project_root / "reports" / gen_str
+    reports_dir.mkdir(parents=True, exist_ok=True)
 
     # SCALE-R1: Pre-concat previous gen reports
     _preconcat_prev_reports(project_root, gen, briefs_dir)
@@ -1871,16 +1981,40 @@ def run_architect(project_root: Path, gen: int, config: dict):
     model = config.get("architect_model", "opus")
 
     t0 = time.time()
+    failure_reason = None
+    timed_out = False
+    session_id = None
+
     try:
-        launch_claude_session(
+        _, session_id = launch_claude_session(
             project_root, prompt, model=model,
             timeout=get_timeout(config, "architect"),
             max_turns=get_max_turns(config, "architect"),
             allowed_tools=["Read", "Write", "Glob", "Grep", "Bash"],
         )
-    except (SessionTimeout, SessionError) as e:
-        print(f"  WARNING: Architect session issue: {e}")
-    _record_timing(project_root, gen, "architect", time.time() - t0)
+    except SessionTimeout as e:
+        timed_out = True
+        session_id = e.session_id
+        print(f"  Architect timed out — attempting wrap-up")
+        wrapup_prompt = _build_architect_wrapup_prompt(briefs_dir, gen)
+        try:
+            resume_claude_session(
+                project_root, session_id, wrapup_prompt,
+                model=model,
+                timeout=get_timeout(config, "architect_wrapup"),
+                max_turns=get_max_turns(config, "architect"),
+                allowed_tools=["Read", "Write", "Glob", "Grep", "Bash"],
+            )
+            print(f"  Architect wrap-up complete")
+        except (SessionTimeout, SessionError) as e2:
+            failure_reason = f"timed out; wrap-up also failed: {e2}"
+            print(f"  Architect wrap-up also failed: {e2}")
+    except SessionError as e:
+        failure_reason = f"session error: {e}"
+        print(f"  WARNING: Architect session error: {e}")
+
+    elapsed = time.time() - t0
+    _record_timing(project_root, gen, "architect", elapsed)
 
     # Find manifest — check expected location, then project root
     manifest_path = briefs_dir / "manifest.yaml"
@@ -1894,10 +2028,12 @@ def run_architect(project_root: Path, gen: int, config: dict):
         if f.name.startswith(("explore_", "exploit_", "genetic_", "full_", "research_", "experimentator_")):
             shutil.move(str(f), str(briefs_dir / f.name))
 
+    used_fallback = False
     if not manifest_path.exists():
         print("  ERROR: Architect did not produce manifest.yaml")
         print("  Creating a minimal default manifest...")
         _create_default_manifest(project_root, gen, config)
+        used_fallback = True
     else:
         # Validate manifest YAML
         try:
@@ -1909,9 +2045,20 @@ def run_architect(project_root: Path, gen: int, config: dict):
             print(f"  ERROR: Invalid manifest.yaml: {e}")
             print("  Creating a minimal default manifest...")
             _create_default_manifest(project_root, gen, config)
+            used_fallback = True
+            if not failure_reason:
+                failure_reason = f"invalid manifest.yaml: {e}"
 
     # BUG-4: Post-process briefs to convert relative paths to absolute
     _absolutize_brief_paths(project_root, briefs_dir)
+
+    # Route architect_report.md → reports/ for System Critic and future Architects.
+    # If the architect didn't write one but something went wrong, write a failure report.
+    architect_report_src = briefs_dir / "architect_report.md"
+    if architect_report_src.exists():
+        shutil.copy2(str(architect_report_src), str(reports_dir / "architect.md"))
+    elif failure_reason or used_fallback:
+        _write_architect_failure_report(reports_dir, gen, failure_reason, elapsed, timed_out, used_fallback)
 
     # Mark architect phase as cleanly complete. phase_status() checks for this sentinel
     # before trusting the manifest. Without it, an orphaned architect (killed mid-session)
@@ -2009,6 +2156,9 @@ def _run_agent_group(project_root: Path, gen: int, config: dict,
 
         print(f"  Launching {atype}_{instance} (model: {model}, work: {work_timeout}s, wrap-up: {wrap_up_timeout}s, debrief: {debrief_timeout}s)")
         create_workspace(project_root, gen, atype, instance)
+        _write_run_state(project_root, agents={
+            f"{atype}_{instance}": {"status": "running", "started_at": datetime.now(timezone.utc).isoformat()}
+        })
 
         prompt = build_agent_prompt(project_root, gen, atype, instance, brief_path)
 
@@ -2030,10 +2180,22 @@ def _run_agent_group(project_root: Path, gen: int, config: dict,
             work_timed_out = True
             session_id = e.session_id
             print(f"  {atype}_{instance} timed out after {work_timeout}s")
+            _write_run_state(project_root,
+                agents={f"{atype}_{instance}": {"status": "wrapping_up"}},
+                error={"gen": gen, "phase": "agents", "agent": f"{atype}_{instance}",
+                       "type": "timeout", "message": f"Timed out after {work_timeout}s",
+                       "ts": datetime.now(timezone.utc).isoformat()},
+            )
         except (SessionError, Exception) as e:
             work_error = str(e)
             session_id = getattr(e, 'session_id', None)
             print(f"  ERROR in {atype}_{instance}: {work_error}")
+            _write_run_state(project_root,
+                agents={f"{atype}_{instance}": {"status": "failed", "error": str(e)[:200]}},
+                error={"gen": gen, "phase": "agents", "agent": f"{atype}_{instance}",
+                       "type": "error", "message": str(e)[:200],
+                       "ts": datetime.now(timezone.utc).isoformat()},
+            )
 
         work_elapsed = time.time() - t0
         _record_timing(project_root, gen, f"agent_{atype}_{instance}_work", work_elapsed)
@@ -2043,6 +2205,7 @@ def _run_agent_group(project_root: Path, gen: int, config: dict,
         if not has_report and (work_timed_out or work_error) and session_id:
             status_msg = "timed out" if work_timed_out else "crashed"
             print(f"  {atype}_{instance} {status_msg} — resuming session for wrap-up")
+            _write_run_state(project_root, agents={f"{atype}_{instance}": {"status": "wrapping_up"}})
 
             wrap_up_msg = (
                 "STOP. Time is running out. Do NOT write new solutions or explore new ideas.\n\n"
@@ -2131,7 +2294,28 @@ def _run_agent_group(project_root: Path, gen: int, config: dict,
         except Exception as e:
             print(f"  ERROR moving outputs for {atype}_{instance}: {e}")
             log_agent_failure(project_root, gen, atype, instance, f"Output move failed: {e}")
+            _write_run_state(project_root,
+                agents={f"{atype}_{instance}": {"status": "failed", "error": str(e)[:200]}},
+                error={"gen": gen, "phase": "agents", "agent": f"{atype}_{instance}",
+                       "type": "error", "message": f"Output move failed: {str(e)[:200]}",
+                       "ts": datetime.now(timezone.utc).isoformat()},
+            )
             # Workspace preserved for debugging
+            print(f"  Completed {atype}_{instance} ({total_elapsed:.0f}s total)")
+            return atype, instance
+
+        # Count solutions produced
+        pop_dir = project_root / "population" / f"gen{gen:03d}" / f"{atype}_{instance}"
+        sol_count = len(list(pop_dir.glob("sol*.py"))) if pop_dir.exists() else 0
+        final_status = "failed" if work_error else "done"
+        _write_run_state(project_root, agents={
+            f"{atype}_{instance}": {
+                "status": final_status,
+                "finished_at": datetime.now(timezone.utc).isoformat(),
+                "solutions": sol_count,
+                "elapsed": round(total_elapsed, 1),
+            }
+        })
 
         print(f"  Completed {atype}_{instance} ({total_elapsed:.0f}s total)")
         return atype, instance
@@ -2170,7 +2354,6 @@ def run_agents(project_root: Path, gen: int, config: dict):
             manifest = yaml.safe_load(f)
 
     agents = manifest.get("agents", [])
-    parallel_groups = manifest.get("parallel_groups", [])
     max_parallel = config.get("max_parallel_sessions", 10)
 
     # Filter out disabled agent types from config
@@ -2191,13 +2374,14 @@ def run_agents(project_root: Path, gen: int, config: dict):
         name = f"{spec['type']}_{spec['instance']}"
         agent_lookup[name] = spec
 
-    if not parallel_groups:
-        # No groups specified — run all in parallel
-        parallel_groups = [list(agent_lookup.keys())]
+    # All agents always run in one parallel group — results feed the next generation
+    parallel_groups = [list(agent_lookup.keys())]
 
-    # Execute groups sequentially; agents within each group in parallel
+    # Write all planned agents as "waiting" in run state
+    agent_statuses = {name: {"status": "waiting"} for name in agent_lookup}
+    _write_run_state(project_root, agents=agent_statuses)
+
     for group_idx, group in enumerate(parallel_groups):
-        # Deduplicate agent names within group to prevent double-launches
         seen = set()
         deduped_group = []
         for name in group:
@@ -2481,9 +2665,9 @@ def run_system_critic(project_root: Path, gen: int, config: dict):
 
 
 def should_run_consistency_review(project_root: Path, gen: int, config: dict) -> bool:
-    interval = config.get("consistency_review_interval", 3)
+    interval = config.get("consistency_review_interval", 1)
     if interval < 1:
-        interval = 3
+        interval = 1
     if gen % interval == 0:
         return True
 
@@ -2574,6 +2758,13 @@ def finalize_generation(project_root: Path, gen: int, config: dict) -> float:
             f"{timing_section}"
         )
 
+    # Update run state: mark generation complete
+    prior = _read_run_state(project_root)
+    completed = prior.get("completed_gens", [])
+    if gen not in completed:
+        completed.append(gen)
+    _write_run_state(project_root, current_phase="complete", completed_gens=completed, agents={})
+
     fmt = _score_fmt(project_root)
     print(f"  Best fitness: {format(best_score, fmt)}")
     return best_score
@@ -2605,26 +2796,32 @@ def run_generation(project_root: Path, gen: int, config: dict) -> float:
     gen_t0 = time.time()
 
     if status == "not_started":
+        _write_run_state(project_root, current_gen=gen, current_phase="architect", agents={})
         run_architect(project_root, gen, config)
         status = "planned"
 
     if status == "planned":
+        _write_run_state(project_root, current_gen=gen, current_phase="agents_running", agents={})
         run_agents(project_root, gen, config)
         status = "agents_done"
 
     if status == "agents_done":
+        _write_run_state(project_root, current_gen=gen, current_phase="evaluator", agents={})
         run_evaluator(project_root, gen, config)
         status = "evaluator_done"
 
     if status == "evaluator_done":
+        _write_run_state(project_root, current_gen=gen, current_phase="system_critic", agents={})
         run_system_critic(project_root, gen, config)
         status = "critic_done"
 
     if status == "critic_done":
+        _write_run_state(project_root, current_gen=gen, current_phase="consistency_review", agents={})
         if should_run_consistency_review(project_root, gen, config):
             run_consistency_review(project_root, gen, config)
         status = "consistency_done"
 
+    _write_run_state(project_root, current_gen=gen, current_phase="finalize")
     best_score = finalize_generation(project_root, gen, config)
     _record_timing(project_root, gen, "total", time.time() - gen_t0)
     return best_score
@@ -2674,26 +2871,52 @@ def main():
         print(f"\n[DRY RUN] Would run generations {start_gen} to {max_gens}")
         return
 
-    for gen in range(start_gen, max_gens + 1):
-        print(f"\n{'#'*60}")
-        print(f"  GENERATION {gen} / {max_gens}")
-        print(f"{'#'*60}")
+    # Check for crashed prior run
+    prior_state = _read_run_state(project_root)
+    if prior_state.get("status") == "running" and prior_state.get("pid"):
+        try:
+            os.kill(prior_state["pid"], 0)
+            print(f"  WARNING: Previous orchestrator (PID {prior_state['pid']}) may still be running!")
+        except OSError:
+            print(f"  NOTE: Previous run (PID {prior_state['pid']}) stopped during "
+                  f"gen {prior_state.get('current_gen', '?')}, "
+                  f"phase '{prior_state.get('current_phase', '?')}'. Resuming.")
 
-        best_score = run_generation(project_root, gen, config)
+    # Initialize run state
+    _write_run_state(project_root,
+        pid=os.getpid(),
+        started_at=datetime.now(timezone.utc).isoformat(),
+        target_gen=max_gens,
+        status="running",
+        current_gen=start_gen,
+        current_phase="starting",
+        agents={},
+        completed_gens=[g for g in range(1, start_gen)],
+    )
 
-        target_reached = (
-            (higher_better and best_score >= target)
-            or (not higher_better and best_score <= target and best_score > 0)
-        )
-        if target_reached:
-            fmt = _score_fmt(project_root)
-            print(f"\n  TARGET REACHED! Fitness {format(best_score, fmt)} {'≥' if higher_better else '≤'} {target}")
-            print(f"  Best solution: {project_root / 'population' / 'best.py'}")
-            break
+    try:
+        for gen in range(start_gen, max_gens + 1):
+            print(f"\n{'#'*60}")
+            print(f"  GENERATION {gen} / {max_gens}")
+            print(f"{'#'*60}")
 
-        if args.single:
-            print(f"\n  Single generation mode — stopping after gen {gen}")
-            break
+            best_score = run_generation(project_root, gen, config)
+
+            target_reached = (
+                (higher_better and best_score >= target)
+                or (not higher_better and best_score <= target and best_score > 0)
+            )
+            if target_reached:
+                fmt = _score_fmt(project_root)
+                print(f"\n  TARGET REACHED! Fitness {format(best_score, fmt)} {'≥' if higher_better else '≤'} {target}")
+                print(f"  Best solution: {project_root / 'population' / 'best.py'}")
+                break
+
+            if args.single:
+                print(f"\n  Single generation mode — stopping after gen {gen}")
+                break
+    finally:
+        _write_run_state(project_root, status="stopped", current_phase="idle")
 
     print(f"\n{'#'*60}")
     print("  Alpha Evolve complete.")

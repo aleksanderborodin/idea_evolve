@@ -1,0 +1,28 @@
+generation: 7
+strategy_summary: "Extend coordinate descent frontier, LP proof-of-concept at N=2000, explore N=600 basin and triplet perturbation, build helpers for future gens"
+agents:
+  - type: exploit
+    instance: 1
+    model: opus
+    brief: "briefs/gen007/exploit_1.md"
+    timeout: 2700
+  - type: exploit
+    instance: 2
+    model: sonnet
+    brief: "briefs/gen007/exploit_2.md"
+    timeout: 1200
+  - type: full
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen007/full_1.md"
+    timeout: 1500
+  - type: explore
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen007/explore_1.md"
+    timeout: 1200
+  - type: experimentator
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen007/experimentator_1.md"
+    timeout: 900

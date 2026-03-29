@@ -59,6 +59,12 @@ header comment. Progression chart shows baseline from initial programs and targe
 direction indicator ("↓ better" / "↑ better"). Agent column shows full identifier (e.g.,
 `explore_1` not just `explore`).
 
+Dashboard has live orchestrator visibility via `history/run_state.json`. Header beacon shows
+green (running), gray (idle), amber (stale >2min), or red (crashed PID). Overview tab shows
+system status bar with phase/gen/elapsed. Pipeline tab shows per-agent status from orchestrator
+(waiting/running/wrapping_up/done/failed) and recent errors. Refresh rate is dynamic: 10s when
+orchestrator is running, 60s when idle.
+
 ## Architecture
 
 The orchestrator is a stateless Python loop. All state lives in files. If it crashes, it resumes
@@ -109,6 +115,8 @@ alpha-evolve/
 │   ├── best.py → symlink    # top/ → ranked symlinks
 │   └── genNNN/{type}_{instance}/sol*.py
 ├── history/                 # generations/, score_progression.md, solution_idea_map.md, coverage_matrix.md
+│   ├── run_state.json       # Live orchestrator state (pid, phase, agent statuses, errors)
+│   └── run_state.json.lock  # File lock for thread-safe updates
 ├── briefs/genNNN/           # manifest.yaml + per-agent briefs
 ├── reports/genNNN/          # Agent debrief reports
 ├── papers/                  # Academic paper library
@@ -125,6 +133,12 @@ alpha-evolve/
 
 ## What Works
 
+- **Architect debrief and failure reporting.** After each architect session, `architect_report.md`
+  is copied from `briefs/genNNN/` to `reports/genNNN/architect.md`. The System Critic reads it
+  automatically as part of `reports/genNNN/`. The next Architect gets it via `prev_gen_reports.md`.
+  If the architect session times out, a wrap-up resume is attempted (300s). If the architect
+  crashes or produces no manifest, the orchestrator writes a structured failure report to
+  `reports/genNNN/architect.md` instead.
 - **Three-phase timeout with session resume.** Work session runs with timeout T1 (default 900s)
   and gets a `--session-id`. If it times out without writing `report.md`, a **wrap-up message**
   is sent to the **same session** via `--resume` (same model, 900s) — the agent retains full
@@ -140,6 +154,13 @@ alpha-evolve/
   The Architect sees recent timing data and can set per-agent `timeout` in `manifest.yaml`.
 - **Evaluation caching.** `evaluate.py` caches results by file content hash in `history/eval_cache.json`.
   Thread-safe with `fcntl` file locking for parallel agent access.
+- **Live run state tracking.** `history/run_state.json` is written by the orchestrator at
+  every phase transition and agent status change. Contains: PID, current gen/phase, per-agent
+  status (waiting/running/wrapping_up/done/failed), error log. Thread-safe with fcntl locking.
+  Dashboard reads it for real-time status beacon, dynamic refresh rates (10s when running,
+  60s when idle), and per-agent pipeline visualization. Crash detection via PID liveness +
+  staleness check (>120s without update). NOT a replacement for phase_status() resume logic —
+  additive visibility layer only.
 - **Stateless crash recovery.** `phase_status()` reconstructs position from file existence.
 - **Lean prompts.** File paths, not inline content. Stable prompt size across generations.
 - **In-session debrief.** Agent writes `report.md` while it still remembers everything it tried.

@@ -171,14 +171,28 @@ body::after {
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  background: var(--text-ghost);
+  transition: background 0.3s, box-shadow 0.3s;
+}
+.status-beacon.running {
   background: var(--accent);
-  box-shadow: 0 0 6px var(--accent);
+  box-shadow: 0 0 8px var(--accent);
   animation: beacon-pulse 2s ease-in-out infinite;
+}
+.status-beacon.idle { background: var(--text-ghost); }
+.status-beacon.stale {
+  background: var(--amber);
+  box-shadow: 0 0 6px var(--amber);
+  animation: beacon-pulse 2s ease-in-out infinite;
+}
+.status-beacon.crashed {
+  background: var(--red);
+  box-shadow: 0 0 6px var(--red);
 }
 
 @keyframes beacon-pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 6px var(--accent); }
-  50% { opacity: 0.4; box-shadow: 0 0 2px var(--accent); }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 .header-label {
@@ -1959,7 +1973,105 @@ body::after {
   background: var(--bg-raised);
 }
 
+/* ===== System Status Bar ===== */
+.system-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-bottom: 16px;
+  font-size: 0.82rem;
+}
+.sys-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.sys-status-dot.running { background: var(--accent); animation: beacon-pulse 2s ease-in-out infinite; }
+.sys-status-dot.idle { background: var(--text-ghost); }
+.sys-status-dot.stale { background: var(--amber); animation: beacon-pulse 2s ease-in-out infinite; }
+.sys-status-dot.crashed { background: var(--red); }
+.sys-status-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  align-items: baseline;
+}
+.sys-status-label { font-weight: 600; font-family: var(--font-display); }
+.sys-status-label.running { color: var(--accent); }
+.sys-status-label.idle { color: var(--text-ghost); }
+.sys-status-label.stale { color: var(--amber); }
+.sys-status-label.crashed { color: var(--red); }
+.sys-status-detail { color: var(--text-secondary); font-weight: 500; }
+.sys-status-phase { color: var(--text-tertiary); text-transform: capitalize; }
+.sys-status-meta { color: var(--text-ghost); font-size: 0.78em; }
+.sys-status-errors { color: var(--red); font-size: 0.78em; font-weight: 500; }
+
+/* ===== Run State Agent Rows (Pipeline tab) ===== */
+.run-state-agents-section {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  margin-bottom: 20px;
+}
+.rs-agent-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  font-size: 0.8rem;
+  border-bottom: 1px solid var(--bg-hover);
+}
+.rs-agent-row:last-child { border-bottom: none; }
+.rs-agent-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.rs-agent-dot.waiting { background: var(--text-ghost); }
+.rs-agent-dot.running { background: var(--accent); animation: beacon-pulse 2s ease-in-out infinite; }
+.rs-agent-dot.wrapping_up { background: var(--amber); animation: beacon-pulse 2s ease-in-out infinite; }
+.rs-agent-dot.done { background: var(--accent); }
+.rs-agent-dot.failed { background: var(--red); }
+.rs-agent-name { font-weight: 500; color: var(--text-primary); min-width: 120px; }
+.rs-agent-status { color: var(--text-tertiary); text-transform: capitalize; min-width: 80px; }
+.rs-agent-detail { color: var(--text-ghost); font-size: 0.9em; }
+
+/* ===== Pipeline Errors ===== */
+.pipeline-errors-section {
+  background: var(--bg-surface);
+  border: 1px solid var(--red-glow);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  margin-top: 20px;
+}
+.pipeline-error-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding: 6px 0;
+  font-size: 0.75rem;
+  border-bottom: 1px solid var(--bg-hover);
+  align-items: baseline;
+}
+.pipeline-error-item:last-child { border-bottom: none; }
+.pipeline-error-ts { color: var(--text-ghost); font-family: var(--font-mono); font-size: 0.7rem; }
+.pipeline-error-gen { color: var(--text-tertiary); font-weight: 500; }
+.pipeline-error-phase { color: var(--text-secondary); }
+.pipeline-error-agent { color: var(--blue); }
+.pipeline-error-type { font-weight: 600; padding: 1px 6px; border-radius: 3px; font-size: 0.7rem; }
+.pipeline-error-type.err { background: var(--red-glow); color: var(--red); }
+.pipeline-error-type.warn { background: var(--amber-glow); color: var(--amber); }
+.pipeline-error-msg { color: var(--text-tertiary); flex: 1; min-width: 200px; }
+
 @media (max-width: 700px) {
   .modal-panel { width: 96%; max-height: 90vh; }
   .live-agents-container { grid-template-columns: 1fr; }
+  .system-status-bar { flex-direction: column; align-items: flex-start; }
 }

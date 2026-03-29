@@ -19,6 +19,34 @@ let activeAgentsData = null;
 let agentRefreshTimer = null;
 let refreshTimer = null;
 
+// ----- Dynamic Refresh -----
+function getRefreshInterval() {
+  if (overviewData?.run_state?.is_running) return 10000;  // 10s when active
+  return 60000;  // 60s when idle
+}
+
+function rescheduleRefresh(loader, timerName) {
+  if (timerName === 'refresh') {
+    clearInterval(refreshTimer);
+    refreshTimer = setInterval(loader, getRefreshInterval());
+  } else {
+    clearInterval(agentRefreshTimer);
+    agentRefreshTimer = setInterval(loader, getRefreshInterval());
+  }
+}
+
+// ----- Helpers -----
+function timeSince(isoStr) {
+  if (!isoStr) return '--';
+  const ms = Date.now() - new Date(isoStr).getTime();
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return s + 's';
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + 'm ' + (s % 60) + 's';
+  const h = Math.floor(m / 60);
+  return h + 'h ' + (m % 60) + 'm';
+}
+
 // ----- Tab Navigation -----
 document.querySelectorAll('.nav-tab').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -39,11 +67,11 @@ document.querySelectorAll('.nav-tab').forEach(btn => {
     clearInterval(refreshTimer);
     clearInterval(agentRefreshTimer);
     if (tab === 'overview') {
-      refreshTimer = setInterval(loadOverview, 60000);
+      refreshTimer = setInterval(loadOverview, getRefreshInterval());
     }
     if (tab === 'pipeline') {
       loadActiveAgents();
-      agentRefreshTimer = setInterval(loadActiveAgents, 60000);
+      agentRefreshTimer = setInterval(loadActiveAgents, getRefreshInterval());
     }
   });
 });
@@ -118,6 +146,11 @@ async function loadOverview() {
   document.getElementById('knowVal').textContent = s.total_clusters + s.total_patterns;
   document.getElementById('knowSub').textContent = s.total_clusters + ' clusters \u00b7 ' + s.total_patterns + ' patterns';
 
+  // Status beacon + system status from run_state
+  updateBeacon(data.run_state);
+  renderSystemStatus(data.run_state);
+  rescheduleRefresh(loadOverview, 'refresh');
+
   // Phase strip — map *_running to the corresponding step as active
   const currentPhase = s.current_phase;
   const phaseIdx = PHASE_ORDER.indexOf(currentPhase);
@@ -170,7 +203,7 @@ async function loadOverview() {
       <div class="gen-card">
         <div class="gen-num">Gen ${g.gen}</div>
         <span class="gen-status ${statusClass}">${statusText}</span>
-        <div class="gen-score">${g.best_score !== null ? g.best_score.toFixed(4) : '--'}</div>
+        <div class="gen-score">${g.best_score !== null ? g.best_score.toFixed(dec) : '--'}</div>
         <div class="gen-sols">${g.solutions} sol${g.solutions !== 1 ? 's' : ''}</div>
       </div>`;
     }).join('');
@@ -238,6 +271,111 @@ function renderAgentCards(agentTypes) {
         <div class="agent-stat"><span>Purpose</span><span class="agent-stat-val" style="color:var(--text-tertiary)">${a.purpose}</span></div>
       </div>`;
   }).join('');
+}
+
+// ----- Status Beacon & System Status -----
+function updateBeacon(rs) {
+  const beacon = document.getElementById('statusBeacon');
+  if (!beacon) return;
+  if (rs && rs.is_running) {
+    beacon.className = 'status-beacon running';
+    beacon.title = `Orchestrator running (gen ${rs.current_gen || '?'}, ${rs.current_phase || '?'})`;
+  } else if (rs && rs.available && rs.pid_alive && rs.is_stale) {
+    beacon.className = 'status-beacon stale';
+    beacon.title = 'Orchestrator may be stuck (no update in >2min)';
+  } else if (rs && rs.available && !rs.pid_alive && rs.status === 'running') {
+    beacon.className = 'status-beacon crashed';
+    beacon.title = 'Orchestrator process died unexpectedly';
+  } else {
+    beacon.className = 'status-beacon idle';
+    beacon.title = rs && rs.available ? 'Orchestrator idle' : 'No run state available';
+  }
+}
+
+function renderSystemStatus(rs) {
+  const el = document.getElementById('systemStatus');
+  if (!el) return;
+  if (!rs || !rs.available) {
+    el.innerHTML = '<span class="sys-status-label idle">No run data</span>';
+    return;
+  }
+
+  let statusClass, statusLabel;
+  if (rs.is_running) { statusClass = 'running'; statusLabel = 'Running'; }
+  else if (rs.pid_alive && rs.is_stale) { statusClass = 'stale'; statusLabel = 'Stale'; }
+  else if (!rs.pid_alive && rs.status === 'running') { statusClass = 'crashed'; statusLabel = 'Crashed'; }
+  else { statusClass = 'idle'; statusLabel = 'Idle'; }
+
+  const phase = rs.current_phase ? rs.current_phase.replace(/_/g, ' ') : '--';
+  const elapsed = rs.started_at ? timeSince(rs.started_at) : '--';
+  const lastUpdate = rs.age_seconds != null ? Math.round(rs.age_seconds) + 's ago' : '--';
+  const gen = rs.current_gen || '--';
+  const errors = (rs.errors || []).length;
+
+  el.innerHTML = `
+    <div class="sys-status-dot ${statusClass}"></div>
+    <div class="sys-status-info">
+      <span class="sys-status-label ${statusClass}">${statusLabel}</span>
+      <span class="sys-status-detail">Gen ${gen}</span>
+      <span class="sys-status-phase">${phase}</span>
+      <span class="sys-status-meta">${elapsed} elapsed &middot; updated ${lastUpdate}</span>
+      ${errors > 0 ? `<span class="sys-status-errors">${errors} error${errors > 1 ? 's' : ''}</span>` : ''}
+    </div>
+  `;
+}
+
+function renderRunStateAgents(rsAgents) {
+  // Merge run_state agent info into live agents display
+  const container = document.getElementById('runStateAgents');
+  if (!container) return;
+  if (!rsAgents || Object.keys(rsAgents).length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = 'block';
+
+  const entries = Object.entries(rsAgents);
+  const html = entries.map(([name, info]) => {
+    const status = info.status || 'unknown';
+    const elapsed = info.started_at ? timeSince(info.started_at) : '';
+    const solCount = info.solutions != null ? info.solutions + ' sol' : '';
+    const detail = [elapsed, solCount].filter(Boolean).join(' · ');
+    return `
+      <div class="rs-agent-row">
+        <span class="rs-agent-dot ${status}"></span>
+        <span class="rs-agent-name">${esc(name)}</span>
+        <span class="rs-agent-status">${status.replace(/_/g, ' ')}</span>
+        ${detail ? `<span class="rs-agent-detail">${detail}</span>` : ''}
+      </div>`;
+  }).join('');
+
+  container.innerHTML = `
+    <div class="section-header" style="margin-bottom:8px">
+      <span class="section-title" style="font-size:0.78rem">Agent Status (from orchestrator)</span>
+    </div>
+    ${html}`;
+}
+
+function renderPipelineErrors(errors) {
+  const container = document.getElementById('pipelineErrors');
+  if (!container) return;
+  if (!errors || errors.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = 'block';
+  const recent = errors.slice(-10).reverse();
+  const html = recent.map(e => `
+    <div class="pipeline-error-item">
+      <span class="pipeline-error-ts">${e.ts ? new Date(e.ts).toLocaleTimeString() : '?'}</span>
+      <span class="pipeline-error-gen">Gen ${e.gen || '?'}</span>
+      <span class="pipeline-error-phase">${esc(e.phase || '')}</span>
+      <span class="pipeline-error-agent">${esc(e.agent || '')}</span>
+      <span class="pipeline-error-type ${e.type === 'timeout' ? 'warn' : 'err'}">${esc(e.type || 'error')}</span>
+      <span class="pipeline-error-msg">${esc((e.message || '').substring(0, 120))}</span>
+    </div>
+  `).join('');
+  document.getElementById('pipelineErrorsList').innerHTML = html;
 }
 
 // =====================================================================
@@ -334,7 +472,7 @@ function updateZoomToggle() {
   }
 }
 
-function buildChartData(solutions, progression, higherIsBetter, sentinel) {
+function buildChartData(solutions, progression, higherIsBetter, sentinel, decimals) {
   // Collect all valid solution scores as scatter points
   const allPoints = [];
   const genMap = {};  // gen -> [scores]
@@ -386,12 +524,15 @@ function buildChartData(solutions, progression, higherIsBetter, sentinel) {
   }
 
   // Compute running best (monotonically improving) and mark records
+  // Only show record star if improvement is visible at display precision (≥1 least-significant digit)
+  const minDelta = Math.pow(10, -(decimals || 4));
   const runningBest = [];
   let currentBest = null;
   for (const gb of genBests) {
     if (currentBest == null || isBetter(gb.score, currentBest.score)) {
+      const isSignificant = currentBest == null || Math.abs(gb.score - currentBest.score) >= minDelta;
       currentBest = gb;
-      gb.isRecord = true;
+      if (isSignificant) gb.isRecord = true;
     }
     runningBest.push({ gen: gb.gen, score: currentBest.score });
   }
@@ -454,8 +595,9 @@ function drawChart(chartData, target, higherIsBetter, baseline, decimals) {
   }
 
   const maxGen = Math.max(...allPoints.map(p => p.gen), 5);
+  const xPad = 0.5;  // half-unit margin so first/last gen aren't at the edge
 
-  function xPos(gen) { return pad.left + (gen / maxGen) * chartW; }
+  function xPos(gen) { return pad.left + ((gen + xPad) / (maxGen + 2 * xPad)) * chartW; }
   function yPos(score) { return pad.top + chartH - ((score - minS) / (maxS - minS)) * chartH; }
 
   chartState = { pad, W, H, chartW, chartH, minS, maxS, fullMin, fullMax, maxGen, dec, xPos, yPos, higherIsBetter };
@@ -557,28 +699,29 @@ function drawChart(chartData, target, higherIsBetter, baseline, decimals) {
     grad.addColorStop(0, 'rgba(5, 150, 105, 0.12)');
     grad.addColorStop(1, 'rgba(5, 150, 105, 0)');
 
-    if (records.length > 1) {
+    // Shaded area under running-best line
+    if (runningBest.length > 1) {
       ctx.fillStyle = grad;
       ctx.beginPath();
       const baseY = higherIsBetter ? yPos(minS) : yPos(maxS);
-      ctx.moveTo(xPos(records[0].gen), baseY);
-      for (const r of records) {
-        ctx.lineTo(xPos(r.gen), yPos(r.score));
+      ctx.moveTo(xPos(runningBest[0].gen), baseY);
+      for (const rb of runningBest) {
+        ctx.lineTo(xPos(rb.gen), yPos(rb.score));
       }
-      const lastR = records[records.length - 1];
-      ctx.lineTo(xPos(lastR.gen), baseY);
+      const last = runningBest[runningBest.length - 1];
+      ctx.lineTo(xPos(last.gen), baseY);
       ctx.closePath();
       ctx.fill();
     }
 
-    // Line connecting records
+    // Running-best line: diagonal when improving, horizontal when flat
     ctx.strokeStyle = '#059669';
     ctx.lineWidth = 2;
     ctx.lineJoin = 'round';
     ctx.beginPath();
-    records.forEach((r, i) => {
-      const rx = xPos(r.gen);
-      const ry = yPos(r.score);
+    runningBest.forEach((rb, i) => {
+      const rx = xPos(rb.gen);
+      const ry = yPos(rb.score);
       if (i === 0) ctx.moveTo(rx, ry);
       else ctx.lineTo(rx, ry);
     });
@@ -837,8 +980,9 @@ function redrawChart() {
     prog.sort((a, b) => a.gen - b.gen);
   }
 
-  const chartData = buildChartData(solutionsData, prog, hib, sv);
-  drawChart(chartData, c.target_score, hib, bl, c.decimals || 4);
+  const dec = c.decimals || 4;
+  const chartData = buildChartData(solutionsData, prog, hib, sv, dec);
+  drawChart(chartData, c.target_score, hib, bl, dec);
 }
 
 // Chart redraws on data refresh, not on window resize
@@ -1270,6 +1414,12 @@ async function loadActiveAgents() {
   if (!data) return;
   activeAgentsData = data;
 
+  // Render run_state agents + errors from cached overview
+  const rs = overviewData?.run_state;
+  renderRunStateAgents(rs?.agents);
+  renderPipelineErrors(rs?.errors);
+  rescheduleRefresh(loadActiveAgents, 'agent');
+
   const container = document.getElementById('liveAgentsContainer');
   const empty = document.getElementById('liveAgentsEmpty');
   const status = document.getElementById('liveAgentStatus');
@@ -1444,7 +1594,7 @@ function openKnowledgeModal(kind, itemId) {
 
 // ----- Init -----
 loadOverview();
-refreshTimer = setInterval(loadOverview, 60000);
+refreshTimer = setInterval(loadOverview, getRefreshInterval());
 
 // Manual refresh button
 document.getElementById('refreshBtn')?.addEventListener('click', () => {

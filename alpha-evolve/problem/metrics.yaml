@@ -19,7 +19,7 @@ target_score: 1.50261
 specs:
   fitness:
     description: C constant in first autocorrelation inequality
-    decimals: 4                    # Decimal places for all score formatting
+    decimals: 6                    # Decimal places for all score formatting
     is_primary: true               # Primary metric — drives rankings and target comparison
     higher_is_better: false        # false = minimize (lower C is better)
     lower_bound: 1.28              # Theoretical best achievable (for agent context)

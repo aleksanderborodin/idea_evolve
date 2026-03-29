@@ -1,38 +1,40 @@
 # Population Summary
 
-Total solutions: 22
-Valid solutions: 22
-Best fitness: 1.5032 (lower is better)
-Average fitness: 1.5108
+Total solutions: 58
+Valid solutions: 58
+Best fitness: 0.000000 (lower is better)
+Average fitness: 1.483013
 
 ## By Agent Type
 
 ### exploit
-- Count: 4
-- Best: 1.5091
-- Avg: 1.5100
-  - gen003/exploit_1/sol02.py: fitness 1.5091
-  - gen003/exploit_1/sol01.py: fitness 1.5093
-  - gen002/exploit_1/sol01.py: fitness 1.5107
+- Count: 17
+- Best: 0.000000
+- Avg: 1.418228
+  - gen009/exploit_2/sol01.py: fitness 0.000000
+  - gen011/exploit_2/sol01.py: fitness 1.502863
+  - gen010/exploit_1/sol01.py: fitness 1.502863
 
 ### explore
-- Count: 13
-- Best: 1.5090
-- Avg: 1.5128
-  - gen003/explore_2/sol01.py: fitness 1.5090
-  - gen002/explore_1/sol03.py: fitness 1.5091
-  - gen003/explore_2/sol03.py: fitness 1.5091
+- Count: 25
+- Best: 1.502863
+- Avg: 1.513519
+  - gen011/explore_1/sol01.py: fitness 1.502863
+  - gen010/explore_2/sol01.py: fitness 1.502863
+  - gen010/explore_1/sol01.py: fitness 1.502863
 
 ### full
-- Count: 1
-- Best: 1.5175
-- Avg: 1.5175
-  - gen002/full_1/sol01.py: fitness 1.5175
+- Count: 6
+- Best: 1.502863
+- Avg: 1.505309
+  - gen007/full_1/sol04.py: fitness 1.502863
+  - gen007/full_1/sol03.py: fitness 1.502863
+  - gen007/full_1/sol02.py: fitness 1.502863
 
 ### research
-- Count: 4
-- Best: 1.5032
-- Avg: 1.5032
-  - gen003/research_1/sol01.py: fitness 1.5032
-  - gen003/research_1/sol01.py: fitness 1.5032
-  - gen003/research_1/sol01.py: fitness 1.5032
+- Count: 10
+- Best: 1.502863
+- Avg: 1.503503
+  - gen004/research_1/sol01.py: fitness 1.502863
+  - gen003/research_1/sol01.py: fitness 1.503164
+  - gen003/research_1/sol01.py: fitness 1.503164

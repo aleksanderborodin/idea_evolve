@@ -15,5 +15,6 @@ In your report, answer:
 6. **Specific experiments to run?** Describe concretely what to test and how.
 7. **What surprised you?** Unexpected results, behaviors, or discoveries.
 8. **Helper tools feedback.** Did you use any helpers from `problem/helpers/`? Were they correct and useful? Did you find bugs or misleading docstrings? What helper tool do you wish existed that would have saved you significant time?
+9. **Time budget.** Did you have enough time to finish your work? If you had more time, what specifically would you have done next?
 
 Write this report BEFORE you finish your session.

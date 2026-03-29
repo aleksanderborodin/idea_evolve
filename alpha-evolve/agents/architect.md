@@ -94,10 +94,9 @@ parallel_groups:
 - `timeout` — (Optional) Session timeout in seconds. Agents killed after this. Use timing data from previous generations to set appropriate values. Default: 900s. Set higher for complex exploit/genetic work, lower for research.
 
 **Parallel groups:**
-- `parallel_groups` — A list of lists. Each inner list contains agent names as `"type_instance"` strings.
-- Groups are executed **sequentially** (group 1 finishes before group 2 starts).
-- Agents **within** a group run in parallel.
-- If omitted, all agents run in one parallel group.
+- All agents in a generation run in one parallel group. They do not communicate with each other.
+- Agent results (solutions, knowledge, reports) are collected by the Evaluator and feed into the **next generation** — not the current one.
+- Do not write `parallel_groups` in the manifest. The orchestrator ignores it and runs all agents simultaneously.
 
 ### 2. Per-Instance Briefs — `type_instance.md`
 
@@ -133,6 +132,30 @@ A document explaining your decisions for this generation. This is read by future
 - What timeout values you chose and why (reference timing data).
 - What you deliberately chose NOT to do this generation and why.
 - Risks and contingencies.
+
+### 4. `architect_report.md` — Debrief
+
+Write this LAST, after all other files are complete. It is your debrief — distinct from
+`manifest_reasoning.md` (which covers strategy). This covers what you observed and what
+concerns you. The orchestrator routes it to `reports/genNNN/` where the **System Critic**
+and **next Architect** will read it automatically.
+
+Include:
+
+- **Data anomalies**: Anything surprising in scores, clusters, coverage, or agent reports
+  that doesn't fit the expected trajectory. Plateaus, regressions, sudden jumps, clusters
+  that seem wrong.
+- **Confidence**: High / Medium / Low — how confident are you in this generation's plan,
+  and specifically why. Low confidence = something felt off about the data or the plan.
+- **What didn't fit**: Things you noticed but had no agent capacity to address. Ideas that
+  seemed important but didn't make the manifest.
+- **Strategic risks**: What could go wrong with this generation's plan? What would make
+  you regret the decisions you made?
+- **Open questions for the System Critic**: Anything the pipeline level needs to investigate
+  that is beyond what a single generation's agents can resolve.
+
+Be direct and honest. A confident plan poorly explained is less useful than an uncertain
+plan with clearly articulated risks.
 
 ---
 
@@ -190,6 +213,31 @@ imported as `from helpers.core import compute_c`. Additional shared helpers crea
 experimentator agents also live in `problem/helpers/` and are documented in `helpers/README.md`.
 Do not tell agents to modify any file in `problem/helpers/` directly — helpers are deployed
 by the orchestrator after experimentator validation.
+
+### Strategic Diversity — Avoid Incrementalism Trap
+
+The biggest risk in evolutionary optimization is converging prematurely on a local optimum
+and spending all remaining generations making tiny refinements. Fight this actively:
+
+- **At least one agent per generation must try something fundamentally different** — not a
+  tweak to the current best, but a completely different mathematical framework, construction
+  method, or problem decomposition. Examples: if all current solutions use gradient descent,
+  try combinatorial construction. If all use continuous optimization, try discrete search.
+  If all optimize the same objective reformulation, try a different reformulation entirely.
+- **Radical exploration budget:** Dedicate at least 25% of agents to approaches that have
+  NO overlap with the current top solutions. These may score worse initially — that's fine.
+  Breakthroughs come from unexpected directions.
+- **Challenge assumptions.** If the knowledge base says "approach X doesn't work," ask whether
+  it was tested properly. Assign an explore agent to revisit debunked ideas with a fresh angle.
+- **Cross-pollinate from research.** If research agents found relevant techniques from other
+  domains (papers, theoretical results), assign explore/full agents to actually implement them —
+  don't just log the findings.
+- **Detect the incrementalism trap:** If the last 3+ generations all used exploit-heavy strategies
+  and score improvement is < 0.1%, you are stuck. Flip the ratio: 3-4 explores with radical
+  directions, at most 1 exploit to maintain the best.
+- **Use genetic crossover creatively.** Don't just blend two similar solutions — cross solutions
+  from completely different clusters or approaches. The most interesting offspring come from
+  dissimilar parents.
 
 ### General Balancing
 
@@ -282,6 +330,7 @@ Before finalizing your output, verify:
 - [ ] Experimentator briefs state a question, methodology, and relevant files.
 - [ ] All file paths in briefs are absolute (using project root).
 - [ ] `manifest_reasoning.md` explains the rationale for every instance.
+- [ ] `architect_report.md` written with confidence level, anomalies, risks, and open questions.
 - [ ] Total instance count is between 3 and 8.
 - [ ] At least 1 explore instance is included (unless target is reached).
 - [ ] Parallel groups use `"type_instance"` format (e.g., `"explore_1"`, `"exploit_2"`).
@@ -292,5 +341,7 @@ Before finalizing your output, verify:
 ## Output Location
 
 Write all files to the briefs directory specified in the CONTEXT section below.
+`architect_report.md` is also written there — the orchestrator copies it to `reports/genNNN/`
+so the System Critic and next Architect receive it automatically.
 
 Begin by reading all inputs listed in the "What You Read" section (using the absolute paths from CONTEXT). Then produce your plan.
