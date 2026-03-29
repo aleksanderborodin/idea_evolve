@@ -1,47 +1,53 @@
 import numpy as np
 
 
-def validate(f_values):
-    f_values = np.asarray(f_values, dtype=float)
+# Problem parameters
+N = 8   # permutation length
+D = 5   # minimum Hamming distance
 
-    if f_values.ndim != 1:
-        raise ValueError(f"Expected 1D array, got shape {f_values.shape}")
 
-    if f_values.size == 0:
-        raise ValueError("Array cannot be empty")
+def validate(perms):
+    perms = np.asarray(perms, dtype=int)
 
-    if not np.all(np.isfinite(f_values)):
-        raise ValueError("Some values are NaN or infinite")
+    if perms.ndim != 2:
+        raise ValueError(f"Expected 2D array, got shape {perms.shape}")
 
-    if np.any(f_values < -1e-6):
+    K, n = perms.shape
+
+    if K == 0:
+        raise ValueError("Code cannot be empty")
+
+    if n != N:
+        raise ValueError(f"Permutation length must be {N}, got {n}")
+
+    # Check each row is a valid permutation of {0, ..., N-1}
+    expected = np.arange(N)
+    for i in range(K):
+        if not np.array_equal(np.sort(perms[i]), expected):
+            raise ValueError(
+                f"Row {i} is not a valid permutation of {{0,...,{N-1}}}: {perms[i]}"
+            )
+
+    # Check for duplicate rows
+    unique_rows = set(map(tuple, perms))
+    if len(unique_rows) < K:
         raise ValueError(
-            f"Function must be non-negative. Minimum value: {np.min(f_values):.2e}"
+            f"Duplicate permutations found: {K} rows but only {len(unique_rows)} unique"
         )
 
-    if np.all(np.abs(f_values) < 1e-12):
-        raise ValueError("Function is identically zero (trivial solution)")
+    # Check all pairwise Hamming distances >= D
+    # Vectorized: compare all pairs
+    min_dist = N  # max possible distance
+    for i in range(K):
+        # Compare row i with all rows j > i
+        if i + 1 < K:
+            dists = np.sum(perms[i] != perms[i + 1:], axis=1)
+            pair_min = np.min(dists)
+            if pair_min < D:
+                j = i + 1 + np.argmin(dists)
+                raise ValueError(
+                    f"Hamming distance between rows {i} and {j} is {pair_min} < {D}"
+                )
+            min_dist = min(min_dist, pair_min)
 
-    domain_width = 0.5
-    dx = domain_width / len(f_values)
-
-    f_nonneg = np.maximum(f_values, 0.0)
-
-    integral_f = np.sum(f_nonneg) * dx
-
-    if integral_f**2 < 1e-9:
-        raise ValueError("Function integral is close to zero, ratio is unstable.")
-
-    N = len(f_values)
-    padded_f = np.pad(f_nonneg, (0, N))
-    fft_f = np.fft.fft(padded_f)
-    conv_f_f = np.fft.ifft(fft_f * fft_f).real
-
-    scaled_conv = conv_f_f * dx
-    max_conv = np.max(scaled_conv)
-
-    c1 = max_conv / (integral_f**2)
-
-    if not np.isfinite(c1) or c1 <= 0:
-        raise ValueError(f"Invalid C₁ value: {c1}")
-
-    return {"fitness": c1, "is_valid": 1}
+    return {"fitness": int(K), "is_valid": 1, "min_distance": int(min_dist)}

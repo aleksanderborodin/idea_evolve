@@ -4,35 +4,12 @@ All reusable helpers live here. Import them in solution files as:
 
     from helpers.<module> import <function>
 
-`evaluate.py` adds `problem/` to `sys.path`, so `helpers/` is directly importable.
+## Available Helpers
 
----
-
-## Built-in helpers
-
-### `core.py` — Problem-specific core helper
-
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `compute_c` | `(f_values: jnp.ndarray) -> float` | JAX-based, differentiable. Computes C = max(f★f) / (∫f)² via FFT. |
-
-Import: `from helpers.core import compute_c`
-
----
-
-## Experimentator-created helpers
-
-Helpers built by experimentator agents and validated by the orchestrator appear below once deployed.
-
-*(none yet)*
-
----
-
-## How helpers are added
-
-Experimentator agents write helpers to `output/helpers/<name>.py`. The orchestrator:
-1. Validates syntax, checks import blocklist, verifies no top-level side effects.
-2. Deploys the file here as `problem/helpers/<name>.py`.
-3. Updates this README and the orchestrator's `_helpers_section()` prompt.
-
-Do **not** add files directly to this directory — always go through the experimentator workflow.
+### core.py — Permutation code utilities
+- `hamming_distance(p, q)` → int: Hamming distance between two permutations
+- `min_distance(perms)` → int: Minimum pairwise distance in a code
+- `check_code(perms, d)` → (bool, int): Validate code and return size
+- `pairwise_distances(perms)` → np.ndarray: Full distance matrix (K×K)
+- `compatible_permutations(perms, d, n=8)` → np.ndarray: All perms of {0,...,n-1}
+  compatible with existing code (WARNING: enumerates all n! permutations, slow for n>8)

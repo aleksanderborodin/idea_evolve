@@ -99,7 +99,12 @@
       "Bash(find /home/sasha/Desktop/project_alpha -path */user/* -type f)",
       "Bash(pstree -p 78205)",
       "Bash(ps --ppid 78205)",
-      "Bash(for f:*)"
+      "Bash(for f:*)",
+      "WebSearch",
+      "WebFetch(domain:webspace.maths.qmul.ac.uk)",
+      "WebFetch(domain:oeis.org)",
+      "Bash(curl -L -o /tmp/permcode.pdf \"https://webspace.maths.qmul.ac.uk/l.h.soicher/designtheory.org/library/preprints/permcode.pdf\" --connect-timeout 30 --max-time 120)",
+      "WebFetch(domain:scholar.google.com)"
     ],
     "additionalDirectories": [
       "/home/sasha/Desktop/project_alpha/alpha-evolve/papers/pdf",

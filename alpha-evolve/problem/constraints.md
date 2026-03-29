@@ -1,26 +1,27 @@
 # Constraints
 
 ## Hard Constraints
-- Function must be non-negative: f(x) ≥ 0 for all x
-- All values must be finite real numbers (no NaN or infinity)
-- Function must not be identically zero (∫f > 0)
-- Represented as 1D NumPy array of float values
+- Each row must be a valid permutation of {0, 1, ..., n-1} (n=8)
+- All pairwise Hamming distances must be ≥ d (d=5)
+- No duplicate rows (each permutation appears at most once)
+- All values must be integers in range [0, n-1]
+- Array must be 2D with shape (K, n) where K ≥ 1
 
 ## Soft Constraints
-- Use numpy, jax, scipy, or standard library
+- Use numpy, scipy, itertools, or standard library
 - Fix random seeds for reproducibility
 - Solutions must implement `def entrypoint() -> np.ndarray`
-- Higher resolution (larger N) generally gives better results but slower computation
+- Prefer constructions that run in under 30 seconds
 
 ## Environment
 - Python 3.12
 - NumPy available
 - SciPy available
-- JAX + optax available
+- itertools, collections, functools available
 - Standard library available
 
-## Autoconvolution Details
-- Domain: [-1/4, 1/4], width = 0.5
-- dx = 0.5 / N (inferred from array length)
-- Autoconvolution computed via FFT with zero-padding
-- C = max(f ★ f * dx) / (sum(f) * dx)²
+## Problem Parameters
+- n = 8 (permutation length)
+- d = 5 (minimum Hamming distance)
+- Total permutations: 8! = 40320
+- Known bounds: 616 ≤ M(8,5) ≤ 926

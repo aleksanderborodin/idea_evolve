@@ -231,3 +231,31 @@ Files modified since gen 10:
 - knowledge/experiments/gen011/experimentator_1/sandbox/scripts/test_topk_screened_cd.py
 - knowledge/experiments/gen011/experimentator_1/sandbox/scripts/topk_screened_cd.py
 - knowledge/experiments/gen011/experimentator_1/sandbox/scripts/__pycache__/topk_screened_cd.cpython-312.pyc
+
+## Generation 12
+Files modified since gen 11:
+- knowledge/state_of_affairs.md
+- knowledge/clusters/cluster_001.md
+- knowledge/clusters/cluster_003.md
+- knowledge/patterns/active/pattern_029.md
+- knowledge/patterns/active/pattern_031.md
+- knowledge/patterns/active/pattern_030.md
+- knowledge/patterns/active/pattern_032.md
+- knowledge/patterns/active/pattern_033.md
+- knowledge/ideas/active/pattern_026.md
+- knowledge/ideas/active/pattern_025.md
+- knowledge/ideas/active/pattern_028.md
+- knowledge/ideas/active/idea_025.md
+- knowledge/ideas/established/idea_024.md
+- knowledge/ideas/established/idea_019.md
+- knowledge/ideas/established/idea_016.md
+- knowledge/ideas/established/idea_014.md
+- knowledge/ideas/archived/idea_007.md
+- knowledge/experiments/gen012/experimentator_1/observations.md
+- knowledge/experiments/gen012/experimentator_1/experiment_results.md
+- knowledge/experiments/gen012/experimentator_1/sandbox/scripts/exp1_compounding.py
+- knowledge/experiments/gen012/experimentator_1/sandbox/scripts/exp3_topk_validation.py
+- knowledge/experiments/gen012/experimentator_1/sandbox/scripts/extract_array.py
+- knowledge/experiments/gen012/experimentator_1/sandbox/scripts/exp2_triplets.py
+- knowledge/experiments/gen012/experimentator_1/sandbox/data/best_array.npy
+- agents/architect.md

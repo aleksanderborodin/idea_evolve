@@ -180,15 +180,6 @@ When the population has converged too tightly (low diversity, or score history s
 - Consider an experimentator to investigate why the plateau exists.
 - In each explore brief, explicitly forbid the directions that are already saturated (reference the coverage matrix).
 
-### Close to Target
-
-When the best score is within 10% of the target:
-
-- Shift heavily toward exploit instances (2-3 exploits).
-- Each exploit should refine a different top-scoring solution.
-- Keep 1 explore as a hedge against local optima.
-- Consider a genetic instance crossing the two best solutions.
-- Set higher timeouts for exploit/genetic agents — they need more iterations.
 
 ### Open Questions Identified
 
@@ -214,24 +205,56 @@ experimentator agents also live in `problem/helpers/` and are documented in `hel
 Do not tell agents to modify any file in `problem/helpers/` directly — helpers are deployed
 by the orchestrator after experimentator validation.
 
-### Strategic Diversity — Avoid Incrementalism Trap
+### MANDATORY: Two-Track Strategy (applies EVERY generation after gen 1)
 
-The biggest risk in evolutionary optimization is converging prematurely on a local optimum
-and spending all remaining generations making tiny refinements. Fight this actively:
+You have two jobs every generation. Both are mandatory. No exceptions.
 
-- **At least one agent per generation must try something fundamentally different** — not a
-  tweak to the current best, but a completely different mathematical framework, construction
-  method, or problem decomposition. Examples: if all current solutions use gradient descent,
-  try combinatorial construction. If all use continuous optimization, try discrete search.
-  If all optimize the same objective reformulation, try a different reformulation entirely.
-- **Radical exploration budget:** Dedicate at least 25% of agents to approaches that have
-  NO overlap with the current top solutions. These may score worse initially — that's fine.
-  Breakthroughs come from unexpected directions.
+**Track A — Directed exploitation (your choice of agents).**
+This is where you command and steer: refine the best solutions, test incremental variations,
+run experiments on known techniques. Use exploit, genetic, experimentator, or focused explore
+agents. You decide the mix based on the current situation.
+
+**Track B — Radical exploration (minimum 1 explore + 1 research, mandatory).**
+These agents exist to find something **completely new**. They are NOT under your strategic
+direction — their job is to surprise you. The rules for Track B agents:
+
+1. **The explore agent MUST NOT start from the current best solution or any file in
+   `population/top/` or `population/best.py`.** It must construct or initialize its solution
+   from scratch — a different mathematical framework, a different construction method, a
+   different starting point. If every current solution uses array X as a warm-start, this
+   agent must NOT use array X.
+2. **The explore agent MUST NOT refine, tweak, or extend the current best technique.** If
+   the system is doing coordinate descent, this agent does something that is not coordinate
+   descent. If the system is doing pairwise perturbations, this agent does not do pairwise
+   perturbations. It tries a genuinely orthogonal approach.
+3. **The research agent surveys the problem domain for ideas the system has never tried.**
+   It reads academic papers, explores mathematical theory, searches for related problems
+   and their solutions. Its deliverable is a findings report with concrete actionable
+   approaches — not vague suggestions.
+4. **Do not judge Track B agents by whether they beat the current best.** A score of 1.51
+   from a completely new approach is more valuable than a score of 1.5028 from yet another
+   CD variant. Track B agents are searching for new basins of attraction.
+5. **In the explore brief, explicitly state: "This is a Track B radical exploration. You
+   must NOT use [current dominant technique/starting point]. Start from scratch."**
+6. **In the research brief, explicitly state: "This is a Track B research mission. Find
+   approaches the system has never tried. Read the coverage matrix and dead ends list to
+   know what has been tried. Look for ideas from adjacent fields, recent papers, or
+   mathematical theory that could apply."**
+
+If the research agent from a previous generation found promising new approaches, **at least
+one Track B explore agent in the current generation must attempt to implement one of them.**
+Research findings that sit unimplemented for 2+ generations are wasted compute.
+
+**Why this matters:** The knowledge base, state of affairs, and clusters all describe what
+the system has already tried. They create a gravity well that pulls every agent toward
+incremental refinement. Track B agents exist to escape that gravity. If you skip them or
+water them down (e.g., "explore triplets instead of pairs" — that's still Track A), you
+are wasting the system's ability to find breakthroughs.
+
+### Additional Diversity Guidelines
+
 - **Challenge assumptions.** If the knowledge base says "approach X doesn't work," ask whether
-  it was tested properly. Assign an explore agent to revisit debunked ideas with a fresh angle.
-- **Cross-pollinate from research.** If research agents found relevant techniques from other
-  domains (papers, theoretical results), assign explore/full agents to actually implement them —
-  don't just log the findings.
+  it was tested properly. Assign a Track B explore to revisit debunked ideas with a fresh angle.
 - **Detect the incrementalism trap:** If the last 3+ generations all used exploit-heavy strategies
   and score improvement is < 0.1%, you are stuck. Flip the ratio: 3-4 explores with radical
   directions, at most 1 exploit to maintain the best.
