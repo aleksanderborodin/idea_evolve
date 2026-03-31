@@ -104,7 +104,18 @@
       "WebFetch(domain:webspace.maths.qmul.ac.uk)",
       "WebFetch(domain:oeis.org)",
       "Bash(curl -L -o /tmp/permcode.pdf \"https://webspace.maths.qmul.ac.uk/l.h.soicher/designtheory.org/library/preprints/permcode.pdf\" --connect-timeout 30 --max-time 120)",
-      "WebFetch(domain:scholar.google.com)"
+      "WebFetch(domain:scholar.google.com)",
+      "Bash(./run_tests)",
+      "Bash(./run_benchmarks --benchmark_format=json --benchmark_out=baseline.json)",
+      "Bash(/tmp/test_harness --bench --benchmark_format=json)",
+      "Bash(kill -9 71792 71793 76413 76415 76459 76522 76523 76525 76526 76543 76545)",
+      "Bash(./run_benchmarks --benchmark_format=json --benchmark_out=../baseline_with_v0.json)",
+      "Bash(dpkg -l)",
+      "Bash(rm -f history/eval_cache.json)",
+      "Bash(python3 problem/evaluate.py problem/initial_programs/optimize.py)",
+      "Read(//sys/fs/cgroup/**)",
+      "Read(//sys/fs/cgroup/benchmark/**)",
+      "Bash(for i:*)"
     ],
     "additionalDirectories": [
       "/home/sasha/Desktop/project_alpha/alpha-evolve/papers/pdf",

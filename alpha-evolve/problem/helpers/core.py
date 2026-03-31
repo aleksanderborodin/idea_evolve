@@ -1,114 +1,100 @@
 """
-Core helpers for Permutation Codes problem.
+Helper utilities for the binary-ternary GEMM optimization problem.
 
-Usage:
-    from helpers.core import hamming_distance, check_code, min_distance, pairwise_distances
+Import: from helpers.core import compile_and_test, read_baseline_times
 """
 
-import numpy as np
+import json
+import os
+import subprocess
+import tempfile
+import uuid
+from pathlib import Path
+
+FAST_CONV = Path(__file__).resolve().parent.parent.parent.parent / "fast-conv"
+BASELINE_JSON = FAST_CONV / "baseline.json"
+
+CXX = "g++"
+CXXFLAGS = [
+    "-O3", "-std=c++17", "-march=native",
+    "-mavx512f", "-mavx512bw", "-mavx512vl",
+    "-mavx512vpopcntdq", "-mavx512bitalg", "-mavx512vnni",
+]
 
 
-def hamming_distance(p, q):
-    """Hamming distance between two permutations (number of differing positions)."""
-    p = np.asarray(p, dtype=int)
-    q = np.asarray(q, dtype=int)
-    return int(np.sum(p != q))
-
-
-def min_distance(perms):
-    """Minimum pairwise Hamming distance in a set of permutations.
-
-    Args:
-        perms: 2D array of shape (K, n), each row a permutation.
-
-    Returns:
-        int: minimum Hamming distance between any two distinct rows.
+def compile_and_test(cpp_code: str) -> dict:
     """
-    perms = np.asarray(perms, dtype=int)
-    K = perms.shape[0]
-    if K < 2:
-        return perms.shape[1]  # vacuously maximum
-
-    best = perms.shape[1]
-    for i in range(K):
-        dists = np.sum(perms[i] != perms[i + 1:], axis=1)
-        if len(dists) > 0:
-            best = min(best, int(np.min(dists)))
-    return best
-
-
-def check_code(perms, d):
-    """Check if a permutation code is valid.
-
-    Args:
-        perms: 2D array of shape (K, n), each row a permutation.
-        d: required minimum Hamming distance.
-
-    Returns:
-        (is_valid, code_size): tuple of (bool, int).
+    Quick compile + correctness check only (no benchmark).
+    Returns {"ok": True} or {"ok": False, "error": "..."}.
     """
-    perms = np.asarray(perms, dtype=int)
-    K, n = perms.shape
-    expected = np.arange(n)
+    uid = uuid.uuid4().hex[:8]
+    candidate_path = f"/tmp/gemm_test_{uid}.cpp"
+    binary_path = f"/tmp/gemm_test_{uid}"
 
-    # Check permutation validity
-    for i in range(K):
-        if not np.array_equal(np.sort(perms[i]), expected):
-            return False, 0
+    try:
+        with open(candidate_path, "w") as f:
+            f.write(cpp_code)
 
-    # Check uniqueness
-    if len(set(map(tuple, perms))) < K:
-        return False, 0
+        result = subprocess.run(
+            [CXX] + CXXFLAGS + [
+                candidate_path,
+                str(FAST_CONV / "bench_harness.cpp"),
+                str(FAST_CONV / "util" / "encoder.cpp"),
+                str(FAST_CONV / "gemm" / "baseline.cpp"),
+                "-lbenchmark", "-lpthread",
+                "-o", binary_path,
+            ],
+            capture_output=True, text=True, timeout=30,
+        )
 
-    # Check minimum distance
-    if min_distance(perms) < d:
-        return False, 0
+        if result.returncode != 0:
+            return {"ok": False, "error": f"Compilation failed:\n{result.stderr[:1500]}"}
 
-    return True, K
+        check = subprocess.run(
+            [binary_path, "--check"],
+            capture_output=True, text=True, timeout=60,
+        )
+
+        if check.returncode != 0:
+            return {"ok": False, "error": f"Correctness failed:\n{check.stderr[:1000]}"}
+
+        return {"ok": True}
+
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "Timeout during compile or test"}
+    finally:
+        for p in [candidate_path, binary_path]:
+            try:
+                os.unlink(p)
+            except FileNotFoundError:
+                pass
 
 
-def pairwise_distances(perms):
-    """Compute all pairwise Hamming distances.
-
-    Args:
-        perms: 2D array of shape (K, n), each row a permutation.
-
-    Returns:
-        np.ndarray of shape (K, K): distance matrix.
+def read_baseline_times() -> dict:
     """
-    perms = np.asarray(perms, dtype=int)
-    K, n = perms.shape
-    dist = np.zeros((K, K), dtype=int)
-    for i in range(K):
-        dist[i, i + 1:] = np.sum(perms[i] != perms[i + 1:], axis=1)
-    dist += dist.T
-    return dist
-
-
-def compatible_permutations(perms, d, n=8):
-    """Find all permutations of {0,...,n-1} compatible with a given code.
-
-    A permutation p is compatible if hamming_distance(p, q) >= d for all q in perms.
-
-    Args:
-        perms: 2D array of shape (K, n), existing code.
-        d: minimum Hamming distance.
-        n: permutation length.
-
-    Returns:
-        np.ndarray of shape (M, n): all compatible permutations.
+    Returns baseline V14opt times in microseconds per benchmark size.
+    Example: {"32x1024x9": 15.78, "64x16384x27": 911.64, "128x65536x54": 12422.36}
     """
-    from itertools import permutations as iter_perms
+    if not BASELINE_JSON.exists():
+        return {}
 
-    perms = np.asarray(perms, dtype=int)
-    result = []
+    data = json.loads(BASELINE_JSON.read_text())
+    times = {}
 
-    for p in iter_perms(range(n)):
-        p_arr = np.array(p, dtype=int)
-        dists = np.sum(p_arr != perms, axis=1)
-        if np.all(dists >= d):
-            result.append(p_arr)
+    for b in data["benchmarks"]:
+        if (b.get("aggregate_name") == "mean"
+                and b["run_type"] == "aggregate"
+                and "gemmV14_BLIS_SingleThread_Optimized" in b.get("run_name", "")):
+            parts = b["run_name"].split("/")
+            size_parts = []
+            for p in parts[1:]:
+                cleaned = p.split("_")[0]
+                if cleaned.isdigit():
+                    size_parts.append(cleaned)
+                if len(size_parts) == 3:
+                    break
+            if len(size_parts) == 3:
+                key = f"{size_parts[0]}x{size_parts[1]}x{size_parts[2]}"
+                times[key] = round(b["cpu_time"], 2)
 
-    if result:
-        return np.array(result)
-    return np.empty((0, n), dtype=int)
+    return times

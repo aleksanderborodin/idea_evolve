@@ -484,6 +484,7 @@ def launch_claude_session(
         session_id = str(uuid.uuid4())
 
     cmd = [
+        "taskset", "-c", "2-7",
         "npx", "@anthropic-ai/claude-code",
         "--print",
         "--model", model_id,
@@ -518,6 +519,7 @@ def resume_claude_session(
     model_id = MODEL_MAP.get(model, model)
 
     cmd = [
+        "taskset", "-c", "2-7",
         "npx", "@anthropic-ai/claude-code",
         "--print",
         "--resume", session_id,

@@ -1,43 +1,36 @@
-# =============================================================================
-# Problem Metrics — Permutation Codes M(8,5)
-# =============================================================================
-# Maximize the size of a permutation code with length 8 and min distance 5.
-
 track_eval_time: true
-
-# Target: beat the best known lower bound of 616 (Smith & Montemanni 2012)
-target_score: 617
+target_score: 24.0
 
 specs:
   fitness:
-    description: Code size (number of codewords/permutations)
-    decimals: 0
+    description: "Geometric median time (µs) across 3 matrix sizes — lower is better. V14opt baseline: ~770 µs. NEW TARGET: 24 µs (~3% of baseline). Previous 477 µs target was already beaten — this is the real goal now."
+    decimals: 2
     is_primary: true
-    higher_is_better: true       # Maximize code size
-    lower_bound: 1               # Minimum valid code has 1 permutation
-    upper_bound: 926             # Theoretical upper bound from LP
-    include_in_prompts: true
-    significant_change: 1        # Any additional codeword is significant
-    sentinel_value: 0            # Returned on evaluation error
-
-  is_valid:
-    description: Whether the code satisfies all constraints (1 valid, 0 invalid)
-    decimals: 0
-    is_primary: false
-    higher_is_better: true
+    higher_is_better: false
     lower_bound: 0.0
-    upper_bound: 1.0
+    upper_bound: 100000.0
     include_in_prompts: true
-    significant_change: 1.0
+    significant_change: 10.0
+    sentinel_value: 100000.0
+  is_valid:
+    description: "Correctness — 1 if output matches reference gemmV0 on all test sizes"
+    higher_is_better: true
     sentinel_value: 0
-
-  min_distance:
-    description: Minimum pairwise Hamming distance in the code
-    decimals: 0
-    is_primary: false
-    higher_is_better: false      # We want exactly d=5, not higher
-    lower_bound: 5
-    upper_bound: 8
+  time_small:
+    description: "Time (µs) on 32x1024x16 — V14opt: 15.78, V19: 19.51"
+    decimals: 2
+    higher_is_better: false
     include_in_prompts: true
-    significant_change: 1
-    sentinel_value: 0
+    sentinel_value: 100000.0
+  time_medium:
+    description: "Time (µs) on 64x16384x32 — V14opt: 911.64, V19: 1229.37"
+    decimals: 2
+    higher_is_better: false
+    include_in_prompts: true
+    sentinel_value: 100000.0
+  time_large:
+    description: "Time (µs) on 128x65536x56 — V14opt: 12422.36, V19: 14987.16"
+    decimals: 2
+    higher_is_better: false
+    include_in_prompts: true
+    sentinel_value: 100000.0

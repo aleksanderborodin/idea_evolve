@@ -472,7 +472,9 @@ def get_initial_scores() -> list[dict]:
         results.append({
             "file": sol.name,
             "score": result.get("fitness") if result else None,
-            "is_valid": result.get("is_valid", 0) if result else 0,
+            # Initial programs are assumed valid — if they have a fitness score,
+            # it came from a successful evaluation
+            "is_valid": result.get("is_valid", 1) if result else 0,
         })
     return results
 

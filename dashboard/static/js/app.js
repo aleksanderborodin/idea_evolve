@@ -980,8 +980,15 @@ function redrawChart() {
     prog.sort((a, b) => a.gen - b.gen);
   }
 
+  // Inject initial programs as gen 0 points
+  const initPts = (overviewData.initial_scores || [])
+    .filter(x => ns(x.score) && x.is_valid)
+    .map(x => ({ gen: 0, score: x.score, agent_type: 'initial', instance: '0',
+                  file: x.file, is_valid: true, is_sentinel: false }));
+  const allSols = initPts.concat(solutionsData || []);
+
   const dec = c.decimals || 4;
-  const chartData = buildChartData(solutionsData, prog, hib, sv, dec);
+  const chartData = buildChartData(allSols, prog, hib, sv, dec);
   drawChart(chartData, c.target_score, hib, bl, dec);
 }
 

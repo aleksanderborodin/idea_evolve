@@ -1,0 +1,23 @@
+{
+  "generations": {
+    "gen001": {
+      "architect": 188.2,
+      "agent_research_1_work": 485.0,
+      "agent_research_1": 485.0,
+      "agent_explore_2_work": 1093.5,
+      "agent_explore_2_wrap_up": 69.4,
+      "agent_explore_2": 1162.9,
+      "agent_explore_1_work": 1800.1,
+      "agent_full_1_work": 1800.1,
+      "agent_full_1_wrap_up": 168.5,
+      "agent_full_1": 1968.6,
+      "agent_explore_1_wrap_up": 346.2,
+      "agent_explore_1": 2146.3,
+      "evaluator": 465.8,
+      "evaluator_debrief": 22.5,
+      "system_critic": 276.6,
+      "consistency_reviewer": 329.6,
+      "total": 3429.1
+    }
+  }
+}

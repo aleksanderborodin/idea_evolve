@@ -1,15 +1,14 @@
-# Problem Helpers
+# Available Helpers
 
-All reusable helpers live here. Import them in solution files as:
+## `helpers.core`
 
-    from helpers.<module> import <function>
+Import: `from helpers.core import compile_and_test, read_baseline_times`
 
-## Available Helpers
+### `compile_and_test(cpp_code: str) -> dict`
+Quick compile + correctness check without benchmarking.
+Returns `{"ok": True}` or `{"ok": False, "error": "..."}`.
+Use this to iterate quickly on correctness before running the full evaluation.
 
-### core.py — Permutation code utilities
-- `hamming_distance(p, q)` → int: Hamming distance between two permutations
-- `min_distance(perms)` → int: Minimum pairwise distance in a code
-- `check_code(perms, d)` → (bool, int): Validate code and return size
-- `pairwise_distances(perms)` → np.ndarray: Full distance matrix (K×K)
-- `compatible_permutations(perms, d, n=8)` → np.ndarray: All perms of {0,...,n-1}
-  compatible with existing code (WARNING: enumerates all n! permutations, slow for n>8)
+### `read_baseline_times() -> dict`
+Returns the baseline V14opt times in microseconds per benchmark size.
+Example: `{"32x1024x9": 15.78, "64x16384x27": 911.64, "128x65536x54": 12422.36}`

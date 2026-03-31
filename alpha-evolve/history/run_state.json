@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "errors": [
+    {
+      "gen": 1,
+      "phase": "agents",
+      "agent": "explore_2",
+      "type": "error",
+      "message": "Exited with code 1: no stderr",
+      "ts": "2026-03-31T14:23:50.359577+00:00"
+    },
+    {
+      "gen": 1,
+      "phase": "agents",
+      "agent": "explore_1",
+      "type": "timeout",
+      "message": "Timed out after 1800s",
+      "ts": "2026-03-31T14:35:36.950875+00:00"
+    },
+    {
+      "gen": 1,
+      "phase": "agents",
+      "agent": "full_1",
+      "type": "timeout",
+      "message": "Timed out after 1800s",
+      "ts": "2026-03-31T14:35:36.991496+00:00"
+    }
+  ],
+  "completed_gens": [
+    1
+  ],
+  "pid": 409382,
+  "started_at": "2026-03-31T14:02:28.562724+00:00",
+  "target_gen": 30,
+  "status": "stopped",
+  "current_gen": 1,
+  "current_phase": "idle",
+  "agents": {},
+  "last_updated": "2026-03-31T14:59:37.707971+00:00"
+}

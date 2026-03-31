@@ -32,9 +32,24 @@ python3 orchestrator.py . --dry-run  # show plan without launching agents
 
 Monitor a background run: `cat /tmp/gen4.log` (or `tail -f /tmp/gen4.log`).
 
-Current problem: **First Autocorrelation Inequality** (functional optimization, target C ≤ 1.5053, lower is better).
-Baseline score: **1.5185** (`problem/initial_programs/optimize.py`).
+Current problem: **Binary-Ternary GEMM Optimization** (C++ performance, geo-median time in µs, lower is better).
+Baseline score: **~770 µs** (V14opt implementation in `problem/initial_programs/optimize.py`).
+Old target of 477 µs already beaten. **NEW Target: 24 µs** (~3% of baseline, ~32x speedup).
+Benchmarks use median (not mean) for stability. Pinned to cores 0-1 via `cgexec`, serialized with file lock.
 Problem files at `alpha-evolve/problem/`. Fitness direction read from `problem/metrics.yaml`.
+Previous problem (Permutation Codes M(8,5)) archived at `alpha-evolve/problem-permcodes/`.
+
+### C++ Evaluation Pipeline
+
+Solutions are Python files where `entrypoint()` returns a **C++ source code string** defining
+`void gemmCandidate(uint8_t* A, uint8_t* B, int* C, int n, int m, int k)`.
+`validate.py` compiles the C++, checks correctness against `gemmV0`, benchmarks 3 sizes,
+and returns geometric mean speedup as fitness. Detailed per-size breakdown written to a
+sidecar file (path in `detail_file` field — agents can `cat` it for diagnostics).
+
+Target CPU: Intel i5-1135G7 (Tiger Lake) with AVX-512 (VPOPCNTDQ, BITALG, VNNI).
+Reference implementations: `fast-conv/gemm/*.cpp`. Benchmark harness: `fast-conv/bench_harness.cpp`.
+Baseline times: `fast-conv/baseline.json`.
 
 ## Dashboard
 
