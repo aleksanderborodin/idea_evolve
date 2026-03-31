@@ -4,6 +4,10 @@ Evolutionary code optimization through collaborative AI agent work sessions.
 Full system specification: `ALPHA_EVOLVE_COMPLETE_V4.md` (standalone, replicable from that doc alone).
 This file is the operational quick-reference and exhaustive issue tracker.
 
+**RULE: When you make any change to the system (code, config, architecture, bug fixes, new features,
+scaling improvements, design decisions), you MUST update this file to reflect that change.
+CLAUDE.md is the single source of truth for the current state of the system. Keep it accurate.**
+
 ## Setup
 
 ```bash

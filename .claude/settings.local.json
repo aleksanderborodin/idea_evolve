@@ -115,7 +115,10 @@
       "Bash(python3 problem/evaluate.py problem/initial_programs/optimize.py)",
       "Read(//sys/fs/cgroup/**)",
       "Read(//sys/fs/cgroup/benchmark/**)",
-      "Bash(for i:*)"
+      "Bash(for i:*)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5000/)",
+      "Bash(python3 -c \"from selenium import webdriver\")",
+      "Bash(python3 -c \"from playwright.sync_api import sync_playwright\")"
     ],
     "additionalDirectories": [
       "/home/sasha/Desktop/project_alpha/alpha-evolve/papers/pdf",
