@@ -1,10 +1,10 @@
-# Alpha Evolve
+# Idea Evolve
 
 Evolutionary code optimization through collaborative AI agent work sessions. Multiple specialized Claude agents (architects, explorers, exploiters, researchers) work in parallel to evolve increasingly better solutions to hard optimization problems.
 
 ## How It Works
 
-Alpha Evolve runs an evolutionary loop where each **generation** goes through 6 phases:
+Idea Evolve runs an evolutionary loop where each **generation** goes through 6 phases:
 
 1. **Architect** -- an AI agent analyzes the current state and plans which agents to launch
 2. **Agent Work** -- specialized agents (explore, exploit, genetic, research) run in parallel, each writing and evaluating solutions
@@ -23,8 +23,8 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# 2. Run (must cd into alpha-evolve first)
-cd alpha-evolve
+# 2. Run (must cd into idea-evolve first)
+cd idea-evolve
 python3 orchestrator.py . --single    # one generation
 python3 orchestrator.py .              # full run (30 generations)
 python3 orchestrator.py . --dry-run    # preview plan without launching
@@ -66,7 +66,7 @@ python dashboard/app.py          # http://localhost:5000
 ## Project Structure
 
 ```
-alpha-evolve/
+idea-evolve/
   orchestrator.py       # Stateless generation loop
   problem/              # Problem definition, evaluator, validators
   agents/               # Prompt templates for each agent type
@@ -81,4 +81,4 @@ images/                 # Screenshots and diagrams
 
 ## Documentation
 
-All detailed documentation, known issues, and operational notes are maintained in [CLAUDE.md](CLAUDE.md). The full system specification (architecture, agent roles, knowledge model, file formats, configuration) is in [ALPHA_EVOLVE_COMPLETE_V4.md](ALPHA_EVOLVE_COMPLETE_V4.md). Changes and updates go into CLAUDE.md only -- this README is a static overview.
+All detailed documentation, known issues, and operational notes are maintained in [CLAUDE.md](CLAUDE.md). The full system specification (architecture, agent roles, knowledge model, file formats, configuration) is in [IDEA_EVOLVE_COMPLETE_V4.md](IDEA_EVOLVE_COMPLETE_V4.md). Changes and updates go into CLAUDE.md only -- this README is a static overview.

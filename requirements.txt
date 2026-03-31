@@ -1,4 +1,4 @@
-# Alpha Evolve — Python dependencies
+# Idea Evolve — Python dependencies
 # Install: source venv/bin/activate && pip install -r requirements.txt
 
 # Core (orchestrator + problem evaluation)

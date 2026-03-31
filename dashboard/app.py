@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Alpha Evolve Dashboard — Flask web app for tracking evolutionary runs.
+Idea Evolve Dashboard — Flask web app for tracking evolutionary runs.
 
 Usage:
     source venv/bin/activate
@@ -33,7 +33,7 @@ def create_app() -> Flask:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Alpha Evolve Dashboard")
+    parser = argparse.ArgumentParser(description="Idea Evolve Dashboard")
     parser.add_argument("--port", type=int, default=5000)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--debug", action="store_true")
@@ -42,7 +42,7 @@ def main():
     from dashboard.data.config import get_project_root
     root = get_project_root()
 
-    print(f"Alpha Evolve Dashboard: http://{args.host}:{args.port}")
+    print(f"Idea Evolve Dashboard: http://{args.host}:{args.port}")
     print(f"Project root: {root}")
 
     app = create_app()

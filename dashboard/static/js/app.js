@@ -1,5 +1,5 @@
 // ======================================================================
-// Alpha Evolve Dashboard — Client Logic
+// Idea Evolve Dashboard — Client Logic
 // ======================================================================
 
 const PHASE_ORDER = ['not_started', 'planned', 'agents_running', 'agents_done', 'evaluator_running', 'evaluator_done', 'critic_running', 'critic_done', 'consistency_running', 'consistency_done', 'complete'];

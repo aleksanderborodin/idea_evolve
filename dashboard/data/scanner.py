@@ -1,6 +1,6 @@
-"""Filesystem scanning for Alpha Evolve project state.
+"""Filesystem scanning for Idea Evolve project state.
 
-Each function scans the alpha-evolve/ directory tree and returns
+Each function scans the idea-evolve/ directory tree and returns
 structured data. No caching — reads fresh on each call.
 """
 
@@ -579,7 +579,7 @@ def get_feedback() -> dict:
 # ---------------------------------------------------------------------------
 
 def get_file_tree() -> dict:
-    """Build a tree of all alpha-evolve files grouped by top-level directory."""
+    """Build a tree of all idea-evolve files grouped by top-level directory."""
     root = _root()
     tree = {}
     if not root.exists():

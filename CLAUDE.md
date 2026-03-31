@@ -1,7 +1,7 @@
-# Alpha Evolve
+# Idea Evolve
 
 Evolutionary code optimization through collaborative AI agent work sessions.
-Full system specification: `ALPHA_EVOLVE_COMPLETE_V4.md` (standalone, replicable from that doc alone).
+Full system specification: `IDEA_EVOLVE_COMPLETE_V4.md` (standalone, replicable from that doc alone).
 This file is the operational quick-reference and exhaustive issue tracker.
 
 **RULE: When you make any change to the system (code, config, architecture, bug fixes, new features,
@@ -20,13 +20,13 @@ All commands below assume the venv is active. Dependencies: `requirements.txt` a
 
 ## Running
 
-**IMPORTANT: always `cd alpha-evolve` first.** The orchestrator takes `.` as the project root
+**IMPORTANT: always `cd idea-evolve` first.** The orchestrator takes `.` as the project root
 argument. Running it from the repo root passes the wrong root and fails preflight checks
 (all required files appear missing). Log output to a file so you can monitor without blocking:
 
 ```bash
 source venv/bin/activate
-cd alpha-evolve
+cd idea-evolve
 python3 orchestrator.py . --single >> /tmp/gen4.log 2>&1 &   # background, one generation
 python3 orchestrator.py .            # full run (foreground)
 python3 orchestrator.py . --single   # one generation only (foreground)
@@ -40,8 +40,8 @@ Current problem: **Binary-Ternary GEMM Optimization** (C++ performance, geo-medi
 Baseline score: **~770 µs** (V14opt implementation in `problem/initial_programs/optimize.py`).
 Old target of 477 µs already beaten. **NEW Target: 24 µs** (~3% of baseline, ~32x speedup).
 Benchmarks use median (not mean) for stability. Pinned to cores 0-1 via `cgexec`, serialized with file lock.
-Problem files at `alpha-evolve/problem/`. Fitness direction read from `problem/metrics.yaml`.
-Previous problem (Permutation Codes M(8,5)) archived at `alpha-evolve/problem-permcodes/`.
+Problem files at `idea-evolve/problem/`. Fitness direction read from `problem/metrics.yaml`.
+Previous problem (Permutation Codes M(8,5)) archived at `idea-evolve/problem-permcodes/`.
 
 ### C++ Evaluation Pipeline
 
@@ -104,7 +104,7 @@ with `--allowedTools Read,Write,Bash,Glob,Grep`. Each agent gets a lean prompt w
 ## File Structure
 
 ```
-alpha-evolve/
+idea-evolve/
 ├── orchestrator.py          # Stateless loop (~2300 lines)
 ├── problem/                 # Problem definition (read-only for agents)
 │   ├── description.md       # Problem description (problem-agnostic)

@@ -1,4 +1,4 @@
-"""Shared helpers for parsing Alpha Evolve files."""
+"""Shared helpers for parsing Idea Evolve files."""
 
 import hashlib
 import json
@@ -9,7 +9,7 @@ import yaml
 
 def _eval_cache() -> dict:
     """Load the evaluation cache (content-hash -> result)."""
-    cache_path = Path(__file__).resolve().parent.parent.parent / "alpha-evolve" / "history" / "eval_cache.json"
+    cache_path = Path(__file__).resolve().parent.parent.parent / "idea-evolve" / "history" / "eval_cache.json"
     try:
         return json.loads(cache_path.read_text()) if cache_path.exists() else {}
     except Exception:
@@ -85,7 +85,7 @@ def extract_score(sol_path: Path) -> dict | None:
 
 def get_metrics_config() -> dict:
     """Read problem/metrics.yaml and return primary metric config."""
-    metrics_path = Path(__file__).resolve().parent.parent.parent / "alpha-evolve" / "problem" / "metrics.yaml"
+    metrics_path = Path(__file__).resolve().parent.parent.parent / "idea-evolve" / "problem" / "metrics.yaml"
     try:
         data = yaml.safe_load(metrics_path.read_text())
         specs = data.get("specs", {})

@@ -1,11 +1,11 @@
-# Project Alpha Dashboard
+# Idea Evolve Dashboard
 
-Web-based monitoring UI for Alpha Evolve evolutionary runs.
+Web-based monitoring UI for Idea Evolve evolutionary runs.
 
 ## Setup
 
 ```bash
-# From project root (project_alpha/)
+# From project root (idea_evolve/)
 source venv/bin/activate
 pip install flask pyyaml       # already in venv
 python dashboard/app.py        # http://localhost:5000
@@ -79,7 +79,7 @@ dashboard/
 ## Design Decisions
 
 - **No build step.** Plain CSS + vanilla JS. No npm, no bundler, no framework.
-- **Filesystem-based.** Backend scans `../alpha-evolve/` on each request. No database.
+- **Filesystem-based.** Backend scans `../idea-evolve/` on each request. No database.
 - **Metrics-aware.** Reads `problem/metrics.yaml` for fitness direction (`higher_is_better`),
   decimal precision, target score. All sort orders, comparisons, and display formats respect this.
 - **Multi-source score resolution.** `extract_score()` checks: `.score` sidecar file →

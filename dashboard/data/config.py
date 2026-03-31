@@ -4,8 +4,8 @@ from pathlib import Path
 
 import yaml
 
-# Alpha-evolve root (sibling of dashboard/)
-_PROJECT_ROOT = Path(__file__).parent.parent.parent / "alpha-evolve"
+# Idea-evolve root (sibling of dashboard/)
+_PROJECT_ROOT = Path(__file__).parent.parent.parent / "idea-evolve"
 
 
 def get_project_root() -> Path:
