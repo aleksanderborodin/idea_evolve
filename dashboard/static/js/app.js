@@ -175,7 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 // --- End Context Management ---
 
-const PHASE_ORDER = ['not_started', 'planned', 'agents_running', 'agents_done', 'evaluator_running', 'evaluator_done', 'critic_running', 'critic_done', 'consistency_running', 'consistency_done', 'complete'];
+const PHASE_ORDER = ['not_started', 'architect', 'planned', 'agents_running', 'agents_done', 'evaluator_running', 'evaluator_done', 'critic_running', 'critic_done', 'consistency_running', 'consistency_done', 'complete'];
 
 let overviewData = null;
 let solutionsData = null;
@@ -331,6 +331,7 @@ async function loadOverview() {
   const phaseIdx = PHASE_ORDER.indexOf(currentPhase);
   // Map running states to the phase-step they belong to
   const runningToStep = {
+    architect: 'planned',
     agents_running: 'agents_done',
     evaluator_running: 'evaluator_done',
     critic_running: 'critic_done',
@@ -394,19 +395,11 @@ async function loadOverview() {
     redrawChart();
   }
 
-  // Refresh frontier data if frontier is toggled on
-  if (showFrontier) {
-    apiFetch('/api/frontier').then(data => {
-      if (data && data.frontier) {
-        frontierData = data.frontier;
-        redrawChart();
-      }
-    });
-  }
 }
 
 function updatePipeline(currentPhase) {
   const runningToStep = {
+    architect: 'planned',
     agents_running: 'agents_done',
     evaluator_running: 'evaluator_done',
     critic_running: 'critic_done',
@@ -594,7 +587,6 @@ let chartState = null;     // Last render state for reuse (axes, padding, etc.)
 let selectedPoint = null;  // Currently clicked point
 let zoomState = { mode: 'auto', yMin: null, yMax: null };
 let showFrontier = false;  // Frontier annotation toggle
-let frontierData = null;   // Cached frontier data from /api/frontier
 
 function computeAutoRange(scores, target, baseline) {
   const vals = scores.filter(v => v != null && isFinite(v));
@@ -938,6 +930,16 @@ function drawChart(chartData, target, higherIsBetter, baseline, decimals) {
     ctx.fill();
   });
 
+  // ---- Layer 6b: Score annotations (only when annotate frontier toggled on) ----
+  if (showFrontier) {
+    records.forEach(pt => {
+      ctx.fillStyle = '#059669';
+      ctx.font = 'bold 8px JetBrains Mono, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(pt.score.toFixed(dec), pt.px, pt.py - 12);
+    });
+  }
+
   // ---- Layer 7: Selected point highlight ----
   if (selectedPoint) {
     const sp = selectedPoint;
@@ -948,70 +950,7 @@ function drawChart(chartData, target, higherIsBetter, baseline, decimals) {
     ctx.stroke();
   }
 
-  // ---- Layer 8: Frontier annotations (when toggled on) ----
-  if (showFrontier && frontierData && frontierData.length > 0) {
-    const annotWidth = 180;
-    const annotHeight = 56;
-    const stemLen = 24;
-
-    frontierData.forEach((f, i) => {
-      const px = xPos(f.gen);
-      const py = yPos(f.score);
-
-      // Alternate above/below to avoid overlap
-      const above = (i % 2 === 0);
-      const annotY = above ? py - stemLen - annotHeight : py + stemLen;
-      const annotX = Math.max(pad.left, Math.min(px - annotWidth / 2, W - pad.right - annotWidth));
-
-      // Stem line (dashed)
-      ctx.strokeStyle = 'rgba(5, 150, 105, 0.4)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([2, 2]);
-      ctx.beginPath();
-      ctx.moveTo(px, py);
-      ctx.lineTo(px, above ? annotY + annotHeight : annotY);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // Annotation box
-      ctx.fillStyle = 'rgba(245, 247, 250, 0.92)';
-      ctx.beginPath();
-      ctx.roundRect(annotX, annotY, annotWidth, annotHeight, 4);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(5, 150, 105, 0.3)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.roundRect(annotX, annotY, annotWidth, annotHeight, 4);
-      ctx.stroke();
-
-      // Text: agent + gen
-      ctx.fillStyle = '#1e293b';
-      ctx.font = 'bold 9px JetBrains Mono, monospace';
-      ctx.textAlign = 'left';
-      ctx.fillText('G' + f.gen + ' ' + (f.agent || ''), annotX + 6, annotY + 13);
-
-      // Score + delta
-      ctx.fillStyle = '#059669';
-      ctx.font = '9px JetBrains Mono, monospace';
-      const delta = f.delta_pct != null ? ' (' + (f.delta_pct > 0 ? '+' : '') + f.delta_pct.toFixed(1) + '%)' : '';
-      ctx.fillText(f.score.toFixed(dec) + delta, annotX + 6, annotY + 25);
-
-      // Central ideas (truncated)
-      ctx.fillStyle = '#64748b';
-      ctx.font = '8px JetBrains Mono, monospace';
-      const ideasText = (f.central_ideas || []).slice(0, 2).join(', ');
-      const truncatedIdeas = ideasText.length > 28 ? ideasText.slice(0, 25) + '...' : ideasText;
-      ctx.fillText(truncatedIdeas, annotX + 6, annotY + 37);
-
-      // Label
-      if (f.label) {
-        ctx.fillStyle = '#475569';
-        ctx.font = 'italic 8px JetBrains Mono, monospace';
-        const labelTrunc = f.label.length > 28 ? f.label.slice(0, 25) + '...' : f.label;
-        ctx.fillText(labelTrunc, annotX + 6, annotY + 49);
-      }
-    });
-  }
+  // (Frontier annotations now integrated into Layer 4+6 above)
 
   // ---- End clip ----
   ctx.restore();
@@ -1201,16 +1140,7 @@ function hideChartTooltip() {
     frontierBtn.addEventListener('click', () => {
       showFrontier = !showFrontier;
       frontierBtn.classList.toggle('active', showFrontier);
-      if (showFrontier && !frontierData) {
-        apiFetch('/api/frontier').then(data => {
-          if (data && data.frontier) {
-            frontierData = data.frontier;
-          }
-          redrawChart();
-        });
-      } else {
-        redrawChart();
-      }
+      redrawChart();
     });
   }
 })();

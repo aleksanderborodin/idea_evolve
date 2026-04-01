@@ -127,10 +127,9 @@ def validate(S):
             "raw_size": raw_size,
         }
     else:
-        # Has violations — extract largest valid subset
-        valid_subset = _extract_largest_sidon_subset(S)
+        # Has violations — invalid, sentinel score
         return {
-            "fitness": len(valid_subset),
+            "fitness": 0,
             "is_valid": 0,
             "violations": violations,
             "raw_size": raw_size,

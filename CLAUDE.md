@@ -40,24 +40,13 @@ Monitor a background run: `tail -f /tmp/run.log`.
 Two orchestrators can run simultaneously on different problems — each works entirely
 inside its own `runs/{problem}/{attempt}/` directory with no shared state.
 
-Current problem: **Binary-Ternary GEMM Optimization** (C++ performance, geo-median time in µs, lower is better).
-Baseline score: **~770 µs** (V14opt implementation in `problems/gemm/initial_programs/optimize.py`).
-Old target of 477 µs already beaten. **NEW Target: 24 µs** (~3% of baseline, ~32x speedup).
-Benchmarks use median (not mean) for stability. Pinned to cores 0-1 via `cgexec`, serialized with file lock.
-Problem files at `idea-evolve/problems/gemm/`. Fitness direction read from `metrics.yaml`.
-Previous problem (Permutation Codes M(8,5)) at `idea-evolve/problems/permcodes/`.
-
-### C++ Evaluation Pipeline
-
-Solutions are Python files where `entrypoint()` returns a **C++ source code string** defining
-`void gemmCandidate(uint8_t* A, uint8_t* B, int* C, int n, int m, int k)`.
-`validate.py` compiles the C++, checks correctness against `gemmV0`, benchmarks 3 sizes,
-and returns geometric mean speedup as fitness. Detailed per-size breakdown written to a
-sidecar file (path in `detail_file` field — agents can `cat` it for diagnostics).
-
-Target CPU: Intel i5-1135G7 (Tiger Lake) with AVX-512 (VPOPCNTDQ, BITALG, VNNI).
-Reference implementations: `fast-conv/gemm/*.cpp`. Benchmark harness: `fast-conv/bench_harness.cpp`.
-Baseline times: `fast-conv/baseline.json`.
+Current problem: **Sidon Sets (B₂ Sequences)** — find the largest Sidon set in {0, ..., 10000}.
+Baseline score: **66** (greedy algorithm). **Target: 100** (≈√N theoretical bound).
+A Sidon set has all pairwise sums distinct. Fitness = set size (higher is better).
+Invalid solutions get sentinel score (0) per the general rule below.
+Problem files at `idea-evolve/problems/sidon/`. Fitness direction read from `metrics.yaml`.
+Helpers: `is_sidon`, `count_violations`, `differences`, `can_add`, `is_prime` in `helpers/core.py`.
+Previous problems: Binary-Ternary GEMM (`problems/gemm/`), Permutation Codes M(8,5) (`problems/permcodes/`).
 
 ## Dashboard
 
@@ -182,6 +171,10 @@ skip logic and dashboard pipeline tab.
   `DEFAULT_MAX_TURNS` in orchestrator.py is just a fallback if config is missing.
 - **Timing tracking.** Every phase and agent records elapsed time to `history/timing.json`.
   The Architect sees recent timing data and can set per-agent `timeout` in `manifest.yaml`.
+- **Invalid solutions get sentinel score.** If `validate.py` returns `is_valid: 0`, the fitness
+  MUST be the `sentinel_value` from `metrics.yaml` (typically 0). No partial credit, no subset
+  extraction, no rewarding near-misses. Only fully valid solutions receive a real score.
+  This is a universal rule for all problems — every `validate.py` must enforce it.
 - **Evaluation caching.** `evaluate.py` caches results by file content hash in `history/eval_cache.json`.
   Thread-safe with `fcntl` file locking for parallel agent access.
 - **Live run state tracking.** `history/run_state.json` is written by the orchestrator at

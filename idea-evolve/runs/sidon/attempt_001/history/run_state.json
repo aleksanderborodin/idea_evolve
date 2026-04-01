@@ -7,7 +7,26 @@
   "target_gen": 30,
   "status": "running",
   "current_gen": 1,
-  "current_phase": "architect",
-  "agents": {},
-  "last_updated": "2026-04-01T20:15:45.906081+00:00"
+  "current_phase": "agents_running",
+  "agents": {
+    "explore_1": {
+      "status": "running",
+      "started_at": "2026-04-01T20:18:21.612662+00:00"
+    },
+    "explore_2": {
+      "status": "running",
+      "started_at": "2026-04-01T20:18:21.613798+00:00"
+    },
+    "full_1": {
+      "status": "running",
+      "started_at": "2026-04-01T20:18:21.613232+00:00"
+    },
+    "research_1": {
+      "status": "done",
+      "finished_at": "2026-04-01T20:29:59.899598+00:00",
+      "solutions": 0,
+      "elapsed": 698.2
+    }
+  },
+  "last_updated": "2026-04-01T20:29:59.899741+00:00"
 }
