@@ -27,40 +27,25 @@ argument. Running it from the repo root passes the wrong root and fails prefligh
 ```bash
 source venv/bin/activate
 cd idea-evolve
-# Legacy mode (single problem — backward compatible)
-python3 orchestrator.py . --single >> /tmp/gen4.log 2>&1 &   # background, one generation
-python3 orchestrator.py .            # full run (foreground)
-python3 orchestrator.py . --single   # one generation only (foreground)
-python3 orchestrator.py . --start-gen 5  # resume from gen 5
-python3 orchestrator.py . --dry-run  # show plan without launching agents
-
-# Multi-problem mode (after migration)
 python3 orchestrator.py . --problem gemm --single         # run gemm, latest attempt
 python3 orchestrator.py . --problem gemm --new-attempt    # create new attempt
 python3 orchestrator.py . --problem gemm --attempt attempt_002  # specific attempt
 python3 orchestrator.py . --problem permcodes --new-attempt     # different problem
+python3 orchestrator.py . --problem gemm --dry-run        # preview plan
+python3 orchestrator.py . --problem gemm --start-gen 5    # resume from gen 5
 ```
 
-Monitor a background run: `cat /tmp/gen4.log` (or `tail -f /tmp/gen4.log`).
+Monitor a background run: `tail -f /tmp/run.log`.
 
-### Migration to Multi-Problem Layout
-
-To migrate from the legacy single-problem layout to multi-problem:
-```bash
-cd idea-evolve
-python3 migrate_to_multi.py . --dry-run  # preview changes
-python3 migrate_to_multi.py .            # execute migration
-```
-This moves `problem/` → `problems/gemm/`, `problem-permcodes/` → `problems/permcodes/`,
-and all run state to `runs/gemm/attempt_001/`. Original dirs are preserved until manual cleanup.
+Two orchestrators can run simultaneously on different problems — each works entirely
+inside its own `runs/{problem}/{attempt}/` directory with no shared state.
 
 Current problem: **Binary-Ternary GEMM Optimization** (C++ performance, geo-median time in µs, lower is better).
-Baseline score: **~770 µs** (V14opt implementation in `problem/initial_programs/optimize.py`).
+Baseline score: **~770 µs** (V14opt implementation in `problems/gemm/initial_programs/optimize.py`).
 Old target of 477 µs already beaten. **NEW Target: 24 µs** (~3% of baseline, ~32x speedup).
 Benchmarks use median (not mean) for stability. Pinned to cores 0-1 via `cgexec`, serialized with file lock.
-Problem files at `idea-evolve/problem/` (legacy) or `idea-evolve/problems/gemm/` (multi-problem).
-Fitness direction read from `problem/metrics.yaml`.
-Previous problem (Permutation Codes M(8,5)) at `idea-evolve/problem-permcodes/` (or `problems/permcodes/`).
+Problem files at `idea-evolve/problems/gemm/`. Fitness direction read from `metrics.yaml`.
+Previous problem (Permutation Codes M(8,5)) at `idea-evolve/problems/permcodes/`.
 
 ### C++ Evaluation Pipeline
 
@@ -90,7 +75,7 @@ Lives in `dashboard/`. Modular Flask app: `data/` (filesystem scanning), `routes
 Architecture, Solutions, Knowledge, Reports. Auto-refreshes every 10s on Overview.
 API endpoints at `/api/*` return JSON. See `dashboard/README.md` for full structure.
 
-Dashboard reads fitness direction and decimals from `problem/metrics.yaml`. Scores display with
+Dashboard reads fitness direction and decimals from `problems/{id}/metrics.yaml`. Scores display with
 proper precision (4 decimals for this problem). Solutions table sorted best-first (respects
 lower-is-better). Score source priority: `.score` sidecar → eval cache (by content hash).
 Header comment fallback removed — it caused stale score inconsistencies.
@@ -142,42 +127,32 @@ with `--allowedTools Read,Write,Bash,Glob,Grep`. Each agent gets a lean prompt w
 ```
 idea-evolve/
 ├── orchestrator.py          # Stateless loop (~3200 lines)
-├── migrate_to_multi.py      # Migration script (already run)
-├── .migrated                # Marker file (migration complete)
+├── agents/                  # Prompt templates (global, 10 files)
+├── prompts/                 # Shared prompt fragments (global)
+├── user/                    # config.yaml, initial_ideas.md, etc. (global)
 │
-├── agents/                  # REAL dir — prompt templates (global, 10 files)
-├── prompts/                 # REAL dir — prompt templates (global)
-├── user/                    # REAL dir — config.yaml, initial_ideas.md, etc. (global)
-│
-├── problems/                # REAL dir — problem definitions (read-only at runtime)
+├── problems/                # Problem definitions (read-only at runtime)
 │   ├── gemm/                # description.md, evaluate.py, validate.py, metrics.yaml, helpers/
 │   └── permcodes/           # same structure
 │
-├── runs/                    # REAL dir — all evolution data, scoped per problem+attempt
-│   └── gemm/
-│       └── attempt_001/     # Self-contained run with all state:
-│           ├── population/  #   genNNN/{agent_name}/sol*.py + .score
-│           ├── knowledge/   #   state_of_affairs.md, ideas/, clusters/, facts/, etc.
-│           ├── history/     #   generations/, all_scores.json, eval_cache.json, run_state.json
-│           ├── briefs/      #   genNNN/manifest.yaml, agent briefs, gen_progress.json
-│           ├── reports/     #   genNNN/agent_name.md (debrief reports)
-│           ├── feedback/    #   system_recommendations.md, system_analysis/, consistency_reviews/
-│           ├── workspace/   #   ephemeral agent workspaces (cleaned after each agent)
-│           └── papers/      #   research paper library
-│
-│ # SYMLINKS — created by orchestrator on startup via _setup_run_symlinks()
-│ # Point to the active problem/attempt so all existing code works unchanged.
-│ # Re-pointed when you run with a different --problem / --attempt.
-├── problem -> problems/gemm
-├── population -> runs/gemm/attempt_001/population
-├── knowledge -> runs/gemm/attempt_001/knowledge
-├── history -> runs/gemm/attempt_001/history
-├── briefs -> runs/gemm/attempt_001/briefs
-├── reports -> runs/gemm/attempt_001/reports
-├── feedback -> runs/gemm/attempt_001/feedback
-├── workspace -> runs/gemm/attempt_001/workspace
-└── papers -> runs/gemm/attempt_001/papers
+└── runs/                    # All evolution data, scoped per problem+attempt
+    └── gemm/
+        └── attempt_001/     # Self-contained run with all state:
+            ├── population/  #   genNNN/{agent_name}/sol*.py + .score
+            ├── knowledge/   #   state_of_affairs.md, ideas/, clusters/, facts/, etc.
+            ├── history/     #   generations/, all_scores.json, eval_cache.json, run_state.json
+            ├── briefs/      #   genNNN/manifest.yaml, agent briefs, gen_progress.json
+            ├── reports/     #   genNNN/agent_name.md (debrief reports)
+            ├── feedback/    #   system_recommendations.md, system_analysis/, consistency_reviews/
+            ├── workspace/   #   ephemeral agent workspaces (cleaned after each agent)
+            └── papers/      #   research paper library
 ```
+
+**No symlinks, no dot files.** The orchestrator sets `project_root = ctx.run_root` so
+all functions operate inside the run directory. Global resources (`agents/`, `prompts/`,
+`user/`) and problem files (`problems/{id}/`) are accessed via `_global()` and `_problem()`
+helpers that read from `CTX`. This means **two orchestrators can run simultaneously**
+on different problems without conflicts.
 
 **Key file: `briefs/genNNN/gen_progress.json`** — durable per-generation progress
 tracker (survives orchestrator restarts, unlike ephemeral `run_state.json`). Contains

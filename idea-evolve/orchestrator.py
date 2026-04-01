@@ -152,34 +152,21 @@ def _build_run_context(project_root: Path, problem_id: str | None, attempt_id: s
     )
 
 
-def _setup_run_symlinks(project_root: Path, ctx: RunContext):
-    """Create symlinks at project_root pointing to the active run and problem dirs.
+# Module-level context — set once in main(), accessible by all functions.
+# This avoids passing ctx through 100+ function signatures.
+CTX: RunContext | None = None
 
-    This lets all existing code that uses project_root/"population", project_root/"problem"
-    etc. work without changing 100+ function signatures. Symlinks are updated on each run.
-    """
-    # State dirs → run_root
-    state_dirs = [
-        "population", "knowledge", "history", "briefs", "reports",
-        "feedback", "workspace", "papers",
-    ]
-    for dirname in state_dirs:
-        link = project_root / dirname
-        target = ctx.run_root / dirname
-        target.mkdir(parents=True, exist_ok=True)
-        if link.is_symlink():
-            link.unlink()
-        elif link.exists():
-            # Real dir exists (shouldn't after migration, but be safe)
-            continue
-        link.symlink_to(target)
 
-    # problem/ → problem_dir
-    problem_link = project_root / "problem"
-    if problem_link.is_symlink():
-        problem_link.unlink()
-    if not problem_link.exists():
-        problem_link.symlink_to(ctx.problem_dir)
+def _global(project_root: Path) -> Path:
+    """Return the global project root (for agents/, prompts/, user/).
+    Falls back to project_root if CTX not set (legacy mode)."""
+    return CTX.project_root if CTX else project_root
+
+
+def _problem(project_root: Path) -> Path:
+    """Return the problem directory (for evaluate.py, metrics.yaml, helpers/).
+    Falls back to project_root / 'problem' if CTX not set."""
+    return CTX.problem_dir if CTX else project_root / "problem"
 
 
 # ---------------------------------------------------------------------------
@@ -391,7 +378,8 @@ def _get_recent_timing(project_root: Path, current_gen: int, lookback: int = 3) 
     return result
 
 
-PREFLIGHT_CACHE = "history/.preflight_ok"
+# Preflight cache disabled — check is fast enough without caching
+# and avoids writing files to the project root.
 
 REQUIRED_PROBLEM_FILES = [
     "description.md",
@@ -424,42 +412,25 @@ REQUIRED_FILES = [f"problem/{f}" for f in REQUIRED_PROBLEM_FILES] + REQUIRED_GLO
 
 
 def _preflight_check(project_root: Path):
-    """Validate all required files exist. Cached so re-runs are instant."""
-    cache_path = project_root / PREFLIGHT_CACHE
-    # Build a hash of all required file mtimes for cache invalidation
-    mtimes = []
+    """Validate all required files exist."""
+    problem_dir = CTX.problem_dir if CTX else project_root / "problem"
     missing = []
-    for rel in REQUIRED_FILES:
-        p = project_root / rel
-        if p.exists():
-            mtimes.append(f"{rel}:{p.stat().st_mtime}")
-        else:
-            missing.append(rel)
-
+    for rel in REQUIRED_GLOBAL_FILES:
+        if not (project_root / rel).exists():
+            missing.append(f"{rel} (in {project_root})")
+    for rel in REQUIRED_PROBLEM_FILES:
+        if not (problem_dir / rel).exists():
+            missing.append(f"{rel} (in {problem_dir})")
     if missing:
         print("ERROR: Required files missing:")
         for m in missing:
             print(f"  - {m}")
         sys.exit(1)
-
-    check_hash = hashlib.md5("\n".join(mtimes).encode()).hexdigest()
-
-    # If cache matches, skip
-    if cache_path.exists():
-        try:
-            if cache_path.read_text().strip() == check_hash:
-                return
-        except Exception:
-            pass
-
-    # All files present — write cache
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    cache_path.write_text(check_hash)
     print("  Preflight check passed — all required files present.")
 
 
 def load_config(project_root: Path) -> dict:
-    config_path = project_root / "user" / "config.yaml"
+    config_path = _global(project_root) / "user" / "config.yaml"
     if not config_path.exists():
         print(f"ERROR: Config not found at {config_path}")
         sys.exit(1)
@@ -469,7 +440,11 @@ def load_config(project_root: Path) -> dict:
 
 def load_metrics_file(project_root: Path) -> dict:
     """Load the full metrics.yaml file. Returns raw dict."""
-    metrics_path = project_root / "problem" / "metrics.yaml"
+    # Try problem_dir from CTX first (multi-problem), fallback to legacy path
+    if CTX and CTX.problem_dir:
+        metrics_path = CTX.problem_dir / "metrics.yaml"
+    else:
+        metrics_path = _problem(project_root) / "metrics.yaml"
     if metrics_path.exists():
         try:
             return yaml.safe_load(metrics_path.read_text()) or {}
@@ -836,7 +811,9 @@ def create_workspace(project_root: Path, gen: int, agent_type: str, instance: in
     output_path = ws_path / "output"
     output_path.mkdir(parents=True, exist_ok=True)
 
-    prompt_src = project_root / "agents" / f"{agent_type}.md"
+    # Agent templates live in CTX.project_root/agents/ (global)
+    global_root = CTX.project_root if CTX else project_root
+    prompt_src = global_root / "agents" / f"{agent_type}.md"
     if prompt_src.exists():
         shutil.copy2(prompt_src, ws_path / "prompt.md")
 
@@ -858,7 +835,8 @@ def create_analysis_workspace(project_root: Path, gen: int, agent_type: str) -> 
     output_path = ws_path / "output"
     output_path.mkdir(parents=True, exist_ok=True)
 
-    prompt_src = project_root / "agents" / f"{agent_type}.md"
+    global_root = CTX.project_root if CTX else project_root
+    prompt_src = global_root / "agents" / f"{agent_type}.md"
     if prompt_src.exists():
         shutil.copy2(prompt_src, ws_path / "prompt.md")
 
@@ -1008,7 +986,7 @@ def move_experiment_outputs(project_root: Path, gen: int, instance: int):
             shutil.copy2(f, reports_dir / f"experimentator_{instance}.md")
         elif f.is_dir() and f.name == "helpers":
             # Validate and deploy helper tools to problem/helpers/
-            helpers_dest = project_root / "problem" / "helpers"
+            helpers_dest = _problem(project_root) / "helpers"
             helpers_dest.mkdir(parents=True, exist_ok=True)
             for hf in f.iterdir():
                 if hf.suffix == ".py" and hf.name != "__init__.py":
@@ -1534,8 +1512,8 @@ def detect_interventions(project_root: Path, gen: int):
 
     for dirpath in [
         project_root / "knowledge",
-        project_root / "user",
-        project_root / "agents",
+        _global(project_root) / "user",
+        _global(project_root) / "agents",
     ]:
         if not dirpath.exists():
             continue
@@ -1544,7 +1522,7 @@ def detect_interventions(project_root: Path, gen: int):
                 interventions.append(str(f.relative_to(project_root)))
 
     if interventions:
-        log_path = project_root / "user" / "interventions.md"
+        log_path = _global(project_root) / "user" / "interventions.md"
         with open(log_path, "a") as f:
             f.write(f"\n## Generation {gen}\n")
             f.write(f"Files modified since gen {prev_gen}:\n")
@@ -1559,11 +1537,11 @@ def detect_interventions(project_root: Path, gen: int):
 def bootstrap_initial_knowledge(project_root: Path):
     print("  Bootstrapping initial knowledge...")
 
-    facts_src = project_root / "user" / "initial_facts.md"
+    facts_src = _global(project_root) / "user" / "initial_facts.md"
     if facts_src.exists():
         _bootstrap_facts(project_root, facts_src)
 
-    ideas_src = project_root / "user" / "initial_ideas.md"
+    ideas_src = _global(project_root) / "user" / "initial_ideas.md"
     if ideas_src.exists():
         _bootstrap_ideas(project_root, ideas_src)
 
@@ -1687,7 +1665,7 @@ def _write_idea_file(ideas_dir: Path, idea_id: str, title: str, body: str):
 
 def _load_prompt(project_root: Path, name: str) -> str:
     """Load a prompt template from prompts/ directory."""
-    path = project_root / "prompts" / f"{name}.md"
+    path = _global(project_root) / "prompts" / f"{name}.md"
     return path.read_text()
 
 
@@ -1706,7 +1684,7 @@ def DEBRIEF_RECOVERY_PROMPT(project_root: Path) -> str:
 def build_architect_prompt(project_root: Path, gen: int, config: dict) -> str:
     gen_str = f"gen{gen:03d}"
     prev_gen_str = f"gen{gen-1:03d}" if gen > 1 else None
-    prompt_template = _read_file(project_root / "agents" / "architect.md")
+    prompt_template = _read_file(_global(project_root) / "agents" / "architect.md")
     briefs_dir = project_root / "briefs" / gen_str
     agent_config = yaml.dump(config.get("agents", {}), default_flow_style=False)
 
@@ -1785,7 +1763,7 @@ def build_agent_prompt(
 ) -> str:
     """Build lean prompt for a work-session agent."""
     gen_str = f"gen{gen:03d}"
-    prompt_template = _read_file(project_root / "agents" / f"{agent_type}.md")
+    prompt_template = _read_file(_global(project_root) / "agents" / f"{agent_type}.md")
     brief = _read_file(project_root / Path(brief_path))
     ws_path = project_root / "workspace" / f"{gen_str}_{agent_type}_{instance}"
     report_path = f"{ws_path}/output/report.md"
@@ -1860,7 +1838,7 @@ with 1 evaluated solution, that is far more valuable than 5 unevaluated ones.
 
 def build_evaluator_prompt(project_root: Path, gen: int, config: dict) -> str:
     gen_str = f"gen{gen:03d}"
-    prompt_template = _read_file(project_root / "agents" / "evaluator.md")
+    prompt_template = _read_file(_global(project_root) / "agents" / "evaluator.md")
     ws_path = project_root / "workspace" / f"{gen_str}_evaluator"
     # Evaluator's debrief goes into evaluator_report.md (its main output),
     # not a separate report.md — avoids confusion about which file to write.
@@ -1951,7 +1929,7 @@ Write all output to: `{ws_path}/output/`
 
 def build_critic_prompt(project_root: Path, gen: int) -> str:
     gen_str = f"gen{gen:03d}"
-    prompt_template = _read_file(project_root / "agents" / "system_critic.md")
+    prompt_template = _read_file(_global(project_root) / "agents" / "system_critic.md")
     ws_path = project_root / "workspace" / f"{gen_str}_system_critic"
     report_path = f"{ws_path}/output/report.md"
     debrief = DEBRIEF_INSTRUCTIONS(project_root).format(report_path=report_path)
@@ -1984,7 +1962,7 @@ Write all output to: `{ws_path}/output/`
 
 def build_consistency_prompt(project_root: Path, gen: int, config: dict) -> str:
     gen_str = f"gen{gen:03d}"
-    prompt_template = _read_file(project_root / "agents" / "consistency_review.md")
+    prompt_template = _read_file(_global(project_root) / "agents" / "consistency_review.md")
     ws_path = project_root / "workspace" / f"{gen_str}_consistency_reviewer"
     staleness = config.get("staleness_threshold", 5)
 
@@ -2032,7 +2010,7 @@ Write all output to: `{ws_path}/output/`
 
 def _helpers_section(project_root: Path) -> str:
     """Generate a prompt section listing available shared helper tools."""
-    helpers_dir = project_root / "problem" / "helpers"
+    helpers_dir = _problem(project_root) / "helpers"
     if not helpers_dir.exists():
         return ""
     helper_files = sorted(f for f in helpers_dir.glob("*.py") if f.name != "__init__.py")
@@ -3234,23 +3212,29 @@ def main():
 
     # Build RunContext (handles legacy vs multi-problem layout)
     ctx = _build_run_context(project_root, args.problem, args.attempt, args.new_attempt)
-    if ctx.problem_id != "default" or ctx.attempt_id != "legacy":
-        print(f"  Problem: {ctx.problem_id}  Attempt: {ctx.attempt_id}")
-        print(f"  Problem dir: {ctx.problem_dir}")
-        print(f"  Run root: {ctx.run_root}")
+    print(f"  Problem: {ctx.problem_id}  Attempt: {ctx.attempt_id}")
+    print(f"  Problem dir: {ctx.problem_dir}")
+    print(f"  Run root: {ctx.run_root}")
 
-    # For multi-problem mode: create symlinks at project_root so all existing
-    # code that uses project_root/"population", project_root/"problem" etc. works.
-    # These are updated on each run to point to the current problem/attempt.
-    if ctx.run_root != project_root:
-        _setup_run_symlinks(project_root, ctx)
+    # Set module-level CTX so all functions can access global/problem dirs
+    # via _global() and _problem() helpers without changing signatures.
+    global CTX
+    CTX = ctx
 
-    _preflight_check(project_root)
+    # The orchestrator works inside ctx.run_root for all state (population, history,
+    # briefs, etc.) and uses ctx.project_root only for global resources (agents/,
+    # prompts/, user/). We alias project_root to run_root so all existing functions
+    # that take project_root automatically use the right directory.
+    # This means two orchestrators can run on different problems simultaneously
+    # without conflicts — each works in its own run_root.
+    project_root = ctx.run_root
 
-    config = load_config(project_root)
+    _preflight_check(ctx.project_root)
+
+    config = load_config(ctx.project_root)
     max_gens = config.get("generations", 20)
-    target = get_target_score(project_root, config)
-    higher_better = fitness_is_higher_better(project_root)
+    target = get_target_score(ctx.project_root, config)
+    higher_better = fitness_is_higher_better(ctx.project_root)
 
     start_gen = args.start_gen if args.start_gen else current_generation(project_root)
 

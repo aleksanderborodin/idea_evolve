@@ -61,11 +61,10 @@ tail -f /tmp/run.log
 
 On first run with `--new-attempt`, the orchestrator:
 1. Creates the run directory skeleton (`runs/gemm/attempt_001/`)
-2. Creates symlinks at `idea-evolve/` root (`population/`, `knowledge/`, etc.) pointing into the run
-3. Bootstraps initial knowledge from `user/initial_ideas.md` and `user/initial_facts.md`
-4. Runs the first generation
+2. Bootstraps initial knowledge from `user/initial_ideas.md` and `user/initial_facts.md`
+3. Runs the first generation
 
-On subsequent runs, it detects where the previous run left off and resumes. If it crashed, completed agents are skipped automatically.
+On subsequent runs, it detects where the previous run left off and resumes. If it crashed, completed agents are skipped automatically. Two orchestrators can run simultaneously on different problems — each works in its own isolated run directory.
 
 ## Running the Dashboard
 
@@ -169,7 +168,6 @@ Agent debrief reports grouped by generation. Each agent writes a report summariz
 project_alpha/
 ├── idea-evolve/
 │   ├── orchestrator.py          # Main loop (~3200 lines)
-│   ├── migrate_to_multi.py      # Migration tool
 │   │
 │   ├── agents/                  # Prompt templates (10 agent types)
 │   │   ├── architect.md         #   Plans each generation
@@ -234,16 +232,7 @@ project_alpha/
 └── CLAUDE.md                    # Operational reference + all known issues
 ```
 
-When the orchestrator runs with `--problem gemm`, it creates **symlinks** at `idea-evolve/` root pointing into the active run directory:
-
-```
-idea-evolve/population -> runs/gemm/attempt_001/population
-idea-evolve/knowledge  -> runs/gemm/attempt_001/knowledge
-idea-evolve/problem    -> problems/gemm
-...etc
-```
-
-This means all code works with simple relative paths. The symlinks are updated automatically when you switch problems or attempts.
+The orchestrator works entirely inside the run directory (`runs/gemm/attempt_001/`). No symlinks are created. Global resources (`agents/`, `prompts/`, `user/`) and problem files (`problems/gemm/`) are accessed via the module-level `CTX` context. This means two orchestrators can run simultaneously on different problems without conflicts.
 
 ## Error Recovery
 
@@ -260,15 +249,6 @@ What happens:
 - **Each phase checks completion** before re-running
 
 No manual cleanup needed.
-
-## Current Problem: Binary-Ternary GEMM
-
-Optimizing C++ matrix multiplication kernels for Intel Tiger Lake (AVX-512). Solutions are Python files whose `entrypoint()` returns a C++ source code string defining `gemmCandidate()`. The evaluator compiles, checks correctness against a reference implementation, and benchmarks across 3 matrix sizes.
-
-- **Baseline:** ~770 us (V14opt implementation)
-- **Target:** 24 us (~32x speedup)
-- **Metric:** Geometric median time in us (lower is better)
-- **Sentinel value:** 100,000 us (used for failed evaluations)
 
 ## Documentation
 
