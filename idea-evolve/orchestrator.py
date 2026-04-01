@@ -522,7 +522,12 @@ def current_generation(project_root: Path) -> int:
     if not gen_dir.exists():
         return 1
     snapshots = sorted(gen_dir.glob("gen*.md"))
-    return len(snapshots) + 1
+    if not snapshots:
+        return 1
+    # Gen 0 is baseline — actual generations start at 1
+    # Count only gen001+ snapshots to determine next gen
+    real_gens = [s for s in snapshots if s.name != "gen000.md"]
+    return len(real_gens) + 1
 
 
 def phase_status(project_root: Path, gen: int) -> str:
@@ -1540,13 +1545,19 @@ def detect_interventions(project_root: Path, gen: int):
 def bootstrap_initial_knowledge(project_root: Path):
     print("  Bootstrapping initial knowledge...")
 
-    facts_src = _global(project_root) / "user" / "initial_facts.md"
-    if facts_src.exists():
-        _bootstrap_facts(project_root, facts_src)
+    # Merge problem-specific + global user seeds (both loaded, prefixed to avoid ID collisions)
+    problem_dir = _problem(project_root)
+    global_dir = _global(project_root) / "user"
 
-    ideas_src = _global(project_root) / "user" / "initial_ideas.md"
-    if ideas_src.exists():
-        _bootstrap_ideas(project_root, ideas_src)
+    if (problem_dir / "initial_facts.md").exists():
+        _bootstrap_facts(project_root, problem_dir / "initial_facts.md", prefix="")
+    if (global_dir / "initial_facts.md").exists():
+        _bootstrap_facts(project_root, global_dir / "initial_facts.md", prefix="user_")
+
+    if (problem_dir / "initial_ideas.md").exists():
+        _bootstrap_ideas(project_root, problem_dir / "initial_ideas.md", prefix="")
+    if (global_dir / "initial_ideas.md").exists():
+        _bootstrap_ideas(project_root, global_dir / "initial_ideas.md", prefix="user_")
 
     soa_path = project_root / "knowledge" / "state_of_affairs.md"
     if not soa_path.exists():
@@ -1570,8 +1581,111 @@ def bootstrap_initial_knowledge(project_root: Path):
 
     print("  Bootstrap complete.")
 
+    # Evaluate initial programs as gen 0 so baseline appears on the chart
+    _bootstrap_gen0(project_root)
 
-def _bootstrap_facts(project_root: Path, facts_src: Path):
+
+def _bootstrap_gen0(project_root: Path):
+    """Evaluate initial programs and store them as generation 0.
+
+    Copies each initial program to population/gen000/baseline/, runs evaluate.py,
+    writes .score files, updates rankings, and creates gen000 snapshot.
+    This gives agents and the dashboard a baseline to compare against from the start.
+    """
+    problem_dir = _problem(project_root)
+    init_dir = problem_dir / "initial_programs"
+    if not init_dir.exists():
+        return
+
+    # Check if gen 0 already exists
+    pop_dir = project_root / "population" / "gen000" / "baseline"
+    snapshot = project_root / "history" / "generations" / "gen000.md"
+    if snapshot.exists():
+        return  # Already bootstrapped
+
+    solutions = list(init_dir.glob("*.py"))
+    if not solutions:
+        return
+
+    print("  Evaluating initial programs as gen 0...")
+    pop_dir.mkdir(parents=True, exist_ok=True)
+
+    evaluate_py = problem_dir / "evaluate.py"
+    if not evaluate_py.exists():
+        print("  WARNING: evaluate.py not found, skipping gen 0 evaluation")
+        return
+
+    env = os.environ.copy()
+    if CTX:
+        env["IDEA_EVOLVE_RUN_ROOT"] = str(CTX.run_root)
+
+    best_score = None
+    higher_better = fitness_is_higher_better(_global(project_root))
+    name, spec = primary_metric(_global(project_root))
+    sentinel = spec.get("sentinel_value")
+    evaluated = 0
+
+    for idx, sol in enumerate(sorted(solutions), 1):
+        dest = pop_dir / f"sol{idx:02d}.py"
+        shutil.copy2(sol, dest)
+
+        # Run evaluate.py
+        try:
+            result = subprocess.run(
+                [sys.executable, str(evaluate_py), str(dest)],
+                capture_output=True, text=True, timeout=60,
+                cwd=str(problem_dir), env=env,
+            )
+            if result.returncode == 0:
+                data = json.loads(result.stdout.strip())
+                # Write .score sidecar
+                score_path = dest.with_suffix(".score")
+                score_path.write_text(json.dumps(data, indent=2))
+
+                score = data.get(name, data.get("fitness"))
+                if score is not None and score != sentinel:
+                    evaluated += 1
+                    if best_score is None:
+                        best_score = score
+                    elif higher_better and score > best_score:
+                        best_score = score
+                    elif not higher_better and score < best_score:
+                        best_score = score
+
+                print(f"    {sol.name} -> {dest.name}: {name}={score}")
+            else:
+                print(f"    {sol.name}: evaluation failed — {result.stderr[:200]}")
+        except Exception as e:
+            print(f"    {sol.name}: error — {e}")
+
+    if evaluated == 0:
+        print("  No initial programs evaluated successfully")
+        return
+
+    # Update rankings so all_scores.json includes gen 0
+    try:
+        update_rankings(project_root, 0)
+    except Exception as e:
+        print(f"  WARNING: Failed to update rankings for gen 0: {e}")
+
+    # Write gen 0 snapshot
+    fmt = _score_fmt(_global(project_root))
+    snapshot.parent.mkdir(parents=True, exist_ok=True)
+    snapshot.write_text(
+        f"---\ngeneration: 0\nbest_score: {best_score}\n"
+        f"timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n---\n\n"
+        f"# Generation 0 — Baseline\n\n"
+        f"Initial programs evaluated: {evaluated}\n"
+        f"Best {name}: {format(best_score, fmt) if best_score is not None else '--'}\n"
+    )
+
+    # Write gen_progress for gen 0
+    _write_gen_progress(project_root, 0, finalize={"status": "complete"})
+
+    print(f"  Gen 0 baseline: {evaluated} solutions, best {name}={format(best_score, fmt) if best_score is not None else '--'}")
+
+
+def _bootstrap_facts(project_root: Path, facts_src: Path, prefix: str = ""):
     text = facts_src.read_text()
     facts_dir = project_root / "knowledge" / "facts"
     facts_dir.mkdir(parents=True, exist_ok=True)
@@ -1583,7 +1697,7 @@ def _bootstrap_facts(project_root: Path, facts_src: Path):
     for line in text.split("\n"):
         if line.startswith("## fact_"):
             if current_id:
-                _write_fact_file(facts_dir, current_id, current_title, "\n".join(current_body).strip())
+                _write_fact_file(facts_dir, prefix + current_id, current_title, "\n".join(current_body).strip())
             parts = line[3:].split(":", 1)
             current_id = parts[0].strip()
             current_title = parts[1].strip() if len(parts) > 1 else current_id
@@ -1592,7 +1706,7 @@ def _bootstrap_facts(project_root: Path, facts_src: Path):
             current_body.append(line)
 
     if current_id:
-        _write_fact_file(facts_dir, current_id, current_title, "\n".join(current_body).strip())
+        _write_fact_file(facts_dir, prefix + current_id, current_title, "\n".join(current_body).strip())
 
 
 def _write_fact_file(facts_dir: Path, fact_id: str, title: str, body: str):
@@ -1614,7 +1728,7 @@ def _write_fact_file(facts_dir: Path, fact_id: str, title: str, body: str):
     )
 
 
-def _bootstrap_ideas(project_root: Path, ideas_src: Path):
+def _bootstrap_ideas(project_root: Path, ideas_src: Path, prefix: str = ""):
     text = ideas_src.read_text()
     ideas_dir = project_root / "knowledge" / "ideas" / "active"
     ideas_dir.mkdir(parents=True, exist_ok=True)
@@ -1626,7 +1740,7 @@ def _bootstrap_ideas(project_root: Path, ideas_src: Path):
     for line in text.split("\n"):
         if line.startswith("## idea_"):
             if current_id:
-                _write_idea_file(ideas_dir, current_id, current_title, "\n".join(current_body).strip())
+                _write_idea_file(ideas_dir, prefix + current_id, current_title, "\n".join(current_body).strip())
             parts = line[3:].split(":", 1)
             current_id = parts[0].strip()
             current_title = parts[1].strip() if len(parts) > 1 else current_id
@@ -1635,7 +1749,7 @@ def _bootstrap_ideas(project_root: Path, ideas_src: Path):
             current_body.append(line)
 
     if current_id:
-        _write_idea_file(ideas_dir, current_id, current_title, "\n".join(current_body).strip())
+        _write_idea_file(ideas_dir, prefix + current_id, current_title, "\n".join(current_body).strip())
 
 
 def _write_idea_file(ideas_dir: Path, idea_id: str, title: str, body: str):

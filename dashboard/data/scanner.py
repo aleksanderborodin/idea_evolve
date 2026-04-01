@@ -9,21 +9,30 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .config import get_project_root, list_problems, list_attempts, get_run_root
+from .config import get_project_root, list_problems, list_attempts, get_run_root, get_problem_dir
 from .helpers import read_frontmatter, read_body, extract_score, get_metrics_config
+
+# Request-scoped context — set by API routes before calling scanner functions.
+# Avoids threading run_root/problem_dir through every function signature.
+_request_run_root: Path | None = None
+_request_problem_dir: Path | None = None
+
+
+def set_scanner_context(run_root: Path | None, problem_dir: Path | None):
+    """Set the scanner context for the current request."""
+    global _request_run_root, _request_problem_dir
+    _request_run_root = run_root
+    _request_problem_dir = problem_dir
 
 
 def _root(run_root: Path | None = None) -> Path:
-    """Return the run root directory (where population/, history/, etc. live).
-
-    If run_root is given, use it; otherwise auto-detect:
-    - Multi-problem layout: use the first problem's latest attempt
-    - Legacy layout: use the project root directly
-    Returns project root as fallback (may have no data dirs — callers handle gracefully).
-    """
+    """Return the run root directory (where population/, history/, etc. live)."""
     if run_root is not None:
         return run_root
-    # Auto-detect: if problems/ dir exists, use first problem's latest attempt
+    # Check request-scoped context first
+    if _request_run_root is not None:
+        return _request_run_root
+    # Auto-detect
     project_root = get_project_root()
     problems_dir = project_root / "problems"
     if problems_dir.is_dir():
@@ -518,21 +527,40 @@ def get_score_progression() -> list[dict]:
 
 
 def get_initial_scores() -> list[dict]:
-    """Get scores for initial/baseline programs."""
+    """Get scores for baseline programs (gen 0 in population, or initial_programs in problem dir)."""
     root = _root()
-    init_dir = root / "problem" / "initial_programs"
     results = []
-    if not init_dir.exists():
+
+    # First try gen 0 population (evaluated baselines from bootstrap)
+    gen0_dir = root / "population" / "gen000"
+    if gen0_dir.exists():
+        for agent_dir in sorted(gen0_dir.iterdir()):
+            if not agent_dir.is_dir():
+                continue
+            for sol in sorted(agent_dir.glob("sol*.py")):
+                result = extract_score(sol)
+                results.append({
+                    "file": sol.name,
+                    "score": result.get("fitness") if result else None,
+                    "is_valid": result.get("is_valid", 1) if result else 0,
+                })
+
+    if results:
         return results
-    for sol in sorted(init_dir.glob("*.py")):
-        result = extract_score(sol)
-        results.append({
-            "file": sol.name,
-            "score": result.get("fitness") if result else None,
-            # Initial programs are assumed valid — if they have a fitness score,
-            # it came from a successful evaluation
-            "is_valid": result.get("is_valid", 1) if result else 0,
-        })
+
+    # Fallback: read from problem dir initial_programs (unevaluated)
+    problem_dir = _request_problem_dir or get_problem_dir()
+    if problem_dir:
+        init_dir = problem_dir / "initial_programs"
+        if init_dir.exists():
+            for sol in sorted(init_dir.glob("*.py")):
+                result = extract_score(sol)
+                results.append({
+                    "file": sol.name,
+                    "score": result.get("fitness") if result else None,
+                    "is_valid": result.get("is_valid", 1) if result else 0,
+                })
+
     return results
 
 

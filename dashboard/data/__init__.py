@@ -1,5 +1,6 @@
 from .config import get_project_root, get_config, list_problems, list_attempts, get_run_root, get_problem_dir
 from .helpers import read_frontmatter, read_body, extract_score, get_metrics_config
+from .scanner import set_scanner_context
 from .scanner import (
     get_generation_status,
     get_phase_status,

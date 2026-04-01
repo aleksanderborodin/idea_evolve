@@ -1,7 +1,7 @@
 ---
 id: idea_005
 type: idea
-name: "Re-tune BLIS Tile Sizes for Tiger Lake"
+name: "Backtracking with Pruning"
 lifecycle: active
 confidence: 0.3
 first_seen: generation_0
@@ -14,8 +14,6 @@ cluster: null
 tags: []
 ---
 
-Current: MC=64, KC=128, NC=256 (tuned for AVX2).
-Tiger Lake has L1d=48KB, L2=1.25MB. With AVX-512 (64-byte wide ops):
-- NC should be larger (more columns per B-panel, amortize B-packing)
-- MC could stay at 64 (L1 fits 64 × 7 × 2 = 896 bytes of packed A easily)
-- KC is irrelevant since k_bytes ≤ 7 always fits
+Use depth-first search with aggressive pruning: at each step, count how many
+candidates remain that could be added without violation. If the count drops
+below (target - current_size), backtrack. This prunes hopeless branches early.

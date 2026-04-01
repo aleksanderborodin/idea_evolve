@@ -29,6 +29,7 @@ from dashboard.data import (
     get_state_of_affairs_staleness,
     get_timing_data,
     get_frontier_data,
+    set_scanner_context,
     list_problems,
     list_attempts,
     get_run_root,
@@ -42,12 +43,15 @@ api_bp = Blueprint("api", __name__, url_prefix="/api")
 def _resolve_context():
     """Extract problem/attempt from query params and resolve paths.
 
+    Sets the scanner context so all scanner functions use the right dirs.
     Returns (run_root, problem_dir) — either or both may be None.
     """
     problem = request.args.get("problem")
     attempt = request.args.get("attempt")
     run_root = get_run_root(problem, attempt) if problem else None
     problem_dir = get_problem_dir(problem) if problem else get_problem_dir()
+    # Set scanner context so _root() and get_initial_scores() use the right dirs
+    set_scanner_context(run_root, problem_dir)
     return run_root, problem_dir
 
 

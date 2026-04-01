@@ -1,7 +1,7 @@
 ---
 id: idea_003
 type: idea
-name: "VNNI for Accumulation"
+name: "Difference-Aware Construction"
 lifecycle: active
 confidence: 0.3
 first_seen: generation_0
@@ -14,7 +14,7 @@ cluster: null
 tags: []
 ---
 
-`_mm512_dpbusd_epi32` computes a dot product of int8 values and accumulates into
-int32, all in one instruction (1 cycle throughput). The binary-ternary multiply
-might be reformulatable as a VNNI operation since element values are {-1,0,+1}
-and {-1,+1}. This could eliminate the popcount step entirely.
+Instead of checking violations after the fact, maintain the set of used differences
+explicitly. When choosing the next element to add, pick one that uses "rare"
+differences (large gaps in the difference spectrum). This leaves more room for
+future elements.

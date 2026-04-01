@@ -1,7 +1,7 @@
 ---
 id: idea_001
 type: idea
-name: "AVX-512 Micro-Kernel with Hardware Popcount"
+name: "Randomized Greedy with Restarts"
 lifecycle: active
 confidence: 0.3
 first_seen: generation_0
@@ -14,7 +14,7 @@ cluster: null
 tags: []
 ---
 
-Replace the 6-instruction LUT-based popcount (`vpshufb` + masks) with a single
-`_mm512_popcnt_epi8()` instruction (AVX512_BITALG). Process 64 bytes of B per
-iteration instead of 32 (AVX2). Micro-kernel shape becomes 4x64 (4 rows of A,
-64 columns of B). This alone could give ~1.5-2x speedup in the micro-kernel.
+The basic greedy algorithm always adds the smallest valid element, giving 66.
+Try random orderings of candidates: shuffle the range [0, 10000] and greedily
+add elements that don't violate the Sidon property. Run many restarts and keep
+the best. Different random orderings explore different parts of the search space.
