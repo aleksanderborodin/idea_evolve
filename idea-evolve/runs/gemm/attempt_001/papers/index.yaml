@@ -1,9 +1,0 @@
-# Paper Index — tracks every paper through the pipeline
-# Pipeline: found → downloaded → extracted → summarized
-#
-# Use: python3 papers/manage.py list     — show all papers
-#      python3 papers/manage.py add <id>  — add arXiv paper
-#      python3 papers/manage.py status    — pipeline overview
-
-papers: []
-next_id: 1

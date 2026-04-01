@@ -7,6 +7,10 @@ let currentProblem = localStorage.getItem('ie_problem') || null;
 let currentAttempt = localStorage.getItem('ie_attempt') || null;
 let problemsCache = null;
 
+// Clean up legacy values from old versions
+if (currentProblem === 'default') { currentProblem = null; localStorage.removeItem('ie_problem'); }
+if (currentAttempt === 'legacy') { currentAttempt = null; localStorage.removeItem('ie_attempt'); }
+
 function getApiParams() {
   const params = new URLSearchParams();
   if (currentProblem && currentProblem !== 'default') params.set('problem', currentProblem);
@@ -35,8 +39,8 @@ function updateContextBreadcrumb() {
   const probEl = document.getElementById('ctxProblem');
   const attEl = document.getElementById('ctxAttempt');
   const dotEl = document.getElementById('ctxDot');
-  if (probEl) probEl.textContent = currentProblem || 'default';
-  if (attEl) attEl.textContent = currentAttempt || 'legacy';
+  if (probEl) probEl.textContent = currentProblem || '--';
+  if (attEl) attEl.textContent = currentAttempt || 'no attempts';
   if (dotEl && problemsCache) {
     const prob = problemsCache.find(p => p.id === currentProblem);
     if (prob) {
@@ -133,18 +137,41 @@ document.addEventListener('DOMContentLoaded', () => {
   const overlay = document.getElementById('flyoutOverlay');
   if (overlay) overlay.addEventListener('click', (e) => { if (e.target === overlay) closeFlyout(); });
   updateContextBreadcrumb();
-  if (!currentProblem) {
-    fetch('/api/problems').then(r => r.json()).then(data => {
-      problemsCache = data;
-      if (data.length > 0) {
+  // Auto-detect context: pick first problem with attempts, or just first problem
+  fetch('/api/problems').then(r => r.json()).then(data => {
+    problemsCache = data;
+    if (data.length > 0 && !currentProblem) {
+      // Prefer a problem that has attempts with data
+      const withAttempts = data.find(p => p.attempts.length > 0);
+      const pick = withAttempts || data[0];
+      currentProblem = pick.id;
+      currentAttempt = pick.attempts.length > 0 ? pick.attempts[0].id : null;
+      localStorage.setItem('ie_problem', currentProblem);
+      if (currentAttempt) localStorage.setItem('ie_attempt', currentAttempt);
+      else localStorage.removeItem('ie_attempt');
+    }
+    // Validate stored context still exists
+    if (currentProblem && data.length > 0) {
+      const prob = data.find(p => p.id === currentProblem);
+      if (!prob) {
         currentProblem = data[0].id;
-        if (data[0].attempts.length > 0) currentAttempt = data[0].attempts[0].id;
+        currentAttempt = data[0].attempts.length > 0 ? data[0].attempts[0].id : null;
         localStorage.setItem('ie_problem', currentProblem);
         if (currentAttempt) localStorage.setItem('ie_attempt', currentAttempt);
-        updateContextBreadcrumb();
+        else localStorage.removeItem('ie_attempt');
+      } else if (currentAttempt) {
+        const att = prob.attempts.find(a => a.id === currentAttempt);
+        if (!att && prob.attempts.length > 0) {
+          currentAttempt = prob.attempts[0].id;
+          localStorage.setItem('ie_attempt', currentAttempt);
+        } else if (!att) {
+          currentAttempt = null;
+          localStorage.removeItem('ie_attempt');
+        }
       }
-    }).catch(() => {});
-  }
+    }
+    updateContextBreadcrumb();
+  }).catch(() => {});
 });
 // --- End Context Management ---
 

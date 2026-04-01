@@ -29,52 +29,47 @@ def _is_legacy_layout() -> bool:
 
 
 def list_problems() -> list[str]:
-    """List problem IDs from problems/ directory. Falls back to ['default'] for legacy layout."""
+    """List problem IDs from problems/ directory."""
     problems_dir = _PROJECT_ROOT / "problems"
     if not problems_dir.is_dir():
-        return ["default"]
-    ids = sorted(d.name for d in problems_dir.iterdir() if d.is_dir())
-    return ids if ids else ["default"]
+        return []
+    return sorted(d.name for d in problems_dir.iterdir() if d.is_dir())
 
 
 def list_attempts(problem_id: str) -> list[str]:
     """List attempt IDs for a problem from runs/{problem_id}/."""
-    if _is_legacy_layout():
-        return ["legacy"]
     runs_dir = _PROJECT_ROOT / "runs" / problem_id
     if not runs_dir.is_dir():
-        return ["legacy"]
-    ids = sorted(d.name for d in runs_dir.iterdir() if d.is_dir())
-    return ids if ids else ["legacy"]
+        return []
+    return sorted(d.name for d in runs_dir.iterdir() if d.is_dir())
 
 
-def get_run_root(problem_id: str | None = None, attempt_id: str | None = None) -> Path:
+def get_run_root(problem_id: str | None = None, attempt_id: str | None = None) -> Path | None:
     """Get the run root path for a problem/attempt.
-
-    Legacy layout: returns _PROJECT_ROOT (the idea-evolve/ dir itself).
-    Multi-problem layout: returns runs/{problem_id}/{attempt_id}/.
-    """
-    if _is_legacy_layout() or problem_id is None or problem_id == "default":
-        return _PROJECT_ROOT
-    if attempt_id is None or attempt_id == "legacy":
-        return _PROJECT_ROOT
+    Returns None if no valid attempt exists."""
+    if problem_id is None:
+        return None
+    if attempt_id is None:
+        # Find latest attempt
+        attempts = list_attempts(problem_id)
+        if attempts:
+            return _PROJECT_ROOT / "runs" / problem_id / attempts[-1]
+        return None
     run_path = _PROJECT_ROOT / "runs" / problem_id / attempt_id
     if run_path.is_dir():
         return run_path
-    # Fallback to legacy
-    return _PROJECT_ROOT
+    return None
 
 
-def get_problem_dir(problem_id: str | None = None) -> Path:
-    """Get the problem definition directory.
-
-    Legacy layout: returns _PROJECT_ROOT / 'problem'.
-    Multi-problem layout: returns problems/{problem_id}/.
-    """
-    if _is_legacy_layout() or problem_id is None or problem_id == "default":
-        return _PROJECT_ROOT / "problem"
+def get_problem_dir(problem_id: str | None = None) -> Path | None:
+    """Get the problem definition directory. Returns None if not found."""
+    if problem_id is None:
+        # Return first available problem
+        problems = list_problems()
+        if problems:
+            return _PROJECT_ROOT / "problems" / problems[0]
+        return None
     prob_path = _PROJECT_ROOT / "problems" / problem_id
     if prob_path.is_dir():
         return prob_path
-    # Fallback to legacy
-    return _PROJECT_ROOT / "problem"
+    return None

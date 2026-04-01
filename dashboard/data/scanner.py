@@ -19,6 +19,7 @@ def _root(run_root: Path | None = None) -> Path:
     If run_root is given, use it; otherwise auto-detect:
     - Multi-problem layout: use the first problem's latest attempt
     - Legacy layout: use the project root directly
+    Returns project root as fallback (may have no data dirs — callers handle gracefully).
     """
     if run_root is not None:
         return run_root
@@ -27,11 +28,11 @@ def _root(run_root: Path | None = None) -> Path:
     problems_dir = project_root / "problems"
     if problems_dir.is_dir():
         problems = list_problems()
-        if problems:
-            attempts = list_attempts(problems[0])
+        for pid in problems:
+            attempts = list_attempts(pid)
             if attempts:
-                resolved = get_run_root(problems[0], attempts[-1])
-                if resolved.is_dir() and resolved != project_root:
+                resolved = get_run_root(pid, attempts[-1])
+                if resolved and resolved.is_dir() and resolved != project_root:
                     return resolved
     return project_root
 

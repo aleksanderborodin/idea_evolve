@@ -137,53 +137,49 @@ with `--allowedTools Read,Write,Bash,Glob,Grep`. Each agent gets a lean prompt w
 
 ## File Structure
 
-### Legacy Layout (single problem, backward compatible)
+### Current Layout (multi-problem, after migration)
 
 ```
 idea-evolve/
 ├── orchestrator.py          # Stateless loop (~3200 lines)
-├── migrate_to_multi.py      # Migration script to multi-problem layout
-├── problem/                 # Problem definition (read-only for agents)
-│   ├── description.md, constraints.md, evaluate.py, validate.py
-│   ├── helper.py            # Backward-compat shim → helpers/core.py
-│   ├── helpers/             # ALL helpers (core + experimentator-created)
-│   └── metrics.yaml         # Fitness direction, bounds, sentinel values
-├── agents/                  # Prompt templates (read-only, 10 files, GLOBAL)
-├── prompts/                 # Prompt templates (loaded by orchestrator, GLOBAL)
-├── user/                    # config.yaml, initial_ideas.md, initial_facts.md (GLOBAL)
-├── knowledge/               # Three-layer hierarchy (per-run state)
-├── population/              # All solutions (per-run state)
-├── history/                 # generations/, all_scores.json, run_state.json (per-run state)
-├── briefs/genNNN/           # manifest.yaml + per-agent briefs + gen_progress.json
-├── reports/genNNN/          # Agent debrief reports
-├── papers/                  # Academic paper library
-├── feedback/                # system_recommendations.md, system_analysis/, etc.
-└── workspace/               # Ephemeral (cleaned after each agent)
+├── migrate_to_multi.py      # Migration script (already run)
+├── .migrated                # Marker file (migration complete)
+│
+├── agents/                  # REAL dir — prompt templates (global, 10 files)
+├── prompts/                 # REAL dir — prompt templates (global)
+├── user/                    # REAL dir — config.yaml, initial_ideas.md, etc. (global)
+│
+├── problems/                # REAL dir — problem definitions (read-only at runtime)
+│   ├── gemm/                # description.md, evaluate.py, validate.py, metrics.yaml, helpers/
+│   └── permcodes/           # same structure
+│
+├── runs/                    # REAL dir — all evolution data, scoped per problem+attempt
+│   └── gemm/
+│       └── attempt_001/     # Self-contained run with all state:
+│           ├── population/  #   genNNN/{agent_name}/sol*.py + .score
+│           ├── knowledge/   #   state_of_affairs.md, ideas/, clusters/, facts/, etc.
+│           ├── history/     #   generations/, all_scores.json, eval_cache.json, run_state.json
+│           ├── briefs/      #   genNNN/manifest.yaml, agent briefs, gen_progress.json
+│           ├── reports/     #   genNNN/agent_name.md (debrief reports)
+│           ├── feedback/    #   system_recommendations.md, system_analysis/, consistency_reviews/
+│           ├── workspace/   #   ephemeral agent workspaces (cleaned after each agent)
+│           └── papers/      #   research paper library
+│
+│ # SYMLINKS — created by orchestrator on startup via _setup_run_symlinks()
+│ # Point to the active problem/attempt so all existing code works unchanged.
+│ # Re-pointed when you run with a different --problem / --attempt.
+├── problem -> problems/gemm
+├── population -> runs/gemm/attempt_001/population
+├── knowledge -> runs/gemm/attempt_001/knowledge
+├── history -> runs/gemm/attempt_001/history
+├── briefs -> runs/gemm/attempt_001/briefs
+├── reports -> runs/gemm/attempt_001/reports
+├── feedback -> runs/gemm/attempt_001/feedback
+├── workspace -> runs/gemm/attempt_001/workspace
+└── papers -> runs/gemm/attempt_001/papers
 ```
 
-### Multi-Problem Layout (after migration)
-
-```
-idea-evolve/
-├── orchestrator.py          # Accepts --problem, --attempt, --new-attempt
-├── agents/, prompts/, user/ # GLOBAL (shared across all problems/attempts)
-├── problems/                # Problem definitions (read-only at runtime)
-│   ├── gemm/                # Current problem/ contents
-│   │   ├── description.md, evaluate.py, validate.py, metrics.yaml
-│   │   └── helpers/, initial_programs/
-│   └── permcodes/           # Archived problem
-├── runs/                    # All evolution data, scoped per problem+attempt
-│   ├── gemm/
-│   │   ├── attempt_001/     # Self-contained run
-│   │   │   ├── population/, knowledge/, history/, briefs/, reports/
-│   │   │   ├── feedback/, workspace/
-│   │   │   └── briefs/genNNN/gen_progress.json  # Durable progress tracking
-│   │   └── attempt_002/
-│   └── permcodes/attempt_001/
-└── dashboard/               # Web UI (reads from any problem/attempt)
-```
-
-**Key new file: `briefs/genNNN/gen_progress.json`** — durable per-generation progress
+**Key file: `briefs/genNNN/gen_progress.json`** — durable per-generation progress
 tracker (survives orchestrator restarts, unlike ephemeral `run_state.json`). Contains
 per-agent status, PIDs, session IDs, per-phase completion status. Used by `run_single_agent()`
 skip logic and dashboard pipeline tab.

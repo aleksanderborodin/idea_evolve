@@ -8,7 +8,8 @@ import yaml
 
 
 def _auto_run_root() -> Path:
-    """Auto-detect the run root for multi-problem layout."""
+    """Auto-detect the run root for multi-problem layout.
+    Returns ie_root as fallback if no attempts exist."""
     ie_root = Path(__file__).resolve().parent.parent.parent / "idea-evolve"
     problems_dir = ie_root / "problems"
     if problems_dir.is_dir():

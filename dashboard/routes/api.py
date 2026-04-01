@@ -42,14 +42,12 @@ api_bp = Blueprint("api", __name__, url_prefix="/api")
 def _resolve_context():
     """Extract problem/attempt from query params and resolve paths.
 
-    Returns (run_root, problem_dir) — both None for legacy/default.
+    Returns (run_root, problem_dir) — either or both may be None.
     """
     problem = request.args.get("problem")
     attempt = request.args.get("attempt")
-    if not problem or problem == "default":
-        return None, None
-    run_root = get_run_root(problem, attempt)
-    problem_dir = get_problem_dir(problem)
+    run_root = get_run_root(problem, attempt) if problem else None
+    problem_dir = get_problem_dir(problem) if problem else get_problem_dir()
     return run_root, problem_dir
 
 
@@ -95,6 +93,8 @@ def problems():
         attempts_list = []
         for aid in list_attempts(pid):
             rroot = get_run_root(pid, aid)
+            if rroot is None:
+                continue
 
             # Count generations
             gen_dir = rroot / "history" / "generations"

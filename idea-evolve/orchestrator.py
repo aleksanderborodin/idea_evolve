@@ -152,6 +152,36 @@ def _build_run_context(project_root: Path, problem_id: str | None, attempt_id: s
     )
 
 
+def _setup_run_symlinks(project_root: Path, ctx: RunContext):
+    """Create symlinks at project_root pointing to the active run and problem dirs.
+
+    This lets all existing code that uses project_root/"population", project_root/"problem"
+    etc. work without changing 100+ function signatures. Symlinks are updated on each run.
+    """
+    # State dirs → run_root
+    state_dirs = [
+        "population", "knowledge", "history", "briefs", "reports",
+        "feedback", "workspace", "papers",
+    ]
+    for dirname in state_dirs:
+        link = project_root / dirname
+        target = ctx.run_root / dirname
+        target.mkdir(parents=True, exist_ok=True)
+        if link.is_symlink():
+            link.unlink()
+        elif link.exists():
+            # Real dir exists (shouldn't after migration, but be safe)
+            continue
+        link.symlink_to(target)
+
+    # problem/ → problem_dir
+    problem_link = project_root / "problem"
+    if problem_link.is_symlink():
+        problem_link.unlink()
+    if not problem_link.exists():
+        problem_link.symlink_to(ctx.problem_dir)
+
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -3208,6 +3238,12 @@ def main():
         print(f"  Problem: {ctx.problem_id}  Attempt: {ctx.attempt_id}")
         print(f"  Problem dir: {ctx.problem_dir}")
         print(f"  Run root: {ctx.run_root}")
+
+    # For multi-problem mode: create symlinks at project_root so all existing
+    # code that uses project_root/"population", project_root/"problem" etc. works.
+    # These are updated on each run to point to the current problem/attempt.
+    if ctx.run_root != project_root:
+        _setup_run_symlinks(project_root, ctx)
 
     _preflight_check(project_root)
 
