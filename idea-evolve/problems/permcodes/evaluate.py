@@ -15,14 +15,17 @@ import fcntl
 import hashlib
 import importlib.util
 import json
+import os
 import sys
 import time
 import traceback
 from pathlib import Path
 
 PROBLEM_ROOT = Path(__file__).parent
-PROJECT_ROOT = PROBLEM_ROOT.parent
-CACHE_PATH = PROJECT_ROOT / "history" / "eval_cache.json"
+
+# Cache lives in the run directory (set by orchestrator via env var).
+_RUN_ROOT = Path(os.environ["IDEA_EVOLVE_RUN_ROOT"]) if "IDEA_EVOLVE_RUN_ROOT" in os.environ else None
+CACHE_PATH = (_RUN_ROOT / "history" / "eval_cache.json") if _RUN_ROOT else Path("/tmp/idea_evolve_eval_cache.json")
 CACHE_LOCK_PATH = CACHE_PATH.with_suffix(".lock")
 
 # Load validate.py from the problem directory (problem-agnostic)

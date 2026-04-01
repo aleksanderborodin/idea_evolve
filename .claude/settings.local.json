@@ -137,7 +137,8 @@
       "Bash(echo \"PID: $!\")",
       "Bash(kill 227409)",
       "Bash(python3 -c \"import py_compile; py_compile.compile\\('idea-evolve/orchestrator.py', doraise=True\\)\")",
-      "Bash(find . -name \"*.pyc\" -path \"*orchestrator*\" -delete)"
+      "Bash(find . -name \"*.pyc\" -path \"*orchestrator*\" -delete)",
+      "WebFetch(domain:robot-learning-collective.github.io)"
     ],
     "additionalDirectories": [
       "/home/sasha/Desktop/project_alpha/alpha-evolve/papers/pdf",

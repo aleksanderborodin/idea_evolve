@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
 """
-Evaluate a solution for the current problem.
+Evaluate a solution for the Sidon Sets problem.
 
 Usage: python3 evaluate.py <solution_file.py>
 
-The solution file must implement def entrypoint() that returns the expected output.
-Prints JSON with at minimum {fitness, is_valid} fields.
-
-Problem-agnostic: reads validate.py from the same directory as this script.
-Caches results by file content hash for speed.
+The solution file must implement def entrypoint() that returns a list of integers.
+Prints JSON with {fitness, is_valid, violations, raw_size} fields.
 """
 
 import fcntl
@@ -24,12 +21,11 @@ from pathlib import Path
 PROBLEM_ROOT = Path(__file__).parent
 
 # Cache lives in the run directory (set by orchestrator via env var).
-# Fallback: walk up from the solution file to find history/, or use /tmp.
 _RUN_ROOT = Path(os.environ["IDEA_EVOLVE_RUN_ROOT"]) if "IDEA_EVOLVE_RUN_ROOT" in os.environ else None
 CACHE_PATH = (_RUN_ROOT / "history" / "eval_cache.json") if _RUN_ROOT else Path("/tmp/idea_evolve_eval_cache.json")
 CACHE_LOCK_PATH = CACHE_PATH.with_suffix(".lock")
 
-# Load validate.py from the problem directory (problem-agnostic)
+# Load validate.py from the problem directory
 _validate_spec = importlib.util.spec_from_file_location("validate", PROBLEM_ROOT / "validate.py")
 _validate_mod = importlib.util.module_from_spec(_validate_spec)
 _validate_spec.loader.exec_module(_validate_mod)
@@ -85,7 +81,6 @@ def load_solution(filepath: str):
     """Dynamically load a solution module and call entrypoint()."""
     spec = importlib.util.spec_from_file_location("solution", filepath)
     module = importlib.util.module_from_spec(spec)
-    # Add problem dir to sys.path so solutions can import from helpers/ (e.g. helpers.core)
     if str(PROBLEM_ROOT) not in sys.path:
         sys.path.insert(0, str(PROBLEM_ROOT))
     spec.loader.exec_module(module)
@@ -96,6 +91,17 @@ def load_solution(filepath: str):
     return module.entrypoint()
 
 
+def _write_score_sidecar(solution_path: str, result: dict):
+    """Write .score sidecar file next to the solution."""
+    try:
+        score_path = Path(solution_path).with_suffix(".score")
+        tmp_path = score_path.with_suffix(".score.tmp")
+        tmp_path.write_text(json.dumps(result, indent=2))
+        tmp_path.rename(score_path)
+    except Exception:
+        pass
+
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: python3 evaluate.py <solution_file.py>")
@@ -104,14 +110,13 @@ def main():
     solution_path = sys.argv[1]
 
     try:
-        # Check cache first (thread-safe)
         content_hash = _file_hash(solution_path)
         cached = _cached_lookup(content_hash)
         if cached is not None:
+            _write_score_sidecar(solution_path, cached)
             print(json.dumps(cached))
             return
 
-        # Check if time tracking is enabled
         track_time = False
         metrics_path = PROBLEM_ROOT / "metrics.yaml"
         if metrics_path.exists():
@@ -130,26 +135,18 @@ def main():
         if track_time:
             result["eval_time_s"] = round(elapsed, 4)
 
-        # Cache the result (thread-safe) — stores eval_time_s too
         _cached_store(content_hash, result)
-
+        _write_score_sidecar(solution_path, result)
         print(json.dumps(result))
     except Exception as e:
-        # Build error result with sentinel values for all metrics
-        error_result = {"error": str(e)}
-        metrics_path = PROBLEM_ROOT / "metrics.yaml"
-        if metrics_path.exists():
-            try:
-                import yaml
-                data = yaml.safe_load(metrics_path.read_text())
-                for name, spec in data.get("specs", {}).items():
-                    error_result[name] = spec.get("sentinel_value", 0)
-            except Exception:
-                error_result["fitness"] = 1e9
-                error_result["is_valid"] = 0
-        else:
-            error_result["fitness"] = 1e9
-            error_result["is_valid"] = 0
+        error_result = {
+            "fitness": 0,
+            "is_valid": 0,
+            "violations": -1,
+            "raw_size": 0,
+            "error": str(e)[:500],
+        }
+        _write_score_sidecar(solution_path, error_result)
         print(json.dumps(error_result))
         print(f"ERROR: {e}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)

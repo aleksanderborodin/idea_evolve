@@ -689,6 +689,9 @@ def _run_claude_process(cmd, prompt_text, project_root, timeout):
     Returns (stdout, pid) where pid is the process ID of the launched process."""
     env = os.environ.copy()
     env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = "16000"
+    # Tell evaluate.py where to write its cache
+    if CTX:
+        env["IDEA_EVOLVE_RUN_ROOT"] = str(CTX.run_root)
 
     try:
         proc = subprocess.Popen(
