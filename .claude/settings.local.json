@@ -131,7 +131,10 @@
       "Bash(cgexec -g cpuset:benchmark_isolated echo \"works!\")",
       "Bash(systemd-run --user --scope -q --property=AllowedCPUs=0-1 echo \"works\")",
       "Bash(kill -9 287960 287961 287963 288097 288886)",
-      "Bash(python3 -c ':*)"
+      "Bash(python3 -c ':*)",
+      "Bash(python3 orchestrator.py . --problem permcodes --new-attempt --dry-run)",
+      "Bash(python3 orchestrator.py . --problem permcodes --single)",
+      "Bash(echo \"PID: $!\")"
     ],
     "additionalDirectories": [
       "/home/sasha/Desktop/project_alpha/alpha-evolve/papers/pdf",
