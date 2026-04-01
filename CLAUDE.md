@@ -27,21 +27,40 @@ argument. Running it from the repo root passes the wrong root and fails prefligh
 ```bash
 source venv/bin/activate
 cd idea-evolve
+# Legacy mode (single problem — backward compatible)
 python3 orchestrator.py . --single >> /tmp/gen4.log 2>&1 &   # background, one generation
 python3 orchestrator.py .            # full run (foreground)
 python3 orchestrator.py . --single   # one generation only (foreground)
 python3 orchestrator.py . --start-gen 5  # resume from gen 5
 python3 orchestrator.py . --dry-run  # show plan without launching agents
+
+# Multi-problem mode (after migration)
+python3 orchestrator.py . --problem gemm --single         # run gemm, latest attempt
+python3 orchestrator.py . --problem gemm --new-attempt    # create new attempt
+python3 orchestrator.py . --problem gemm --attempt attempt_002  # specific attempt
+python3 orchestrator.py . --problem permcodes --new-attempt     # different problem
 ```
 
 Monitor a background run: `cat /tmp/gen4.log` (or `tail -f /tmp/gen4.log`).
+
+### Migration to Multi-Problem Layout
+
+To migrate from the legacy single-problem layout to multi-problem:
+```bash
+cd idea-evolve
+python3 migrate_to_multi.py . --dry-run  # preview changes
+python3 migrate_to_multi.py .            # execute migration
+```
+This moves `problem/` → `problems/gemm/`, `problem-permcodes/` → `problems/permcodes/`,
+and all run state to `runs/gemm/attempt_001/`. Original dirs are preserved until manual cleanup.
 
 Current problem: **Binary-Ternary GEMM Optimization** (C++ performance, geo-median time in µs, lower is better).
 Baseline score: **~770 µs** (V14opt implementation in `problem/initial_programs/optimize.py`).
 Old target of 477 µs already beaten. **NEW Target: 24 µs** (~3% of baseline, ~32x speedup).
 Benchmarks use median (not mean) for stability. Pinned to cores 0-1 via `cgexec`, serialized with file lock.
-Problem files at `idea-evolve/problem/`. Fitness direction read from `problem/metrics.yaml`.
-Previous problem (Permutation Codes M(8,5)) archived at `idea-evolve/problem-permcodes/`.
+Problem files at `idea-evolve/problem/` (legacy) or `idea-evolve/problems/gemm/` (multi-problem).
+Fitness direction read from `problem/metrics.yaml`.
+Previous problem (Permutation Codes M(8,5)) at `idea-evolve/problem-permcodes/` (or `problems/permcodes/`).
 
 ### C++ Evaluation Pipeline
 
@@ -73,10 +92,25 @@ API endpoints at `/api/*` return JSON. See `dashboard/README.md` for full struct
 
 Dashboard reads fitness direction and decimals from `problem/metrics.yaml`. Scores display with
 proper precision (4 decimals for this problem). Solutions table sorted best-first (respects
-lower-is-better). Score source priority: `.score` sidecar → eval cache (by content hash) →
-header comment. Progression chart shows baseline from initial programs and target line with
+lower-is-better). Score source priority: `.score` sidecar → eval cache (by content hash).
+Header comment fallback removed — it caused stale score inconsistencies.
+Progression chart shows baseline from initial programs and target line with
 direction indicator ("↓ better" / "↑ better"). Agent column shows full identifier (e.g.,
 `explore_1` not just `explore`).
+
+**Multi-problem navigation:** Dashboard has a problem/attempt selector flyout panel in the
+header (between logo and nav tabs). Click the breadcrumb to open the flyout, which shows
+all problems with their attempts, summary stats, and status indicators. Selection stored
+in localStorage. All API endpoints accept `?problem=X&attempt=Y` query params.
+API endpoint: `GET /api/problems` returns all problems with attempts and summary stats.
+
+**Annotated frontier:** The score progression chart has a toggleable "Frontier" button that
+overlays annotated callouts on record-breaking solutions, showing agent name, score delta,
+central ideas, and a descriptive label. Data from `GET /api/frontier`.
+
+**Knowledge staleness:** Overview API returns `soa_staleness` (how many generations behind
+the State of Affairs is) and `lifecycle_counts` (ideas by lifecycle stage). Pipeline tab
+reads from `gen_progress.json` for durable per-agent status.
 
 Dashboard has live orchestrator visibility via `history/run_state.json`. Header beacon shows
 green (running), gray (idle), amber (stale >2min), or red (crashed PID). Overview tab shows
@@ -103,52 +137,56 @@ with `--allowedTools Read,Write,Bash,Glob,Grep`. Each agent gets a lean prompt w
 
 ## File Structure
 
+### Legacy Layout (single problem, backward compatible)
+
 ```
 idea-evolve/
-├── orchestrator.py          # Stateless loop (~2300 lines)
+├── orchestrator.py          # Stateless loop (~3200 lines)
+├── migrate_to_multi.py      # Migration script to multi-problem layout
 ├── problem/                 # Problem definition (read-only for agents)
-│   ├── description.md       # Problem description (problem-agnostic)
-│   ├── constraints.md
-│   ├── evaluate.py          # Problem-agnostic evaluator (loads validate.py, caches results)
-│   ├── validate.py          # Problem-specific validation logic
-│   ├── helper.py            # Backward-compat shim only — re-exports from helpers/core.py
-│   ├── helpers/             # ALL helpers live here (core + experimentator-created)
-│   │   ├── __init__.py
-│   │   ├── core.py          # Problem-specific helper: compute_c (import: from helpers.core import compute_c)
-│   │   ├── README.md        # Index of all available helpers
-│   │   └── <name>.py        # Experimentator-created helpers (validated/deployed by orchestrator)
-│   └── metrics.yaml         # Fitness direction, bounds, sentinel values, eval time tracking
-├── agents/                  # Prompt templates (read-only, 10 files)
-│   ├── architect.md, explore.md, exploit.md, genetic.md, full.md
-│   ├── research.md, experimentator.md, evaluator.md
-│   ├── system_critic.md, consistency_review.md
-├── knowledge/               # Three-layer hierarchy (written by orchestrator only)
-│   ├── state_of_affairs.md  # Layer 0
-│   ├── clusters/            # Layer 1
-│   ├── ideas/{active,established,disputed,debunked,archived}/  # Layer 2
-│   ├── patterns/{active,confirmed}/  # Layer 2
-│   ├── facts/               # Global (no lifecycle)
-│   ├── research/            # Research findings per gen
-│   └── experiments/         # Experimentator results per gen
-├── population/              # All solutions
-│   ├── best.py → symlink    # top/ → ranked symlinks
-│   └── genNNN/{type}_{instance}/sol*.py
-├── history/                 # generations/, score_progression.md, solution_idea_map.md, coverage_matrix.md
-│   ├── run_state.json       # Live orchestrator state (pid, phase, agent statuses, errors)
-│   └── run_state.json.lock  # File lock for thread-safe updates
-├── briefs/genNNN/           # manifest.yaml + per-agent briefs
+│   ├── description.md, constraints.md, evaluate.py, validate.py
+│   ├── helper.py            # Backward-compat shim → helpers/core.py
+│   ├── helpers/             # ALL helpers (core + experimentator-created)
+│   └── metrics.yaml         # Fitness direction, bounds, sentinel values
+├── agents/                  # Prompt templates (read-only, 10 files, GLOBAL)
+├── prompts/                 # Prompt templates (loaded by orchestrator, GLOBAL)
+├── user/                    # config.yaml, initial_ideas.md, initial_facts.md (GLOBAL)
+├── knowledge/               # Three-layer hierarchy (per-run state)
+├── population/              # All solutions (per-run state)
+├── history/                 # generations/, all_scores.json, run_state.json (per-run state)
+├── briefs/genNNN/           # manifest.yaml + per-agent briefs + gen_progress.json
 ├── reports/genNNN/          # Agent debrief reports
 ├── papers/                  # Academic paper library
-│   ├── manage.py            # Pipeline CLI: add, list, status, summarize
-│   ├── index.yaml           # Tracks all papers + pipeline status
-│   ├── pdf/                 # Raw PDFs (NNN_name_author.pdf)
-│   ├── md/                  # Auto-extracted text (NNN_name_author.md)
-│   └── summaries/           # Agent-written structured summaries
-├── prompts/                 # Prompt templates (loaded by orchestrator)
-├── feedback/                # system_recommendations.md, experiment_suggestions/, experiment_requests/, agent_gaps/, consistency_reviews/
-├── workspace/               # Ephemeral (cleaned after each agent)
-└── user/                    # config.yaml, initial_ideas.md, initial_facts.md, interventions.md
+├── feedback/                # system_recommendations.md, system_analysis/, etc.
+└── workspace/               # Ephemeral (cleaned after each agent)
 ```
+
+### Multi-Problem Layout (after migration)
+
+```
+idea-evolve/
+├── orchestrator.py          # Accepts --problem, --attempt, --new-attempt
+├── agents/, prompts/, user/ # GLOBAL (shared across all problems/attempts)
+├── problems/                # Problem definitions (read-only at runtime)
+│   ├── gemm/                # Current problem/ contents
+│   │   ├── description.md, evaluate.py, validate.py, metrics.yaml
+│   │   └── helpers/, initial_programs/
+│   └── permcodes/           # Archived problem
+├── runs/                    # All evolution data, scoped per problem+attempt
+│   ├── gemm/
+│   │   ├── attempt_001/     # Self-contained run
+│   │   │   ├── population/, knowledge/, history/, briefs/, reports/
+│   │   │   ├── feedback/, workspace/
+│   │   │   └── briefs/genNNN/gen_progress.json  # Durable progress tracking
+│   │   └── attempt_002/
+│   └── permcodes/attempt_001/
+└── dashboard/               # Web UI (reads from any problem/attempt)
+```
+
+**Key new file: `briefs/genNNN/gen_progress.json`** — durable per-generation progress
+tracker (survives orchestrator restarts, unlike ephemeral `run_state.json`). Contains
+per-agent status, PIDs, session IDs, per-phase completion status. Used by `run_single_agent()`
+skip logic and dashboard pipeline tab.
 
 ## What Works
 
@@ -166,7 +204,9 @@ idea-evolve/
   a new session only if no session_id exists. Work gets completed and knowledge is never lost.
 - **Mandatory evaluate-immediately workflow.** Agent prompts (explore, exploit, full, genetic)
   and the orchestrator's global prompt context enforce: write one solution → run evaluate.py →
-  update `# fitness:` header → then move on. Prevents agents from batch-writing unevaluated solutions.
+  verify `.score` file created → then move on. Prevents agents from batch-writing unevaluated
+  solutions. Header comment `# fitness:` no longer used — `.score` sidecar is the only
+  authoritative score source (alongside eval_cache by content hash).
 - **Turn budgets from config.** `user/config.yaml` `max_turns:` section is authoritative.
   `DEFAULT_MAX_TURNS` in orchestrator.py is just a fallback if config is missing.
 - **Timing tracking.** Every phase and agent records elapsed time to `history/timing.json`.
@@ -180,7 +220,18 @@ idea-evolve/
   60s when idle), and per-agent pipeline visualization. Crash detection via PID liveness +
   staleness check (>120s without update). NOT a replacement for phase_status() resume logic —
   additive visibility layer only.
-- **Stateless crash recovery.** `phase_status()` reconstructs position from file existence.
+- **Stateless crash recovery.** `phase_status()` reconstructs position from file existence,
+  with `gen_progress.json` as primary source (durable, written per-phase). Falls back to
+  filesystem checks for backward compatibility.
+- **Durable generation progress.** `briefs/genNNN/gen_progress.json` tracks per-agent
+  completion status, PIDs, session IDs, and output move status. Survives orchestrator
+  restarts (unlike ephemeral `run_state.json`). Used by `run_single_agent()` to skip
+  completed agents and kill orphaned processes on resume.
+- **Orphan process cleanup.** On restart, `_kill_generation_orphans()` reads `gen_progress.json`
+  and kills any agent processes still listed as "running" (verified via `/proc/{pid}/cmdline`).
+- **Multi-problem support.** `RunContext` dataclass separates global resources, problem
+  definitions, and per-attempt run state. CLI accepts `--problem`, `--attempt`, `--new-attempt`.
+  Legacy single-problem mode preserved when no `--problem` given.
 - **Lean prompts.** File paths, not inline content. Stable prompt size across generations.
 - **In-session debrief.** Agent writes `report.md` while it still remembers everything it tried.
 - **Parallel groups.** `parallel_groups` in manifest → groups sequential, agents within group parallel.

@@ -121,7 +121,17 @@
       "Bash(python3 -c \"from playwright.sync_api import sync_playwright\")",
       "Bash(find /home/sasha/Desktop/project_alpha -type f -name *.md -o -name *.py -o -name *.json -o -name *.yaml -o -name *.yml -o -name *.html -o -name *.js -o -name *.css)",
       "Bash(git mv:*)",
-      "Bash(ps -p 792253 -o pid,etime,cmd --no-headers)"
+      "Bash(ps -p 792253 -o pid,etime,cmd --no-headers)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f''''Gen: {d.get\\(\"\"current_gen\"\"\\)}, Phase: {d.get\\(\"\"current_phase\"\"\\)}, PID: {d.get\\(\"\"pid\"\"\\)}''''\\)\")",
+      "Bash(xargs -r ps --no-headers -o pid,cmd -p)",
+      "Bash(cgexec -g cpuset:bench echo \"works\")",
+      "Bash(kill -9 242361 242362 252665 252666 252675 252703 252888 252898 252900 252903 278721 278942)",
+      "Bash(sudo cgcreate:*)",
+      "Bash(sudo cgset:*)",
+      "Bash(cgexec -g cpuset:benchmark_isolated echo \"works!\")",
+      "Bash(systemd-run --user --scope -q --property=AllowedCPUs=0-1 echo \"works\")",
+      "Bash(kill -9 287960 287961 287963 288097 288886)",
+      "Bash(python3 -c ':*)"
     ],
     "additionalDirectories": [
       "/home/sasha/Desktop/project_alpha/alpha-evolve/papers/pdf",

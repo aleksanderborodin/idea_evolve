@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "errors": [
+    {
+      "gen": 1,
+      "phase": "agents",
+      "agent": "explore_2",
+      "type": "error",
+      "message": "Exited with code 1: no stderr",
+      "ts": "2026-03-31T14:23:50.359577+00:00"
+    },
+    {
+      "gen": 1,
+      "phase": "agents",
+      "agent": "explore_1",
+      "type": "timeout",
+      "message": "Timed out after 1800s",
+      "ts": "2026-03-31T14:35:36.950875+00:00"
+    },
+    {
+      "gen": 1,
+      "phase": "agents",
+      "agent": "full_1",
+      "type": "timeout",
+      "message": "Timed out after 1800s",
+      "ts": "2026-03-31T14:35:36.991496+00:00"
+    },
+    {
+      "gen": 2,
+      "phase": "agents",
+      "agent": "research_1",
+      "type": "timeout",
+      "message": "Timed out after 900s",
+      "ts": "2026-03-31T19:29:38.736889+00:00"
+    },
+    {
+      "gen": 2,
+      "phase": "agents",
+      "agent": "experimentator_1",
+      "type": "timeout",
+      "message": "Timed out after 1500s",
+      "ts": "2026-03-31T19:39:38.649422+00:00"
+    },
+    {
+      "gen": 2,
+      "phase": "agents",
+      "agent": "explore_2",
+      "type": "timeout",
+      "message": "Timed out after 2700s",
+      "ts": "2026-03-31T19:59:38.577165+00:00"
+    },
+    {
+      "gen": 2,
+      "phase": "agents",
+      "agent": "explore_1",
+      "type": "timeout",
+      "message": "Timed out after 2700s",
+      "ts": "2026-03-31T19:59:38.706191+00:00"
+    },
+    {
+      "gen": 3,
+      "phase": "agents",
+      "agent": "research_1",
+      "type": "timeout",
+      "message": "Timed out after 900s",
+      "ts": "2026-04-01T14:19:55.281174+00:00"
+    },
+    {
+      "gen": 3,
+      "phase": "agents",
+      "agent": "experimentator_1",
+      "type": "timeout",
+      "message": "Timed out after 1200s",
+      "ts": "2026-04-01T14:24:55.428397+00:00"
+    }
+  ],
+  "completed_gens": [
+    1,
+    2,
+    3
+  ],
+  "pid": 39748,
+  "started_at": "2026-04-01T14:01:05.607969+00:00",
+  "target_gen": 30,
+  "status": "stopped",
+  "current_gen": 3,
+  "current_phase": "idle",
+  "agents": {},
+  "last_updated": "2026-04-01T15:08:14.307779+00:00"
+}

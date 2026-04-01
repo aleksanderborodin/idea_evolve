@@ -53,7 +53,7 @@ Write the offspring as a clean, self-contained `sol*.py` file. Do not leave dead
 
 ### 5. Test and Iterate
 
-**CRITICAL: Run evaluate.py IMMEDIATELY after writing the offspring. Update the `# fitness:` header with the real score. Never leave a placeholder.**
+**CRITICAL: Run evaluate.py IMMEDIATELY after writing the offspring. Verify the `.score` sidecar file was created. Never skip evaluation.**
 
 ```bash
 python3 evaluate.py output/sol01.py

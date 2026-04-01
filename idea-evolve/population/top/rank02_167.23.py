@@ -1,1 +1,0 @@
-gen001/full_1/sol04.py

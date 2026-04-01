@@ -7,9 +7,31 @@ from pathlib import Path
 import yaml
 
 
-def _eval_cache() -> dict:
-    """Load the evaluation cache (content-hash -> result)."""
-    cache_path = Path(__file__).resolve().parent.parent.parent / "idea-evolve" / "history" / "eval_cache.json"
+def _auto_run_root() -> Path:
+    """Auto-detect the run root for multi-problem layout."""
+    ie_root = Path(__file__).resolve().parent.parent.parent / "idea-evolve"
+    problems_dir = ie_root / "problems"
+    if problems_dir.is_dir():
+        for pdir in sorted(problems_dir.iterdir()):
+            if pdir.is_dir():
+                runs_dir = ie_root / "runs" / pdir.name
+                if runs_dir.is_dir():
+                    attempts = sorted(d for d in runs_dir.iterdir() if d.is_dir())
+                    if attempts:
+                        return attempts[-1]
+    return ie_root
+
+
+def _eval_cache(run_root: Path | None = None) -> dict:
+    """Load the evaluation cache (content-hash -> result).
+
+    If run_root is given, look for the cache there instead of the default path.
+    """
+    if run_root is not None:
+        cache_path = run_root / "history" / "eval_cache.json"
+    else:
+        root = _auto_run_root()
+        cache_path = root / "history" / "eval_cache.json"
     try:
         return json.loads(cache_path.read_text()) if cache_path.exists() else {}
     except Exception:
@@ -66,26 +88,30 @@ def extract_score(sol_path: Path) -> dict | None:
     except Exception:
         pass
 
-    # Last resort: parse header comments
-    try:
-        text = sol_path.read_text()
-        for line in text.split("\n")[:10]:
-            if "fitness:" in line.lower():
-                parts = line.split(":")
-                for part in parts[1:]:
-                    try:
-                        val = float(part.strip().split()[0])
-                        return {"fitness": val}
-                    except (ValueError, IndexError):
-                        continue
-    except Exception:
-        pass
+    # Header comment fallback removed — stale headers caused score inconsistencies.
+    # Only .score sidecar and eval_cache are authoritative sources.
     return None
 
 
-def get_metrics_config() -> dict:
-    """Read problem/metrics.yaml and return primary metric config."""
-    metrics_path = Path(__file__).resolve().parent.parent.parent / "idea-evolve" / "problem" / "metrics.yaml"
+def get_metrics_config(problem_dir: Path | None = None) -> dict:
+    """Read problem/metrics.yaml and return primary metric config.
+
+    If problem_dir is given, look for metrics.yaml there instead of the default path.
+    """
+    if problem_dir is not None:
+        metrics_path = problem_dir / "metrics.yaml"
+    else:
+        ie_root = Path(__file__).resolve().parent.parent.parent / "idea-evolve"
+        # Try legacy path first, then auto-detect from problems/
+        metrics_path = ie_root / "problem" / "metrics.yaml"
+        if not metrics_path.exists():
+            problems_dir = ie_root / "problems"
+            if problems_dir.is_dir():
+                for pdir in sorted(problems_dir.iterdir()):
+                    candidate = pdir / "metrics.yaml"
+                    if candidate.exists():
+                        metrics_path = candidate
+                        break
     try:
         data = yaml.safe_load(metrics_path.read_text())
         specs = data.get("specs", {})

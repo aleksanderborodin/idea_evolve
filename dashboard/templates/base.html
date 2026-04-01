@@ -21,6 +21,16 @@
     <div class="logo-text">Idea <span>Evolve</span></div>
   </div>
 
+  <div class="context-selector">
+    <button class="context-btn" id="contextBtn">
+      <span class="ctx-problem" id="ctxProblem">--</span>
+      <span class="ctx-sep">/</span>
+      <span class="ctx-attempt" id="ctxAttempt">--</span>
+      <span class="ctx-status-dot" id="ctxDot"></span>
+      <span class="ctx-chevron">&#9662;</span>
+    </button>
+  </div>
+
   <nav class="nav">
     <button class="nav-tab active" data-tab="overview">
       <span class="tab-icon">&#9632;</span>
@@ -78,6 +88,19 @@
     <div class="modal-meta" id="modalMeta"></div>
     <div class="modal-body" id="modalBody"></div>
     <div class="modal-footer" id="modalFooter"></div>
+  </div>
+</div>
+
+<!-- ==================== FLYOUT PANEL ==================== -->
+<div class="flyout-overlay" id="flyoutOverlay">
+  <div class="flyout-panel" id="flyoutPanel">
+    <div class="flyout-header">
+      <span>Problems &amp; Attempts</span>
+      <button class="flyout-close" id="flyoutClose">&times;</button>
+    </div>
+    <div class="flyout-body" id="flyoutBody">
+      <div class="flyout-loading">Loading...</div>
+    </div>
   </div>
 </div>
 

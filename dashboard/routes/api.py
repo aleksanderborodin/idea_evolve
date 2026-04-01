@@ -1,6 +1,10 @@
 """JSON API endpoints for the dashboard frontend."""
 
-from flask import Blueprint, jsonify
+import json
+import os
+from pathlib import Path
+
+from flask import Blueprint, jsonify, request
 
 from dashboard.data import (
     get_active_agents,
@@ -9,10 +13,12 @@ from dashboard.data import (
     get_eval_cache_stats,
     get_feedback,
     get_file_tree,
+    get_gen_progress,
     get_generation_status,
     get_initial_scores,
     get_knowledge,
     get_knowledge_item,
+    get_knowledge_lifecycle_counts,
     get_manifest,
     get_phase_status,
     get_reports,
@@ -20,17 +26,155 @@ from dashboard.data import (
     get_score_progression,
     get_solution_idea_map,
     get_solutions,
+    get_state_of_affairs_staleness,
     get_timing_data,
+    get_frontier_data,
+    list_problems,
+    list_attempts,
+    get_run_root,
+    get_problem_dir,
 )
 from dashboard.data.helpers import get_metrics_config
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
 
+def _resolve_context():
+    """Extract problem/attempt from query params and resolve paths.
+
+    Returns (run_root, problem_dir) — both None for legacy/default.
+    """
+    problem = request.args.get("problem")
+    attempt = request.args.get("attempt")
+    if not problem or problem == "default":
+        return None, None
+    run_root = get_run_root(problem, attempt)
+    problem_dir = get_problem_dir(problem)
+    return run_root, problem_dir
+
+
+# ---------------------------------------------------------------------------
+# Problem / Attempt Discovery
+# ---------------------------------------------------------------------------
+
+@api_bp.route("/problems")
+def problems():
+    """List all problems with their attempts and summary stats."""
+    result = []
+    for pid in list_problems():
+        pdir = get_problem_dir(pid)
+
+        # Read problem name from description.md first line
+        name = pid
+        desc_first_line = ""
+        desc_path = pdir / "description.md"
+        if desc_path.exists():
+            try:
+                lines = desc_path.read_text().splitlines()
+                for line in lines:
+                    stripped = line.strip().lstrip("# ").strip()
+                    if stripped:
+                        name = stripped
+                        break
+                # First non-title content line
+                for line in lines[1:]:
+                    stripped = line.strip()
+                    if stripped and not stripped.startswith("#"):
+                        desc_first_line = stripped[:120]
+                        break
+            except Exception:
+                pass
+
+        # Read metrics
+        metrics = get_metrics_config(problem_dir=pdir)
+        target_score = metrics.get("target_score")
+        higher_is_better = metrics.get("higher_is_better", True)
+        decimals = metrics.get("decimals", 4)
+
+        # Build attempts
+        attempts_list = []
+        for aid in list_attempts(pid):
+            rroot = get_run_root(pid, aid)
+
+            # Count generations
+            gen_dir = rroot / "history" / "generations"
+            gen_count = len(list(gen_dir.glob("gen*.md"))) if gen_dir.is_dir() else 0
+
+            # Count solutions
+            pop_dir = rroot / "population"
+            sol_count = 0
+            if pop_dir.is_dir():
+                for gd in pop_dir.iterdir():
+                    if gd.is_dir() and gd.name.startswith("gen"):
+                        for ad in gd.iterdir():
+                            if ad.is_dir():
+                                sol_count += len(list(ad.glob("sol*.py")))
+
+            # Best score from all_scores.json
+            best_score = None
+            scores_path = rroot / "history" / "all_scores.json"
+            if scores_path.exists():
+                try:
+                    all_scores = json.loads(scores_path.read_text())
+                    for score, _path in all_scores:
+                        if score is None or not isinstance(score, (int, float)):
+                            continue
+                        if best_score is None:
+                            best_score = score
+                        elif higher_is_better and score > best_score:
+                            best_score = score
+                        elif not higher_is_better and score < best_score:
+                            best_score = score
+                except Exception:
+                    pass
+
+            # Run state / status
+            status = "idle"
+            state_path = rroot / "history" / "run_state.json"
+            if state_path.exists():
+                try:
+                    rs = json.loads(state_path.read_text())
+                    pid_val = rs.get("pid")
+                    pid_alive = False
+                    if pid_val:
+                        try:
+                            os.kill(pid_val, 0)
+                            pid_alive = True
+                        except (OSError, ProcessLookupError):
+                            pass
+                    if pid_alive and rs.get("status") == "running":
+                        status = "running"
+                    elif not pid_alive and rs.get("status") == "running":
+                        status = "crashed"
+                except Exception:
+                    pass
+
+            attempts_list.append({
+                "id": aid,
+                "generations_completed": gen_count,
+                "best_score": best_score,
+                "total_solutions": sol_count,
+                "status": status,
+            })
+
+        result.append({
+            "id": pid,
+            "name": name,
+            "description_first_line": desc_first_line,
+            "target_score": target_score,
+            "higher_is_better": higher_is_better,
+            "decimals": decimals,
+            "attempts": attempts_list,
+        })
+
+    return jsonify(result)
+
+
 @api_bp.route("/overview")
 def overview():
+    run_root, problem_dir = _resolve_context()
     config = get_config()
-    metrics = get_metrics_config()
+    metrics = get_metrics_config(problem_dir=problem_dir)
     generations = get_generation_status()
     progression = get_score_progression()
     timing = get_timing_data()
@@ -65,7 +209,7 @@ def overview():
 
     # Quick knowledge counts (avoid full scan — just count files)
     from dashboard.data.config import get_project_root
-    root = get_project_root()
+    root = run_root if run_root is not None else get_project_root()
     idea_count = sum(
         len(list(d.glob("*.md")))
         for d in (root / "knowledge" / "ideas").iterdir()
@@ -118,6 +262,10 @@ def overview():
     else:
         baseline_score = None
 
+    # Knowledge staleness and lifecycle counts
+    soa_staleness = get_state_of_affairs_staleness()
+    lifecycle_counts = get_knowledge_lifecycle_counts()
+
     return jsonify({
         "config": {
             "target_score": metrics.get("target_score", config.get("target_score")),
@@ -148,6 +296,8 @@ def overview():
         "eval_cache": cache_stats,
         "initial_scores": initial_scores,
         "run_state": run_state,
+        "soa_staleness": soa_staleness,
+        "lifecycle_counts": lifecycle_counts,
     })
 
 
@@ -202,6 +352,11 @@ def feedback():
     return jsonify(get_feedback())
 
 
+@api_bp.route("/generation/<int:gen>/progress")
+def generation_progress(gen):
+    return jsonify(get_gen_progress(gen))
+
+
 @api_bp.route("/generation/<int:gen>")
 def generation(gen):
     gen_str = f"gen{gen:03d}"
@@ -219,3 +374,9 @@ def generation(gen):
         result["snapshot"] = snapshot_path.read_text()[:5000]
 
     return jsonify(result)
+
+
+@api_bp.route("/frontier")
+def frontier():
+    """Return record-breaking (frontier) solutions with idea annotations."""
+    return jsonify({"frontier": get_frontier_data()})

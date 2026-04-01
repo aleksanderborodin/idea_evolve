@@ -1,0 +1,9 @@
+{
+  "fitness": 175.65,
+  "is_valid": 1,
+  "detail_file": "/tmp/bench_detail_2b64982b.json",
+  "time_small": 4.11,
+  "time_medium": 337.16,
+  "time_large": 3911.12,
+  "eval_time_s": 29.9314
+}

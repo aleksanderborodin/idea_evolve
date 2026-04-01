@@ -1,4 +1,4 @@
-from .config import get_project_root, get_config
+from .config import get_project_root, get_config, list_problems, list_attempts, get_run_root, get_problem_dir
 from .helpers import read_frontmatter, read_body, extract_score, get_metrics_config
 from .scanner import (
     get_generation_status,
@@ -18,4 +18,8 @@ from .scanner import (
     get_eval_cache_stats,
     get_active_agents,
     get_feedback,
+    get_gen_progress,
+    get_knowledge_lifecycle_counts,
+    get_state_of_affairs_staleness,
+    get_frontier_data,
 )

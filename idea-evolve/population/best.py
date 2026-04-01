@@ -1,1 +1,0 @@
-gen001/explore_1/sol10.py

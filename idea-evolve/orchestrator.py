@@ -26,6 +26,130 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
+from dataclasses import dataclass
+
+
+# ---------------------------------------------------------------------------
+# RunContext — replaces the overloaded project_root parameter
+# ---------------------------------------------------------------------------
+
+@dataclass
+class RunContext:
+    """Separates the three roles previously conflated in project_root:
+    - project_root: global resources (agents/, prompts/, user/)
+    - problem_dir: problem definition (description.md, evaluate.py, etc.)
+    - run_root: per-attempt run state (population/, knowledge/, history/, etc.)
+    """
+    project_root: Path    # idea-evolve/ (for agents/, prompts/, user/)
+    problem_dir: Path     # problems/{problem_id}/ (or legacy problem/)
+    run_root: Path        # runs/{problem_id}/{attempt_id}/ (or legacy = project_root)
+    problem_id: str
+    attempt_id: str
+
+
+def _ensure_run_skeleton(run_root: Path):
+    """Create the directory tree for a new attempt."""
+    dirs = [
+        "population",
+        "knowledge/ideas/active",
+        "knowledge/ideas/established",
+        "knowledge/ideas/disputed",
+        "knowledge/ideas/debunked",
+        "knowledge/ideas/archived",
+        "knowledge/patterns/active",
+        "knowledge/patterns/confirmed",
+        "knowledge/clusters",
+        "knowledge/facts",
+        "knowledge/research",
+        "knowledge/experiments",
+        "history/generations",
+        "briefs",
+        "reports",
+        "feedback/system_analysis",
+        "feedback/consistency_reviews",
+        "feedback/experiment_requests",
+        "workspace",
+    ]
+    for d in dirs:
+        (run_root / d).mkdir(parents=True, exist_ok=True)
+
+
+def _build_run_context(project_root: Path, problem_id: str | None, attempt_id: str | None,
+                        new_attempt: bool = False) -> RunContext:
+    """Construct a RunContext from CLI args. Supports both legacy and multi-problem layouts."""
+
+    # Legacy mode: no --problem given, use problem/ directory directly
+    if problem_id is None:
+        if (project_root / "problem").exists():
+            return RunContext(
+                project_root=project_root,
+                problem_dir=project_root / "problem",
+                run_root=project_root,  # Legacy: state lives at project root
+                problem_id="default",
+                attempt_id="legacy",
+            )
+        # Check for multi-problem layout
+        problems_dir = project_root / "problems"
+        if problems_dir.exists():
+            problem_dirs = sorted(d for d in problems_dir.iterdir() if d.is_dir())
+            if len(problem_dirs) == 1:
+                problem_id = problem_dirs[0].name
+            else:
+                avail = ", ".join(d.name for d in problem_dirs)
+                print(f"  ERROR: Multiple problems found ({avail}). Use --problem to select one.")
+                sys.exit(1)
+        else:
+            print("  ERROR: No problem/ or problems/ directory found.")
+            sys.exit(1)
+
+    # Multi-problem mode
+    problem_dir = project_root / "problems" / problem_id
+    if not problem_dir.exists():
+        # Check legacy location as fallback
+        if problem_id == "default" and (project_root / "problem").exists():
+            problem_dir = project_root / "problem"
+        else:
+            print(f"  ERROR: Problem directory not found: {problem_dir}")
+            sys.exit(1)
+
+    runs_dir = project_root / "runs" / problem_id
+
+    if new_attempt:
+        # Auto-create next attempt
+        runs_dir.mkdir(parents=True, exist_ok=True)
+        existing = sorted(d for d in runs_dir.iterdir() if d.is_dir() and d.name.startswith("attempt_"))
+        next_num = len(existing) + 1
+        attempt_id = f"attempt_{next_num:03d}"
+        run_root = runs_dir / attempt_id
+        _ensure_run_skeleton(run_root)
+        print(f"  Created new attempt: {problem_id}/{attempt_id}")
+    elif attempt_id:
+        run_root = runs_dir / attempt_id
+        if not run_root.exists():
+            _ensure_run_skeleton(run_root)
+    else:
+        # Default to latest attempt
+        if runs_dir.exists():
+            existing = sorted(d for d in runs_dir.iterdir() if d.is_dir() and d.name.startswith("attempt_"))
+            if existing:
+                attempt_id = existing[-1].name
+                run_root = existing[-1]
+            else:
+                attempt_id = "attempt_001"
+                run_root = runs_dir / attempt_id
+                _ensure_run_skeleton(run_root)
+        else:
+            attempt_id = "attempt_001"
+            run_root = runs_dir / attempt_id
+            _ensure_run_skeleton(run_root)
+
+    return RunContext(
+        project_root=project_root,
+        problem_dir=problem_dir,
+        run_root=run_root,
+        problem_id=problem_id,
+        attempt_id=attempt_id,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +249,107 @@ def _read_run_state(project_root: Path) -> dict:
     return {}
 
 
+def _write_gen_progress(project_root: Path, gen: int, **updates):
+    """Thread-safe update to briefs/genNNN/gen_progress.json. Merges updates into existing state."""
+    gen_str = f"gen{gen:03d}"
+    progress_path = project_root / "briefs" / gen_str / "gen_progress.json"
+    lock_path = progress_path.with_suffix(".lock")
+    progress_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(lock_path, "w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            if progress_path.exists():
+                state = json.loads(progress_path.read_text())
+            else:
+                state = {"schema_version": 1, "agents": {}}
+            for k, v in updates.items():
+                if k == "agents" and isinstance(v, dict):
+                    state.setdefault("agents", {}).update(v)
+                else:
+                    state[k] = v
+            state["last_updated"] = datetime.now(timezone.utc).isoformat()
+            progress_path.write_text(json.dumps(state, indent=2))
+            fcntl.flock(lock, fcntl.LOCK_UN)
+    except Exception as e:
+        print(f"  WARNING: Failed to write gen_progress.json: {e}")
+
+
+def _read_gen_progress(project_root: Path, gen: int) -> dict:
+    """Read briefs/genNNN/gen_progress.json or return empty dict."""
+    gen_str = f"gen{gen:03d}"
+    progress_path = project_root / "briefs" / gen_str / "gen_progress.json"
+    if progress_path.exists():
+        try:
+            return json.loads(progress_path.read_text())
+        except Exception:
+            pass
+    return {}
+
+
+def _agent_has_output(project_root: Path, gen: int, atype: str, instance: int) -> bool:
+    """Check if an agent has produced output (in population or workspace)."""
+    gen_str = f"gen{gen:03d}"
+    agent_name = f"{atype}_{instance}"
+    # Check population (outputs already moved)
+    pop_dir = project_root / "population" / gen_str / agent_name
+    if pop_dir.exists() and any(pop_dir.iterdir()):
+        return True
+    # Check reports
+    report = project_root / "reports" / gen_str / f"{agent_name}.md"
+    if report.exists():
+        return True
+    # Check research/experiment outputs
+    if atype == "research":
+        research_dir = project_root / "knowledge" / "research" / gen_str
+        if research_dir.exists() and any(research_dir.iterdir()):
+            return True
+    if atype == "experimentator":
+        exp_dir = project_root / "knowledge" / "experiments" / gen_str
+        if exp_dir.exists() and any(exp_dir.iterdir()):
+            return True
+    # Check workspace (output exists but not moved yet)
+    ws_output = project_root / "workspace" / f"{gen_str}_{agent_name}" / "output"
+    if ws_output.exists() and any(ws_output.iterdir()):
+        return True
+    return False
+
+
+def _kill_orphan(pid: int, label: str):
+    """Kill an orphaned agent process group after verifying it's a Claude process."""
+    try:
+        # Verify it's actually a Claude/npx process before killing
+        cmdline_path = Path(f"/proc/{pid}/cmdline")
+        if cmdline_path.exists():
+            cmdline = cmdline_path.read_bytes().decode("utf-8", errors="replace")
+            if "claude" not in cmdline.lower() and "npx" not in cmdline.lower():
+                print(f"  WARNING: PID {pid} ({label}) is not a Claude process, skipping kill")
+                return
+        else:
+            return  # Process already dead
+
+        print(f"  Killing orphaned process {label} (PID {pid})")
+        try:
+            os.killpg(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+        time.sleep(2)
+        try:
+            os.killpg(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    except Exception as e:
+        print(f"  WARNING: Failed to kill orphan {label} (PID {pid}): {e}")
+
+
+def _kill_generation_orphans(project_root: Path, gen: int):
+    """Kill all running agent processes from a prior run of this generation."""
+    progress = _read_gen_progress(project_root, gen)
+    agents = progress.get("agents", {})
+    for name, info in agents.items():
+        if info.get("status") == "running" and info.get("pid"):
+            _kill_orphan(info["pid"], name)
+
+
 def _get_recent_timing(project_root: Path, current_gen: int, lookback: int = 3) -> dict:
     """Get timing data from recent generations for the Architect."""
     timing = _load_timing(project_root)
@@ -138,11 +363,16 @@ def _get_recent_timing(project_root: Path, current_gen: int, lookback: int = 3) 
 
 PREFLIGHT_CACHE = "history/.preflight_ok"
 
-REQUIRED_FILES = [
-    "problem/description.md",
-    "problem/evaluate.py",
-    "problem/validate.py",
-    "problem/metrics.yaml",
+REQUIRED_PROBLEM_FILES = [
+    "description.md",
+    "evaluate.py",
+    "validate.py",
+    "metrics.yaml",
+    "helpers/__init__.py",
+    "helpers/core.py",
+]
+
+REQUIRED_GLOBAL_FILES = [
     "user/config.yaml",
     "agents/architect.md",
     "agents/explore.md",
@@ -157,9 +387,10 @@ REQUIRED_FILES = [
     "prompts/debrief_instructions.md",
     "prompts/analysis_debrief.md",
     "prompts/debrief_recovery.md",
-    "problem/helpers/__init__.py",
-    "problem/helpers/core.py",
 ]
+
+# Legacy combined list for backward compat
+REQUIRED_FILES = [f"problem/{f}" for f in REQUIRED_PROBLEM_FILES] + REQUIRED_GLOBAL_FILES
 
 
 def _preflight_check(project_root: Path):
@@ -296,6 +527,26 @@ def phase_status(project_root: Path, gen: int) -> str:
     if snapshot.exists():
         return "complete"
 
+    # Try gen_progress.json first (durable, survives orchestrator restarts)
+    progress = _read_gen_progress(project_root, gen)
+    if progress:
+        if progress.get("finalize", {}).get("status") == "complete":
+            return "complete"
+        if progress.get("consistency_review", {}).get("status") == "complete":
+            return "consistency_done"
+        if progress.get("system_critic", {}).get("status") == "complete":
+            return "critic_done"
+        if progress.get("evaluator", {}).get("status") == "complete":
+            return "evaluator_done"
+        agents = progress.get("agents", {})
+        if agents and all(a.get("status") == "complete" for a in agents.values()):
+            return "agents_done"
+        if agents and any(a.get("status") in ("running", "complete", "failed") for a in agents.values()):
+            # Partial — run_agents will skip completed ones via gen_progress
+            return "planned"
+
+    # Fall back to filesystem checks (backward compat for pre-gen_progress generations)
+
     # Check moved outputs (survive cleanup) OR workspace (mid-run)
     consistency_review = project_root / "feedback" / "consistency_reviews" / f"{gen_str}.md"
     consistency_ws = project_root / "workspace" / f"{gen_str}_consistency_reviewer"
@@ -376,8 +627,8 @@ def phase_status(project_root: Path, gen: int) -> str:
                     return "agents_done"
                 elif completed > 0:
                     # Some agents done but not all — still in progress.
-                    # Return "planned" so run_agents re-runs (it will skip completed ones
-                    # since their workspaces are already moved).
+                    # Return "planned" so run_agents re-runs (skip logic in
+                    # run_single_agent uses gen_progress.json to skip completed agents).
                     return "planned"
         except Exception:
             pass
@@ -414,20 +665,23 @@ MODEL_MAP = {
 
 class SessionTimeout(Exception):
     """Raised when a Claude session exceeds its timeout."""
-    def __init__(self, msg, session_id=None):
+    def __init__(self, msg, session_id=None, pid=None):
         super().__init__(msg)
         self.session_id = session_id
+        self.pid = pid
 
 
 class SessionError(Exception):
     """Raised when a Claude session exits with a non-zero return code."""
-    def __init__(self, msg, session_id=None):
+    def __init__(self, msg, session_id=None, pid=None):
         super().__init__(msg)
         self.session_id = session_id
+        self.pid = pid
 
 
 def _run_claude_process(cmd, prompt_text, project_root, timeout):
-    """Low-level: run a Claude Code CLI process with timeout and process-group cleanup."""
+    """Low-level: run a Claude Code CLI process with timeout and process-group cleanup.
+    Returns (stdout, pid) where pid is the process ID of the launched process."""
     env = os.environ.copy()
     env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = "16000"
 
@@ -442,6 +696,7 @@ def _run_claude_process(cmd, prompt_text, project_root, timeout):
             env=env,
             start_new_session=True,
         )
+        pid = proc.pid
         try:
             stdout, stderr = proc.communicate(input=prompt_text, timeout=timeout)
         except subprocess.TimeoutExpired:
@@ -457,13 +712,13 @@ def _run_claude_process(cmd, prompt_text, project_root, timeout):
                     proc.wait(timeout=5)
                 except subprocess.TimeoutExpired:
                     pass
-            raise SessionTimeout(f"Timed out after {timeout}s")
+            raise SessionTimeout(f"Timed out after {timeout}s", pid=pid)
 
         if proc.returncode != 0:
             if stderr:
                 print(f"  STDERR: {stderr[:500]}")
             raise SessionError(f"Exited with code {proc.returncode}: {stderr[:200] if stderr else 'no stderr'}")
-        return stdout
+        return stdout, pid
     except FileNotFoundError:
         print("  ERROR: Claude Code CLI not found. Install with: npm install -g @anthropic-ai/claude-code")
         sys.exit(1)
@@ -477,8 +732,8 @@ def launch_claude_session(
     max_turns: int = 50,
     allowed_tools: list[str] | None = None,
     session_id: str | None = None,
-) -> tuple[str, str]:
-    """Launch a new Claude Code session. Returns (stdout, session_id)."""
+) -> tuple[str, str, int]:
+    """Launch a new Claude Code session. Returns (stdout, session_id, pid)."""
     model_id = MODEL_MAP.get(model, model)
     if session_id is None:
         session_id = str(uuid.uuid4())
@@ -497,12 +752,12 @@ def launch_claude_session(
             cmd.extend(["--allowedTools", tool])
 
     try:
-        stdout = _run_claude_process(cmd, prompt_text, project_root, timeout)
+        stdout, pid = _run_claude_process(cmd, prompt_text, project_root, timeout)
     except SessionTimeout as e:
-        raise SessionTimeout(str(e), session_id=session_id) from None
+        raise SessionTimeout(str(e), session_id=session_id, pid=e.pid) from None
     except SessionError as e:
         raise SessionError(str(e), session_id=session_id) from None
-    return stdout, session_id
+    return stdout, session_id, pid
 
 
 def resume_claude_session(
@@ -532,9 +787,10 @@ def resume_claude_session(
             cmd.extend(["--allowedTools", tool])
 
     try:
-        return _run_claude_process(cmd, prompt_text, project_root, timeout)
+        stdout, _pid = _run_claude_process(cmd, prompt_text, project_root, timeout)
+        return stdout
     except SessionTimeout as e:
-        raise SessionTimeout(str(e), session_id=session_id) from None
+        raise SessionTimeout(str(e), session_id=session_id, pid=e.pid) from None
     except SessionError as e:
         raise SessionError(str(e), session_id=session_id) from None
 
@@ -1116,20 +1372,8 @@ def _extract_score(sol_path: Path, metric_name: str = "fitness") -> float | None
     except Exception:
         pass
 
-    # 3. Header comment fallback (# fitness: 1.234)
-    try:
-        text = sol_path.read_text()
-        for line in text.split("\n")[:10]:
-            for key in [metric_name, "fitness", "score"]:
-                if f"{key}:" in line.lower():
-                    parts = line.split(":")
-                    for part in parts[1:]:
-                        try:
-                            return float(part.strip().split()[0])
-                        except (ValueError, IndexError):
-                            continue
-    except Exception:
-        pass
+    # Header comment fallback removed — stale headers caused score inconsistencies.
+    # Only .score sidecar and eval_cache are authoritative sources.
     return None
 
 
@@ -1988,7 +2232,7 @@ def run_architect(project_root: Path, gen: int, config: dict):
     session_id = None
 
     try:
-        _, session_id = launch_claude_session(
+        _, session_id, _pid = launch_claude_session(
             project_root, prompt, model=model,
             timeout=get_timeout(config, "architect"),
             max_turns=get_max_turns(config, "architect"),
@@ -2139,6 +2383,49 @@ def _run_agent_group(project_root: Path, gen: int, config: dict,
     def run_single_agent(agent_spec):
         atype = agent_spec["type"]
         instance = agent_spec["instance"]
+        agent_name = f"{atype}_{instance}"
+
+        # --- Skip logic for crash recovery ---
+        progress = _read_gen_progress(project_root, gen)
+        agent_progress = progress.get("agents", {}).get(agent_name, {})
+
+        # Skip completed agents (outputs already moved)
+        if agent_progress.get("status") == "complete" and agent_progress.get("outputs_moved"):
+            print(f"  Skipping {agent_name} — already completed")
+            _write_run_state(project_root, agents={agent_name: {"status": "done"}})
+            return atype, instance
+
+        # If output exists but move was interrupted, just re-move
+        if _agent_has_output(project_root, gen, atype, instance) and not agent_progress.get("outputs_moved"):
+            print(f"  Re-moving outputs for {agent_name} (interrupted move)")
+            try:
+                if atype == "experimentator":
+                    move_experiment_outputs(project_root, gen, instance)
+                elif atype == "research":
+                    move_research_outputs(project_root, gen, instance)
+                else:
+                    move_agent_outputs(project_root, gen, atype, instance)
+                _write_gen_progress(project_root, gen, agents={agent_name: {
+                    "status": "complete", "outputs_moved": True,
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                }})
+                _write_run_state(project_root, agents={agent_name: {"status": "done"}})
+                return atype, instance
+            except Exception as e:
+                print(f"  Re-move failed for {agent_name}: {e}, will re-run agent")
+
+        # Kill orphan from prior run
+        if agent_progress.get("status") == "running" and agent_progress.get("pid"):
+            _kill_orphan(agent_progress["pid"], agent_name)
+
+        # Clean stale workspace before re-running
+        gen_str = f"gen{gen:03d}"
+        ws_path = project_root / "workspace" / f"{gen_str}_{atype}_{instance}"
+        if ws_path.exists():
+            shutil.rmtree(ws_path)
+
+        # --- End skip logic ---
+
         # Experimentator defaults to opus (creates shared tools); others default to sonnet
         if atype == "experimentator":
             default_model = config.get("experimentator_model", config.get("default_model", "sonnet"))
@@ -2150,13 +2437,17 @@ def _run_agent_group(project_root: Path, gen: int, config: dict,
         work_timeout = agent_spec.get("timeout", get_timeout(config, "agent_default"))
         debrief_timeout = get_timeout(config, "debrief_recovery")
 
-        gen_str = f"gen{gen:03d}"
-        ws_path = project_root / "workspace" / f"{gen_str}_{atype}_{instance}"
         report_path = f"{ws_path}/output/report.md"
 
         wrap_up_timeout = get_timeout(config, "wrap_up")
 
-        print(f"  Launching {atype}_{instance} (model: {model}, work: {work_timeout}s, wrap-up: {wrap_up_timeout}s, debrief: {debrief_timeout}s)")
+        # Mark as pending in gen_progress before launch
+        _write_gen_progress(project_root, gen, agents={agent_name: {
+            "status": "pending",
+            "started_at": datetime.now(timezone.utc).isoformat(),
+        }})
+
+        print(f"  Launching {agent_name} (model: {model}, work: {work_timeout}s, wrap-up: {wrap_up_timeout}s, debrief: {debrief_timeout}s)")
         create_workspace(project_root, gen, atype, instance)
         _write_run_state(project_root, agents={
             f"{atype}_{instance}": {"status": "running", "started_at": datetime.now(timezone.utc).isoformat()}
@@ -2172,12 +2463,18 @@ def _run_agent_group(project_root: Path, gen: int, config: dict,
             tools = ["Read", "Write", "Bash", "Glob", "Grep"]
             if atype == "research":
                 tools.extend(["WebSearch", "WebFetch"])
-            _, session_id = launch_claude_session(
+            _, session_id, agent_pid = launch_claude_session(
                 project_root, prompt, model=model,
                 timeout=work_timeout,
                 max_turns=get_max_turns(config, atype),
                 allowed_tools=tools,
             )
+            _write_gen_progress(project_root, gen, agents={
+                f"{atype}_{instance}": {
+                    "status": "running", "pid": agent_pid, "session_id": session_id,
+                    "started_at": datetime.now(timezone.utc).isoformat(),
+                }
+            })
         except SessionTimeout as e:
             work_timed_out = True
             session_id = e.session_id
@@ -2214,7 +2511,7 @@ def _run_agent_group(project_root: Path, gen: int, config: dict,
                 "Do this NOW, in order:\n"
                 f"1. Run `python3 {project_root}/problem/evaluate.py <file>` on every sol*.py "
                 f"in `{ws_path}/output/` that does NOT have a .score file yet. One at a time.\n"
-                "2. After each evaluation, update the `# fitness:` header in the .py file with the real score.\n"
+                "2. After each evaluation, verify the .score file was created next to the .py file.\n"
                 "3. Write observations.md summarizing what you tried and the scores.\n"
                 f"4. Write `{report_path}` with a table of all solutions and scores.\n\n"
                 "Do NOT read any new files. Do NOT write new code. Just evaluate and report."
@@ -2319,6 +2616,15 @@ def _run_agent_group(project_root: Path, gen: int, config: dict,
             }
         })
 
+        # Mark complete in durable gen_progress (survives orchestrator restarts)
+        _write_gen_progress(project_root, gen, agents={
+            f"{atype}_{instance}": {
+                "status": "complete", "outputs_moved": True,
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "solutions": sol_count,
+            }
+        })
+
         print(f"  Completed {atype}_{instance} ({total_elapsed:.0f}s total)")
         return atype, instance
 
@@ -2378,6 +2684,9 @@ def run_agents(project_root: Path, gen: int, config: dict):
 
     # All agents always run in one parallel group — results feed the next generation
     parallel_groups = [list(agent_lookup.keys())]
+
+    # Kill orphans from any prior crashed run of this generation
+    _kill_generation_orphans(project_root, gen)
 
     # Write all planned agents as "waiting" in run state
     agent_statuses = {name: {"status": "waiting"} for name in agent_lookup}
@@ -2517,7 +2826,7 @@ def _run_analysis_with_debrief(
     errored = False
     session_id = None
     try:
-        _, session_id = launch_claude_session(
+        _, session_id, _pid = launch_claude_session(
             project_root, prompt, model=model, timeout=timeout,
             max_turns=max_turns, allowed_tools=allowed_tools,
         )
@@ -2592,6 +2901,13 @@ def run_evaluator(project_root: Path, gen: int, config: dict):
     print(f"  GENERATION {gen} — Phase 3: Evaluator")
     print(f"{'='*60}")
 
+    # Skip if already completed (crash recovery)
+    progress = _read_gen_progress(project_root, gen)
+    if progress.get("evaluator", {}).get("status") == "complete":
+        print("  Evaluator already complete, skipping")
+        return
+
+    _write_gen_progress(project_root, gen, evaluator={"status": "running"})
     ws = create_analysis_workspace(project_root, gen, "evaluator")
     for subdir in ["new_ideas", "updated_ideas", "new_patterns", "updated_clusters"]:
         (ws / "output" / subdir).mkdir(exist_ok=True)
@@ -2625,8 +2941,10 @@ def run_evaluator(project_root: Path, gen: int, config: dict):
     try:
         move_evaluator_outputs(project_root, gen)
         cleanup_workspace(project_root, gen, "evaluator")
+        _write_gen_progress(project_root, gen, evaluator={"status": "complete"})
     except Exception as e:
         print(f"  ERROR moving evaluator outputs: {e}")
+        _write_gen_progress(project_root, gen, evaluator={"status": "failed", "error": str(e)[:200]})
         # Workspace preserved for debugging
     print("  Evaluator complete")
 
@@ -2636,6 +2954,13 @@ def run_system_critic(project_root: Path, gen: int, config: dict):
     print(f"  GENERATION {gen} — Phase 4: System Critic")
     print(f"{'='*60}")
 
+    # Skip if already completed (crash recovery)
+    progress = _read_gen_progress(project_root, gen)
+    if progress.get("system_critic", {}).get("status") == "complete":
+        print("  System Critic already complete, skipping")
+        return
+
+    _write_gen_progress(project_root, gen, system_critic={"status": "running"})
     ws = create_analysis_workspace(project_root, gen, "system_critic")
     model = config.get("analysis", {}).get("system_critic", {}).get("model", "sonnet")
     prompt = build_critic_prompt(project_root, gen)
@@ -2661,8 +2986,10 @@ def run_system_critic(project_root: Path, gen: int, config: dict):
     try:
         move_critic_outputs(project_root, gen)
         cleanup_workspace(project_root, gen, "system_critic")
+        _write_gen_progress(project_root, gen, system_critic={"status": "complete"})
     except Exception as e:
         print(f"  ERROR moving system critic outputs: {e}")
+        _write_gen_progress(project_root, gen, system_critic={"status": "failed", "error": str(e)[:200]})
     print("  System Critic complete")
 
 
@@ -2690,6 +3017,13 @@ def run_consistency_review(project_root: Path, gen: int, config: dict):
     print(f"  GENERATION {gen} — Phase 5: Consistency Review")
     print(f"{'='*60}")
 
+    # Skip if already completed (crash recovery)
+    progress = _read_gen_progress(project_root, gen)
+    if progress.get("consistency_review", {}).get("status") == "complete":
+        print("  Consistency Review already complete, skipping")
+        return
+
+    _write_gen_progress(project_root, gen, consistency_review={"status": "running"})
     ws = create_analysis_workspace(project_root, gen, "consistency_reviewer")
     for subdir in ["updated_ideas", "updated_clusters"]:
         (ws / "output" / subdir).mkdir(exist_ok=True)
@@ -2718,8 +3052,10 @@ def run_consistency_review(project_root: Path, gen: int, config: dict):
     try:
         move_consistency_outputs(project_root, gen)
         cleanup_workspace(project_root, gen, "consistency_reviewer")
+        _write_gen_progress(project_root, gen, consistency_review={"status": "complete"})
     except Exception as e:
         print(f"  ERROR moving consistency review outputs: {e}")
+        _write_gen_progress(project_root, gen, consistency_review={"status": "failed", "error": str(e)[:200]})
     print("  Consistency Review complete")
 
 
@@ -2729,6 +3065,7 @@ def finalize_generation(project_root: Path, gen: int, config: dict) -> float:
     print(f"  GENERATION {gen} — Phase 6: Finalize")
     print(f"{'='*60}")
 
+    _write_gen_progress(project_root, gen, finalize={"status": "running"})
     best_score = update_rankings(project_root, gen)
     detect_interventions(project_root, gen)
 
@@ -2766,6 +3103,7 @@ def finalize_generation(project_root: Path, gen: int, config: dict) -> float:
     if gen not in completed:
         completed.append(gen)
     _write_run_state(project_root, current_phase="complete", completed_gens=completed, agents={})
+    _write_gen_progress(project_root, gen, finalize={"status": "complete"})
 
     fmt = _score_fmt(project_root)
     print(f"  Best fitness: {format(best_score, fmt)}")
@@ -2836,6 +3174,18 @@ def main():
         help="Path to the idea-evolve project root"
     )
     parser.add_argument(
+        "--problem", type=str, default=None,
+        help="Problem ID (directory name under problems/)"
+    )
+    parser.add_argument(
+        "--attempt", type=str, default=None,
+        help="Attempt ID (directory name under runs/{problem}/)"
+    )
+    parser.add_argument(
+        "--new-attempt", action="store_true",
+        help="Create a new attempt for the specified problem"
+    )
+    parser.add_argument(
         "--start-gen", type=int, default=None,
         help="Override starting generation number"
     )
@@ -2851,6 +3201,13 @@ def main():
 
     project_root = Path(args.project_root).resolve()
     print(f"Idea Evolve — Project root: {project_root}")
+
+    # Build RunContext (handles legacy vs multi-problem layout)
+    ctx = _build_run_context(project_root, args.problem, args.attempt, args.new_attempt)
+    if ctx.problem_id != "default" or ctx.attempt_id != "legacy":
+        print(f"  Problem: {ctx.problem_id}  Attempt: {ctx.attempt_id}")
+        print(f"  Problem dir: {ctx.problem_dir}")
+        print(f"  Run root: {ctx.run_root}")
 
     _preflight_check(project_root)
 
@@ -2880,9 +3237,12 @@ def main():
             os.kill(prior_state["pid"], 0)
             print(f"  WARNING: Previous orchestrator (PID {prior_state['pid']}) may still be running!")
         except OSError:
+            prior_gen = prior_state.get("current_gen", start_gen)
             print(f"  NOTE: Previous run (PID {prior_state['pid']}) stopped during "
-                  f"gen {prior_state.get('current_gen', '?')}, "
+                  f"gen {prior_gen}, "
                   f"phase '{prior_state.get('current_phase', '?')}'. Resuming.")
+            # Kill orphaned agent processes from the crashed generation
+            _kill_generation_orphans(project_root, prior_gen)
 
     # Initialize run state
     _write_run_state(project_root,

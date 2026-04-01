@@ -2,6 +2,152 @@
 // Idea Evolve Dashboard — Client Logic
 // ======================================================================
 
+// --- Context Management (problem/attempt selection) ---
+let currentProblem = localStorage.getItem('ie_problem') || null;
+let currentAttempt = localStorage.getItem('ie_attempt') || null;
+let problemsCache = null;
+
+function getApiParams() {
+  const params = new URLSearchParams();
+  if (currentProblem && currentProblem !== 'default') params.set('problem', currentProblem);
+  if (currentAttempt && currentAttempt !== 'legacy') params.set('attempt', currentAttempt);
+  return params.toString() ? '?' + params.toString() : '';
+}
+
+function setContext(problem, attempt) {
+  currentProblem = problem;
+  currentAttempt = attempt;
+  if (problem) localStorage.setItem('ie_problem', problem);
+  else localStorage.removeItem('ie_problem');
+  if (attempt) localStorage.setItem('ie_attempt', attempt);
+  else localStorage.removeItem('ie_attempt');
+  updateContextBreadcrumb();
+  overviewData = null;
+  solutionsData = null;
+  knowledgeData = null;
+  reportsData = null;
+  filesData = null;
+  const activeTab = document.querySelector('.nav-tab.active');
+  if (activeTab) activeTab.click();
+}
+
+function updateContextBreadcrumb() {
+  const probEl = document.getElementById('ctxProblem');
+  const attEl = document.getElementById('ctxAttempt');
+  const dotEl = document.getElementById('ctxDot');
+  if (probEl) probEl.textContent = currentProblem || 'default';
+  if (attEl) attEl.textContent = currentAttempt || 'legacy';
+  if (dotEl && problemsCache) {
+    const prob = problemsCache.find(p => p.id === currentProblem);
+    if (prob) {
+      const att = prob.attempts.find(a => a.id === currentAttempt);
+      const status = att ? att.status : 'idle';
+      dotEl.className = 'ctx-status-dot ' + status;
+    }
+  }
+}
+
+function openFlyout() {
+  const overlay = document.getElementById('flyoutOverlay');
+  if (overlay) { overlay.classList.add('open'); loadProblems(); }
+}
+
+function closeFlyout() {
+  const overlay = document.getElementById('flyoutOverlay');
+  if (overlay) overlay.classList.remove('open');
+}
+
+async function loadProblems() {
+  const body = document.getElementById('flyoutBody');
+  if (!body) return;
+  body.innerHTML = '<div class="flyout-loading">Loading...</div>';
+  try {
+    const r = await fetch('/api/problems');
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    problemsCache = data;
+    updateContextBreadcrumb();
+    renderFlyoutBody(data);
+  } catch (e) {
+    body.innerHTML = '<div class="flyout-loading">Failed to load problems</div>';
+  }
+}
+
+function renderFlyoutBody(problems) {
+  const body = document.getElementById('flyoutBody');
+  if (!body) return;
+  if (!problems.length) { body.innerHTML = '<div class="flyout-loading">No problems found</div>'; return; }
+
+  body.innerHTML = problems.map(p => {
+    const attCount = p.attempts.length;
+    const isExp = problems.length === 1 || p.id === currentProblem;
+    return `
+      <div class="flyout-problem${isExp ? ' expanded' : ''}" data-problem="${p.id}">
+        <div class="flyout-problem-header" onclick="toggleFlyoutProblem(this)">
+          <span class="flyout-problem-chevron">&#9654;</span>
+          <span class="flyout-problem-name">${escHtml(p.name)}</span>
+          <span class="flyout-problem-meta">${attCount} attempt${attCount !== 1 ? 's' : ''}</span>
+        </div>
+        ${p.description_first_line ? `<div class="flyout-problem-desc">${escHtml(p.description_first_line)}</div>` : ''}
+        <div class="flyout-attempts">
+          ${p.attempts.map(a => {
+            const isActive = p.id === currentProblem && a.id === currentAttempt;
+            const scoreStr = a.best_score != null ? a.best_score.toFixed(p.decimals) : '--';
+            return `
+              <div class="flyout-attempt${isActive ? ' active' : ''}"
+                   onclick="selectAttempt('${p.id}', '${a.id}')">
+                <span class="flyout-attempt-dot ${a.status}"></span>
+                <span class="flyout-attempt-name">${escHtml(a.id)}</span>
+                <span class="flyout-attempt-stats">
+                  <span class="flyout-attempt-score">${scoreStr}</span><br>
+                  Gen ${a.generations_completed} &middot; ${a.total_solutions} sol
+                </span>
+              </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function toggleFlyoutProblem(headerEl) {
+  const el = headerEl.closest('.flyout-problem');
+  if (el) el.classList.toggle('expanded');
+}
+
+function selectAttempt(problemId, attemptId) {
+  setContext(problemId, attemptId);
+  closeFlyout();
+}
+
+function escHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('contextBtn');
+  if (btn) btn.addEventListener('click', openFlyout);
+  const closeBtn = document.getElementById('flyoutClose');
+  if (closeBtn) closeBtn.addEventListener('click', closeFlyout);
+  const overlay = document.getElementById('flyoutOverlay');
+  if (overlay) overlay.addEventListener('click', (e) => { if (e.target === overlay) closeFlyout(); });
+  updateContextBreadcrumb();
+  if (!currentProblem) {
+    fetch('/api/problems').then(r => r.json()).then(data => {
+      problemsCache = data;
+      if (data.length > 0) {
+        currentProblem = data[0].id;
+        if (data[0].attempts.length > 0) currentAttempt = data[0].attempts[0].id;
+        localStorage.setItem('ie_problem', currentProblem);
+        if (currentAttempt) localStorage.setItem('ie_attempt', currentAttempt);
+        updateContextBreadcrumb();
+      }
+    }).catch(() => {});
+  }
+});
+// --- End Context Management ---
+
 const PHASE_ORDER = ['not_started', 'planned', 'agents_running', 'agents_done', 'evaluator_running', 'evaluator_done', 'critic_running', 'critic_done', 'consistency_running', 'consistency_done', 'complete'];
 
 let overviewData = null;
@@ -76,10 +222,12 @@ document.querySelectorAll('.nav-tab').forEach(btn => {
   });
 });
 
-// ----- API Fetch -----
+// ----- API Fetch (auto-appends problem/attempt context) -----
 async function apiFetch(url) {
   try {
-    const r = await fetch(url);
+    const ctxParams = getApiParams();
+    const fullUrl = ctxParams ? url + (url.includes('?') ? '&' + ctxParams.slice(1) : ctxParams) : url;
+    const r = await fetch(fullUrl);
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
     const el = document.getElementById('lastUpdate');
@@ -217,6 +365,16 @@ async function loadOverview() {
     });
   } else {
     redrawChart();
+  }
+
+  // Refresh frontier data if frontier is toggled on
+  if (showFrontier) {
+    apiFetch('/api/frontier').then(data => {
+      if (data && data.frontier) {
+        frontierData = data.frontier;
+        redrawChart();
+      }
+    });
   }
 }
 
@@ -408,6 +566,8 @@ let chartPoints = [];      // All rendered points with px/py for hit testing
 let chartState = null;     // Last render state for reuse (axes, padding, etc.)
 let selectedPoint = null;  // Currently clicked point
 let zoomState = { mode: 'auto', yMin: null, yMax: null };
+let showFrontier = false;  // Frontier annotation toggle
+let frontierData = null;   // Cached frontier data from /api/frontier
 
 function computeAutoRange(scores, target, baseline) {
   const vals = scores.filter(v => v != null && isFinite(v));
@@ -761,6 +921,71 @@ function drawChart(chartData, target, higherIsBetter, baseline, decimals) {
     ctx.stroke();
   }
 
+  // ---- Layer 8: Frontier annotations (when toggled on) ----
+  if (showFrontier && frontierData && frontierData.length > 0) {
+    const annotWidth = 180;
+    const annotHeight = 56;
+    const stemLen = 24;
+
+    frontierData.forEach((f, i) => {
+      const px = xPos(f.gen);
+      const py = yPos(f.score);
+
+      // Alternate above/below to avoid overlap
+      const above = (i % 2 === 0);
+      const annotY = above ? py - stemLen - annotHeight : py + stemLen;
+      const annotX = Math.max(pad.left, Math.min(px - annotWidth / 2, W - pad.right - annotWidth));
+
+      // Stem line (dashed)
+      ctx.strokeStyle = 'rgba(5, 150, 105, 0.4)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 2]);
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(px, above ? annotY + annotHeight : annotY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Annotation box
+      ctx.fillStyle = 'rgba(245, 247, 250, 0.92)';
+      ctx.beginPath();
+      ctx.roundRect(annotX, annotY, annotWidth, annotHeight, 4);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(5, 150, 105, 0.3)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(annotX, annotY, annotWidth, annotHeight, 4);
+      ctx.stroke();
+
+      // Text: agent + gen
+      ctx.fillStyle = '#1e293b';
+      ctx.font = 'bold 9px JetBrains Mono, monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText('G' + f.gen + ' ' + (f.agent || ''), annotX + 6, annotY + 13);
+
+      // Score + delta
+      ctx.fillStyle = '#059669';
+      ctx.font = '9px JetBrains Mono, monospace';
+      const delta = f.delta_pct != null ? ' (' + (f.delta_pct > 0 ? '+' : '') + f.delta_pct.toFixed(1) + '%)' : '';
+      ctx.fillText(f.score.toFixed(dec) + delta, annotX + 6, annotY + 25);
+
+      // Central ideas (truncated)
+      ctx.fillStyle = '#64748b';
+      ctx.font = '8px JetBrains Mono, monospace';
+      const ideasText = (f.central_ideas || []).slice(0, 2).join(', ');
+      const truncatedIdeas = ideasText.length > 28 ? ideasText.slice(0, 25) + '...' : ideasText;
+      ctx.fillText(truncatedIdeas, annotX + 6, annotY + 37);
+
+      // Label
+      if (f.label) {
+        ctx.fillStyle = '#475569';
+        ctx.font = 'italic 8px JetBrains Mono, monospace';
+        const labelTrunc = f.label.length > 28 ? f.label.slice(0, 25) + '...' : f.label;
+        ctx.fillText(labelTrunc, annotX + 6, annotY + 49);
+      }
+    });
+  }
+
   // ---- End clip ----
   ctx.restore();
 
@@ -940,6 +1165,25 @@ function hideChartTooltip() {
       }
       updateZoomToggle();
       redrawChart();
+    });
+  }
+
+  // Frontier toggle button
+  const frontierBtn = document.getElementById('chartFrontierToggle');
+  if (frontierBtn) {
+    frontierBtn.addEventListener('click', () => {
+      showFrontier = !showFrontier;
+      frontierBtn.classList.toggle('active', showFrontier);
+      if (showFrontier && !frontierData) {
+        apiFetch('/api/frontier').then(data => {
+          if (data && data.frontier) {
+            frontierData = data.frontier;
+          }
+          redrawChart();
+        });
+      } else {
+        redrawChart();
+      }
     });
   }
 })();

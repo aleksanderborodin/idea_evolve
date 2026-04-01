@@ -59,7 +59,7 @@ SA calibration, visualization, or data transformations.
 
 Write your solution as a clean `sol*.py` file. Quality matters — clean code is easier to debug, easier for future agents to learn from, and less likely to contain subtle errors that tank the score.
 
-**CRITICAL RULE: Write one solution → run evaluate.py → update its `# fitness:` header with the real score → THEN move on.**
+**CRITICAL RULE: Write one solution → run evaluate.py → verify the `.score` file was created → THEN move on.**
 Never batch-write multiple solutions before evaluating. A solution without a real score is worthless.
 
 ```bash
@@ -105,7 +105,7 @@ These requests will be picked up by Research agents or future Full agent session
 
 Place your files in the designated output directory:
 
-- **`sol*.py`** — Your solution. Must include score headers after evaluation.
+- **`sol*.py`** — Your solution. Must have corresponding `.score` files from evaluate.py.
 - **`observations.md`** — What you tried, your reasoning, results, and any insights for future agents.
 - **`experiment_requests.md`** (optional) — Systematic questions you want investigated.
 

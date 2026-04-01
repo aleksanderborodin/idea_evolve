@@ -9,26 +9,45 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .config import get_project_root
+from .config import get_project_root, list_problems, list_attempts, get_run_root
 from .helpers import read_frontmatter, read_body, extract_score, get_metrics_config
 
 
-def _root() -> Path:
-    return get_project_root()
+def _root(run_root: Path | None = None) -> Path:
+    """Return the run root directory (where population/, history/, etc. live).
+
+    If run_root is given, use it; otherwise auto-detect:
+    - Multi-problem layout: use the first problem's latest attempt
+    - Legacy layout: use the project root directly
+    """
+    if run_root is not None:
+        return run_root
+    # Auto-detect: if problems/ dir exists, use first problem's latest attempt
+    project_root = get_project_root()
+    problems_dir = project_root / "problems"
+    if problems_dir.is_dir():
+        problems = list_problems()
+        if problems:
+            attempts = list_attempts(problems[0])
+            if attempts:
+                resolved = get_run_root(problems[0], attempts[-1])
+                if resolved.is_dir() and resolved != project_root:
+                    return resolved
+    return project_root
 
 
-def _is_sentinel(score: float | None) -> bool:
+def _is_sentinel(score: float | None, problem_dir: Path | None = None) -> bool:
     """Check if a score is the sentinel (evaluation error) value."""
     if score is None:
         return False
-    metrics = get_metrics_config()
+    metrics = get_metrics_config(problem_dir=problem_dir)
     sentinel = metrics.get("sentinel_value")
     if sentinel is not None and score == sentinel:
         return True
     return False
 
 
-def _is_valid_score(result: dict | None) -> bool:
+def _is_valid_score(result: dict | None, problem_dir: Path | None = None) -> bool:
     """Check if an extracted score result represents a real valid score."""
     if not result:
         return False
@@ -37,7 +56,7 @@ def _is_valid_score(result: dict | None) -> bool:
         return False
     if not result.get("is_valid", 0):
         return False
-    if _is_sentinel(score):
+    if _is_sentinel(score, problem_dir=problem_dir):
         return False
     return True
 
@@ -438,8 +457,45 @@ def get_knowledge() -> dict:
 # ---------------------------------------------------------------------------
 
 def get_score_progression() -> list[dict]:
-    """Parse score_progression.md into data points."""
-    prog_path = _root() / "history" / "score_progression.md"
+    """Derive score progression from all_scores.json, grouped by generation.
+
+    Falls back to parsing score_progression.md if all_scores.json is unavailable.
+    """
+    root = _root()
+    all_scores_path = root / "history" / "all_scores.json"
+
+    if all_scores_path.exists():
+        try:
+            all_scores = json.loads(all_scores_path.read_text())
+            if all_scores:
+                metrics = get_metrics_config()
+                higher_is_better = metrics.get("higher_is_better", True)
+
+                # Group by generation (extract gen from path)
+                gen_best = {}
+                for score, path_str in all_scores:
+                    if score is None or not isinstance(score, (int, float)):
+                        continue
+                    # Extract gen number from path like .../population/gen002/agent/sol.py
+                    path = Path(path_str)
+                    for part in path.parts:
+                        if part.startswith("gen") and part[3:].isdigit():
+                            gen_num = int(part[3:])
+                            if gen_num not in gen_best:
+                                gen_best[gen_num] = score
+                            elif higher_is_better and score > gen_best[gen_num]:
+                                gen_best[gen_num] = score
+                            elif not higher_is_better and score < gen_best[gen_num]:
+                                gen_best[gen_num] = score
+                            break
+
+                return [{"gen": g, "best_fitness": s}
+                        for g, s in sorted(gen_best.items())]
+        except Exception:
+            pass
+
+    # Fallback: parse score_progression.md
+    prog_path = root / "history" / "score_progression.md"
     points = []
     if not prog_path.exists():
         return points
@@ -862,6 +918,208 @@ def get_knowledge_item(kind: str, item_id: str) -> dict | None:
                     }
 
     return None
+
+
+def get_gen_progress(gen: int) -> dict:
+    """Read briefs/genNNN/gen_progress.json for durable per-agent status."""
+    root = _root()
+    gen_str = f"gen{gen:03d}"
+    progress_path = root / "briefs" / gen_str / "gen_progress.json"
+    if progress_path.exists():
+        try:
+            return json.loads(progress_path.read_text())
+        except Exception:
+            pass
+    return {}
+
+
+def get_knowledge_lifecycle_counts() -> dict:
+    """Count ideas by lifecycle stage."""
+    root = _root()
+    counts = {}
+    ideas_dir = root / "knowledge" / "ideas"
+    if ideas_dir.exists():
+        for lc_dir in ideas_dir.iterdir():
+            if lc_dir.is_dir():
+                counts[lc_dir.name] = len(list(lc_dir.glob("*.md")))
+    return counts
+
+
+def get_state_of_affairs_staleness() -> dict:
+    """Check how stale the State of Affairs is relative to current generation."""
+    root = _root()
+    soa_path = root / "knowledge" / "state_of_affairs.md"
+    result = {"exists": False, "last_updated_gen": None, "current_gen": None, "gens_behind": None}
+
+    if not soa_path.exists():
+        return result
+
+    result["exists"] = True
+
+    # Read SOA frontmatter for generation info
+    try:
+        text = soa_path.read_text()
+        if text.startswith("---"):
+            import yaml
+            end = text.index("---", 3)
+            fm = yaml.safe_load(text[3:end])
+            if isinstance(fm, dict):
+                result["last_updated_gen"] = fm.get("generation", fm.get("last_updated_gen"))
+    except Exception:
+        pass
+
+    # Current generation from history
+    gen_dir = root / "history" / "generations"
+    if gen_dir.exists():
+        snapshots = sorted(gen_dir.glob("gen*.md"))
+        result["current_gen"] = len(snapshots)
+
+    if result["last_updated_gen"] is not None and result["current_gen"] is not None:
+        result["gens_behind"] = result["current_gen"] - result["last_updated_gen"]
+
+    return result
+
+
+def get_frontier_data() -> list[dict]:
+    """Compute record-breaking (frontier) solutions with idea annotations.
+
+    Reads all_scores.json, computes running best respecting fitness direction,
+    and annotates each frontier point with ideas from solution_idea_map.md.
+    """
+    import math
+    import re
+
+    root = _root()
+    all_scores_path = root / "history" / "all_scores.json"
+    if not all_scores_path.exists():
+        return []
+
+    try:
+        all_scores = json.loads(all_scores_path.read_text())
+    except Exception:
+        return []
+
+    if not all_scores:
+        return []
+
+    metrics = get_metrics_config()
+    higher_is_better = metrics.get("higher_is_better", True)
+
+    # Parse each entry: [score, path]
+    entries = []
+    for score, path_str in all_scores:
+        if score is None or not isinstance(score, (int, float)):
+            continue
+        if score == 0.0 or not math.isfinite(score):
+            continue
+        if _is_sentinel(score):
+            continue
+
+        path = Path(path_str)
+        gen_num = None
+        agent = None
+        filename = path.name
+
+        for part in path.parts:
+            if part.startswith("gen") and part[3:].isdigit():
+                gen_num = int(part[3:])
+                break
+
+        # Extract agent from path: .../genNNN/agent_name/solXX.py
+        parts = path.parts
+        for i, part in enumerate(parts):
+            if part.startswith("gen") and part[3:].isdigit():
+                if i + 1 < len(parts) and i + 2 <= len(parts):
+                    agent = parts[i + 1]
+                break
+
+        if gen_num is None:
+            continue
+
+        entries.append({
+            "gen": gen_num,
+            "score": score,
+            "agent": agent or "unknown",
+            "file": filename,
+            "path": path_str,
+        })
+
+    # Sort by generation, then by score within gen
+    entries.sort(key=lambda e: (e["gen"], e["score"] if not higher_is_better else -e["score"]))
+
+    # Compute running best (frontier)
+    frontier = []
+    current_best = None
+    for entry in entries:
+        is_new_record = False
+        if current_best is None:
+            is_new_record = True
+        elif higher_is_better and entry["score"] > current_best:
+            is_new_record = True
+        elif not higher_is_better and entry["score"] < current_best:
+            is_new_record = True
+
+        if is_new_record:
+            prev_best = current_best
+            current_best = entry["score"]
+
+            delta_pct = None
+            if prev_best is not None and prev_best != 0:
+                delta_pct = round(((entry["score"] - prev_best) / abs(prev_best)) * 100, 2)
+
+            frontier.append({
+                "gen": entry["gen"],
+                "score": entry["score"],
+                "agent": entry["agent"],
+                "file": entry["file"],
+                "delta_pct": delta_pct,
+                "central_ideas": [],
+                "label": None,
+            })
+
+    # Parse solution_idea_map.md for idea annotations
+    idea_map_path = root / "history" / "solution_idea_map.md"
+    if idea_map_path.exists():
+        try:
+            map_text = idea_map_path.read_text()
+            _annotate_frontier_with_ideas(frontier, map_text, re)
+        except Exception:
+            pass
+
+    return frontier
+
+
+def _annotate_frontier_with_ideas(frontier: list[dict], map_text: str, re) -> None:
+    """Parse solution_idea_map.md and annotate frontier points with central ideas."""
+    # Build a lookup: (agent, file) -> central_ideas list
+    idea_lookup = {}
+    current_key = None
+
+    for line in map_text.split("\n"):
+        line = line.strip()
+
+        # Match section headers like ### explore_1/sol01 or ### gen002/explore_1/sol01
+        header_match = re.match(r'^###\s+(?:gen\d+/)?([\w]+/sol\d+)', line)
+        if header_match:
+            key_str = header_match.group(1)  # e.g. "explore_1/sol01"
+            parts = key_str.split("/")
+            if len(parts) == 2:
+                current_key = (parts[0], parts[1] + ".py")
+            continue
+
+        # Match Central ideas line
+        if current_key and line.startswith("- Central:"):
+            ideas_str = line[len("- Central:"):].strip()
+            ideas = [i.strip() for i in ideas_str.split(",") if i.strip()]
+            idea_lookup[current_key] = ideas
+
+    # Annotate frontier
+    for fp in frontier:
+        key = (fp["agent"], fp["file"])
+        if key in idea_lookup:
+            fp["central_ideas"] = idea_lookup[key]
+            if fp["central_ideas"]:
+                fp["label"] = fp["central_ideas"][0]
 
 
 def get_eval_cache_stats() -> dict:

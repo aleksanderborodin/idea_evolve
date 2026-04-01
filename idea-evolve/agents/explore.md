@@ -57,17 +57,14 @@ population already has. A new algorithm, a different mathematical formulation,
 an unusual data representation, a counterintuitive heuristic — anything that
 does not fall inside an existing cluster.
 
-**CRITICAL RULE: Write one solution → evaluate it → update its `# fitness:` header → THEN move on.**
+**CRITICAL RULE: Write one solution → evaluate it → verify the .score file was created → THEN move on.**
 Never batch-write multiple solutions before evaluating. A solution without a real score is worthless.
 
 ```bash
 python3 evaluate.py output/sol01.py
 ```
 
-After evaluation, update the first line of the file with the actual score:
-```python
-# fitness: 1.5139
-```
+After evaluation, verify the `.score` sidecar file exists next to your solution (e.g. `output/sol01.score`). This is the authoritative score record.
 
 ### 4. Iterate
 
@@ -82,7 +79,7 @@ After evaluation, update the first line of the file with the actual score:
 
 You may submit multiple solutions. Each one should represent a distinct
 attempt worth preserving in the population. Every submitted solution MUST
-have a real `# fitness:` score from evaluate.py — not a placeholder.
+have a corresponding `.score` file from evaluate.py.
 
 ---
 
@@ -99,14 +96,8 @@ output/sol03.py
 ...
 ```
 
-Every solution file **MUST** begin with a header comment containing its score:
-
-```python
-# fitness: 1.8234
-```
-
-This line must be the very first line of the file. The orchestrator parses it to
-ingest results. A file without this header will be ignored.
+Every solution file **MUST** have a corresponding `.score` sidecar file created by evaluate.py.
+The `.score` file is the authoritative score record — the orchestrator reads it to ingest results.
 
 ### Observations
 
