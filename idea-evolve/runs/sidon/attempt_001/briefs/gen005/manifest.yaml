@@ -1,0 +1,28 @@
+generation: 5
+strategy_summary: "Rokicki-Dogon data fetch for immediate 104-105, CP-SAT extended run for 103, beam search to break greedy ceiling, radical Track B exploration"
+agents:
+  - type: experimentator
+    instance: 1
+    model: opus
+    brief: "briefs/gen005/experimentator_1.md"
+    timeout: 1200
+  - type: full
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen005/full_1.md"
+    timeout: 2700
+  - type: explore
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen005/explore_1.md"
+    timeout: 1500
+  - type: explore
+    instance: 2
+    model: sonnet
+    brief: "briefs/gen005/explore_2.md"
+    timeout: 1200
+  - type: research
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen005/research_1.md"
+    timeout: 1200

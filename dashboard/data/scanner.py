@@ -227,7 +227,7 @@ def get_generation_status() -> list[dict]:
             report_count = len(list(reports_dir.glob("*.md")))
 
         best_score = None
-        metrics = get_metrics_config()
+        metrics = get_metrics_config(problem_dir=_request_problem_dir)
         higher_is_better = metrics.get("higher_is_better", True)
 
         def _update_best(score):
@@ -365,7 +365,7 @@ def get_solutions() -> list[dict]:
                     "in_progress": True,
                 })
 
-    metrics = get_metrics_config()
+    metrics = get_metrics_config(problem_dir=_request_problem_dir)
     higher_is_better = metrics.get("higher_is_better", True)
 
     def _sort_key(x):
@@ -478,7 +478,7 @@ def get_score_progression() -> list[dict]:
         try:
             all_scores = json.loads(all_scores_path.read_text())
             if all_scores:
-                metrics = get_metrics_config()
+                metrics = get_metrics_config(problem_dir=_request_problem_dir)
                 higher_is_better = metrics.get("higher_is_better", True)
 
                 # Group by generation (extract gen from path)
@@ -786,7 +786,7 @@ def get_active_agents() -> list[dict]:
         output_dir = ws / "output"
         solutions = []
         best_score = None
-        metrics = get_metrics_config()
+        metrics = get_metrics_config(problem_dir=_request_problem_dir)
         higher_is_better = metrics.get("higher_is_better", True)
 
         if output_dir.exists():
@@ -1031,7 +1031,7 @@ def get_frontier_data() -> list[dict]:
     if not all_scores:
         return []
 
-    metrics = get_metrics_config()
+    metrics = get_metrics_config(problem_dir=_request_problem_dir)
     higher_is_better = metrics.get("higher_is_better", True)
 
     # Parse each entry: [score, path]

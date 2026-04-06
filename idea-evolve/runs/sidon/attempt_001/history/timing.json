@@ -4,6 +4,38 @@
       "architect": 155.7,
       "agent_research_1_work": 698.2,
       "agent_research_1": 698.2
+    },
+    "gen003": {
+      "evaluator": 2151.7,
+      "evaluator_debrief": 25.0,
+      "system_critic": 329.3,
+      "consistency_reviewer": 398.3
+    },
+    "gen004": {
+      "architect": 284.6,
+      "agent_experimentator_1_work": 474.6,
+      "agent_experimentator_1": 474.6,
+      "agent_explore_1_work": 815.5,
+      "agent_explore_1_debrief": 97.8,
+      "agent_explore_1": 913.3,
+      "agent_research_1_work": 1200.2,
+      "agent_explore_2_work": 1200.2,
+      "agent_research_1_wrap_up": 119.3,
+      "agent_research_1": 1319.5,
+      "agent_explore_2_wrap_up": 129.5,
+      "agent_explore_2": 1329.6,
+      "agent_full_1_work": 1800.2,
+      "agent_full_1_wrap_up": 87.2,
+      "agent_full_1": 1887.4,
+      "evaluator": 415.2,
+      "evaluator_debrief": 28.8,
+      "system_critic": 342.3,
+      "consistency_reviewer": 481.5,
+      "consistency_reviewer_debrief": 29.4,
+      "total": 3469.6
+    },
+    "gen005": {
+      "architect": 302.1
     }
   }
 }

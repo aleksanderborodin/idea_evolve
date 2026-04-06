@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "agents": {
+    "full_1": {
+      "status": "pending",
+      "started_at": "2026-04-06T17:12:26.313380+00:00"
+    },
+    "explore_1": {
+      "status": "pending",
+      "started_at": "2026-04-06T17:12:26.314011+00:00"
+    },
+    "experimentator_1": {
+      "status": "pending",
+      "started_at": "2026-04-06T17:12:26.313731+00:00"
+    },
+    "explore_2": {
+      "status": "pending",
+      "started_at": "2026-04-06T17:12:26.314435+00:00"
+    },
+    "research_1": {
+      "status": "pending",
+      "started_at": "2026-04-06T17:12:26.315459+00:00"
+    }
+  },
+  "last_updated": "2026-04-06T17:12:26.316409+00:00"
+}

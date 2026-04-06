@@ -1,0 +1,28 @@
+generation: 4
+strategy_summary: "ILP with correct formulation as primary breakthrough path; correct min-blocking greedy; Track B radical non-Singer construction; literature search must finally complete; quick hybrid/spectrum experiments"
+agents:
+  - type: full
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen004/full_1.md"
+    timeout: 1800
+  - type: explore
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen004/explore_1.md"
+    timeout: 1200
+  - type: explore
+    instance: 2
+    model: sonnet
+    brief: "briefs/gen004/explore_2.md"
+    timeout: 1200
+  - type: research
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen004/research_1.md"
+    timeout: 1200
+  - type: experimentator
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen004/experimentator_1.md"
+    timeout: 900

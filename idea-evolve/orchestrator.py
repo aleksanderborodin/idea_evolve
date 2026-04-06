@@ -1518,16 +1518,17 @@ def detect_interventions(project_root: Path, gen: int):
     ref_time = prev_snapshot.stat().st_mtime
     interventions = []
 
-    for dirpath in [
-        project_root / "knowledge",
-        _global(project_root) / "user",
-        _global(project_root) / "agents",
+    global_root = _global(project_root)
+    for dirpath, base in [
+        (project_root / "knowledge", project_root),
+        (global_root / "user", global_root),
+        (global_root / "agents", global_root),
     ]:
         if not dirpath.exists():
             continue
         for f in dirpath.rglob("*"):
             if f.is_file() and f.stat().st_mtime > ref_time:
-                interventions.append(str(f.relative_to(project_root)))
+                interventions.append(str(f.relative_to(base)))
 
     if interventions:
         log_path = _global(project_root) / "user" / "interventions.md"
@@ -2514,8 +2515,36 @@ def _run_agent_group(project_root: Path, gen: int, config: dict,
         progress = _read_gen_progress(project_root, gen)
         agent_progress = progress.get("agents", {}).get(agent_name, {})
 
+        def _skip_debrief_if_missing(perm_report: Path, ws_path: Path, brief_path_str: str):
+            """If the agent completed but never wrote a report, run debrief recovery."""
+            if perm_report.exists():
+                return
+            print(f"  {agent_name} — completed but missing report, running debrief recovery")
+            debrief_prompt = DEBRIEF_RECOVERY_PROMPT(project_root).format(
+                project_root=project_root,
+                ws_path=ws_path,
+                agent_type=atype,
+                instance=instance,
+                gen=gen,
+                brief_path=project_root / Path(brief_path_str) if brief_path_str else "N/A",
+                report_path=perm_report,
+            )
+            try:
+                launch_claude_session(
+                    project_root, debrief_prompt, model="sonnet",
+                    timeout=get_timeout(config, "debrief_recovery"),
+                    max_turns=get_max_turns(config, "debrief_recovery"),
+                    allowed_tools=["Read", "Write", "Glob", "Grep"],
+                )
+            except Exception as e:
+                print(f"  Debrief recovery failed for {agent_name}: {e}")
+
         # Skip completed agents (outputs already moved)
         if agent_progress.get("status") == "complete" and agent_progress.get("outputs_moved"):
+            gen_str_s = f"gen{gen:03d}"
+            perm_report = project_root / "reports" / gen_str_s / f"{atype}_{instance}.md"
+            ws_path_s = project_root / "workspace" / f"{gen_str_s}_{atype}_{instance}"
+            _skip_debrief_if_missing(perm_report, ws_path_s, agent_spec.get("brief", ""))
             print(f"  Skipping {agent_name} — already completed")
             _write_run_state(project_root, agents={agent_name: {"status": "done"}})
             return atype, instance
@@ -2534,6 +2563,10 @@ def _run_agent_group(project_root: Path, gen: int, config: dict,
                     "status": "complete", "outputs_moved": True,
                     "completed_at": datetime.now(timezone.utc).isoformat(),
                 }})
+                gen_str_s = f"gen{gen:03d}"
+                perm_report = project_root / "reports" / gen_str_s / f"{atype}_{instance}.md"
+                ws_path_s = project_root / "workspace" / f"{gen_str_s}_{atype}_{instance}"
+                _skip_debrief_if_missing(perm_report, ws_path_s, agent_spec.get("brief", ""))
                 _write_run_state(project_root, agents={agent_name: {"status": "done"}})
                 return atype, instance
             except Exception as e:
@@ -2631,16 +2664,28 @@ def _run_agent_group(project_root: Path, gen: int, config: dict,
             print(f"  {atype}_{instance} {status_msg} — resuming session for wrap-up")
             _write_run_state(project_root, agents={f"{atype}_{instance}": {"status": "wrapping_up"}})
 
-            wrap_up_msg = (
-                "STOP. Time is running out. Do NOT write new solutions or explore new ideas.\n\n"
-                "Do this NOW, in order:\n"
-                f"1. Run `python3 {project_root}/problem/evaluate.py <file>` on every sol*.py "
-                f"in `{ws_path}/output/` that does NOT have a .score file yet. One at a time.\n"
-                "2. After each evaluation, verify the .score file was created next to the .py file.\n"
-                "3. Write observations.md summarizing what you tried and the scores.\n"
-                f"4. Write `{report_path}` with a table of all solutions and scores.\n\n"
-                "Do NOT read any new files. Do NOT write new code. Just evaluate and report."
-            )
+            if atype == "research":
+                wrap_up_msg = (
+                    "STOP. Time is running out. Do NOT start new searches or download new papers.\n\n"
+                    "Do this NOW, in order:\n"
+                    f"1. Write `{ws_path}/output/findings.md` with everything you have found so far —"
+                    " even partial results. Include any web search snippets, paper titles, and key facts"
+                    " you have already retrieved. Mark incomplete sections clearly.\n"
+                    f"2. Write `{report_path}` summarizing what you searched for, what you found,"
+                    " and what remains unanswered.\n\n"
+                    "Do NOT read new files or fetch new URLs. Just write up what you already know."
+                )
+            else:
+                wrap_up_msg = (
+                    "STOP. Time is running out. Do NOT write new solutions or explore new ideas.\n\n"
+                    "Do this NOW, in order:\n"
+                    f"1. Run `python3 {project_root}/problem/evaluate.py <file>` on every sol*.py "
+                    f"in `{ws_path}/output/` that does NOT have a .score file yet. One at a time.\n"
+                    "2. After each evaluation, verify the .score file was created next to the .py file.\n"
+                    "3. Write observations.md summarizing what you tried and the scores.\n"
+                    f"4. Write `{report_path}` with a table of all solutions and scores.\n\n"
+                    "Do NOT read any new files. Do NOT write new code. Just evaluate and report."
+                )
             try:
                 resume_claude_session(
                     project_root, session_id, wrap_up_msg, model=model,

@@ -1,0 +1,49 @@
+============================================================
+EXP-6: Multi-Singer Hybrid Test
+============================================================
+Singer q=101: 102 elements, range [0, 9775]
+Singer q=97 (full, unshifted): 98 elements, range [0, 9480]
+  (Building took 0.1s)
+Singer q=97 truncated to N=10000: 98 elements
+ET p=71 (Bose construction): 71 elements, range [0, 4971]
+  ET p=71 is Sidon: False
+
+--- Test 1: Full Singer-102 base, try adding ET-71 elements ---
+  Elements added from ET to full Singer-102: 0
+
+--- Test 2: Full Singer-102 base, try adding Singer-97 elements ---
+  Elements added from Singer-97 to full Singer-102: 0
+
+--- Test 3: Reduced Singer-101 bases, try adding ET-71 elements ---
+  Base Singer-102[:90] + ET-71: added 0, total=90
+  Base Singer-102[:80] + ET-71: added 0, total=80
+  Base Singer-102[:70] + ET-71: added 0, total=70
+  Base Singer-102[:60] + ET-71: added 0, total=60
+  Base Singer-102[:50] + ET-71: added 0, total=50
+  Base Singer-102[:40] + ET-71: added 1, total=41
+
+--- Test 4: Reduced Singer-101 bases, try adding Singer-97 elements ---
+  Base Singer-102[:90] + Singer-97: added 0, total=90
+  Base Singer-102[:80] + Singer-97: added 0, total=80
+  Base Singer-102[:70] + Singer-97: added 0, total=70
+  Base Singer-102[:60] + Singer-97: added 1, total=61
+  Base Singer-102[:50] + Singer-97: added 3, total=53
+  Base Singer-102[:40] + Singer-97: added 9, total=49
+
+--- Test 5: ET-71 base, try adding Singer-101 elements ---
+  Elements added from Singer-101 to ET-71 base (71 elems): 2
+  Total: 73
+  Added elements: [8776, 9627]...
+
+--- Test 6: Singer-97 base, try adding Singer-101 elements ---
+  Elements added from Singer-101 to Singer-97 base (98 elems): 0
+  Total: 98
+
+--- Test 7: Reduce Singer-101 base, fill from ET-71, then fill from Singer-97 ---
+  Singer-101[:70] -> +0 ET-71 -> +0 Singer-97 = 70
+  Singer-101[:75] -> +0 ET-71 -> +0 Singer-97 = 75
+  Singer-101[:80] -> +0 ET-71 -> +0 Singer-97 = 80
+  Singer-101[:85] -> +0 ET-71 -> +0 Singer-97 = 85
+
+Best hybrid total: 85
+No hybrid exceeds 102.

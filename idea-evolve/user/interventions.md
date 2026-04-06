@@ -124,3 +124,38 @@ Files modified since gen 2:
 - knowledge/ideas/archived/idea_013.md
 - knowledge/ideas/debunked/idea_018.md
 - knowledge/ideas/disputed/idea_006.md
+
+## Generation 4
+Files modified since gen 3:
+- knowledge/state_of_affairs.md
+- knowledge/clusters/cluster_004.md
+- knowledge/clusters/cluster_001.md
+- knowledge/clusters/cluster_003.md
+- knowledge/clusters/cluster_002.md
+- knowledge/experiments/gen004/experimentator_1/experiment_results.md
+- knowledge/experiments/gen004/experimentator_1/sandbox/scripts/exp6_multi_singer_hybrid.py
+- knowledge/experiments/gen004/experimentator_1/sandbox/scripts/exp4_difference_spectrum.py
+- knowledge/experiments/gen004/experimentator_1/sandbox/data/exp4_output.txt
+- knowledge/experiments/gen004/experimentator_1/sandbox/data/exp6_output.txt
+- knowledge/research/gen004/research_1/sol01.py
+- knowledge/research/gen004/research_1/sol01.score
+- knowledge/research/gen004/research_1/findings.md
+- knowledge/research/gen004/research_1/observations.md
+- knowledge/patterns/active/pattern_012.md
+- knowledge/patterns/active/pattern_011.md
+- knowledge/ideas/active/fact_004.md
+- knowledge/ideas/active/idea_005.md
+- knowledge/ideas/active/fact_002.md
+- knowledge/ideas/active/idea_003.md
+- knowledge/ideas/active/idea_016.md
+- knowledge/ideas/active/pattern_009.md
+- knowledge/ideas/active/idea_020.md
+- knowledge/ideas/active/idea_019.md
+- knowledge/ideas/debunked/idea_018.md
+- knowledge/ideas/debunked/idea_013.md
+- knowledge/ideas/debunked/idea_012.md
+- knowledge/ideas/debunked/idea_002.md
+- knowledge/ideas/debunked/idea_014.md
+- knowledge/ideas/debunked/idea_017.md
+- knowledge/ideas/established/idea_004.md
+- knowledge/ideas/established/idea_006.md

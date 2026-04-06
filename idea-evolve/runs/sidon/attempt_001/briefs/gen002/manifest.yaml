@@ -1,0 +1,28 @@
+generation: 2
+strategy_summary: "Singer q=101 cyclic shift search (highest priority path to 100), blocker analysis + SA from 99-seed, helper infrastructure, radical non-Singer exploration + research"
+agents:
+  - type: exploit
+    instance: 1
+    model: opus
+    brief: "briefs/gen002/exploit_1.md"
+    timeout: 1800
+  - type: exploit
+    instance: 2
+    model: sonnet
+    brief: "briefs/gen002/exploit_2.md"
+    timeout: 1500
+  - type: experimentator
+    instance: 1
+    model: opus
+    brief: "briefs/gen002/experimentator_1.md"
+    timeout: 900
+  - type: explore
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen002/explore_1.md"
+    timeout: 1500
+  - type: research
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen002/research_1.md"
+    timeout: 700

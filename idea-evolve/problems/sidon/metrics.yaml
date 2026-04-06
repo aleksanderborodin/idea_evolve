@@ -1,9 +1,9 @@
 track_eval_time: true
-target_score: 100
+target_score: 108
 
 specs:
   fitness:
-    description: "Size of the largest valid Sidon subset — higher is better. Greedy baseline: 66. Target: 100."
+    description: "Size of the largest valid Sidon subset — higher is better. Greedy baseline: 66. Target: 108."
     decimals: 0
     is_primary: true
     higher_is_better: true

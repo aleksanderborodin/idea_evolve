@@ -1,32 +1,64 @@
 {
   "schema_version": 1,
-  "errors": [],
-  "completed_gens": [],
-  "pid": 313473,
-  "started_at": "2026-04-01T20:15:45.905434+00:00",
+  "errors": [
+    {
+      "gen": 4,
+      "phase": "agents",
+      "agent": "research_1",
+      "type": "timeout",
+      "message": "Timed out after 1200s",
+      "ts": "2026-04-06T16:09:08.597736+00:00"
+    },
+    {
+      "gen": 4,
+      "phase": "agents",
+      "agent": "explore_2",
+      "type": "timeout",
+      "message": "Timed out after 1200s",
+      "ts": "2026-04-06T16:09:08.603873+00:00"
+    },
+    {
+      "gen": 4,
+      "phase": "agents",
+      "agent": "full_1",
+      "type": "timeout",
+      "message": "Timed out after 1800s",
+      "ts": "2026-04-06T16:19:08.612805+00:00"
+    }
+  ],
+  "completed_gens": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "pid": 272420,
+  "started_at": "2026-04-06T17:07:24.112371+00:00",
   "target_gen": 30,
   "status": "running",
-  "current_gen": 1,
+  "current_gen": 5,
   "current_phase": "agents_running",
   "agents": {
-    "explore_1": {
+    "experimentator_1": {
       "status": "running",
-      "started_at": "2026-04-01T20:18:21.612662+00:00"
-    },
-    "explore_2": {
-      "status": "running",
-      "started_at": "2026-04-01T20:18:21.613798+00:00"
+      "started_at": "2026-04-06T17:12:26.326968+00:00"
     },
     "full_1": {
       "status": "running",
-      "started_at": "2026-04-01T20:18:21.613232+00:00"
+      "started_at": "2026-04-06T17:12:26.324195+00:00"
+    },
+    "explore_1": {
+      "status": "running",
+      "started_at": "2026-04-06T17:12:26.325746+00:00"
+    },
+    "explore_2": {
+      "status": "running",
+      "started_at": "2026-04-06T17:12:26.331385+00:00"
     },
     "research_1": {
-      "status": "done",
-      "finished_at": "2026-04-01T20:29:59.899598+00:00",
-      "solutions": 0,
-      "elapsed": 698.2
+      "status": "running",
+      "started_at": "2026-04-06T17:12:26.326197+00:00"
     }
   },
-  "last_updated": "2026-04-01T20:29:59.899741+00:00"
+  "last_updated": "2026-04-06T17:12:26.337110+00:00"
 }

@@ -1,0 +1,112 @@
+============================================================
+EXP-4: Unused Difference Spectrum Analysis
+============================================================
+Singer q=101 set: 102 elements
+Pairwise differences: 5151 (expected 5151)
+  All pairwise differences are distinct (confirmed Sidon property)
+
+Free differences (not used): 4849 out of 10000
+Usage ratio: 51.5% of 10000 possible differences used
+
+--- Free Difference Distribution ---
+Free differences per decile:
+  [    1- 1000]: 11 free, 989 used (98.9% used)
+  [ 1001- 2000]: 98 free, 902 used (90.2% used)
+  [ 2001- 3000]: 206 free, 794 used (79.4% used)
+  [ 3001- 4000]: 298 free, 702 used (70.2% used)
+  [ 4001- 5000]: 414 free, 586 used (58.6% used)
+  [ 5001- 6000]: 546 free, 454 used (45.4% used)
+  [ 6001- 7000]: 673 free, 327 used (32.7% used)
+  [ 7001- 8000]: 762 free, 238 used (23.8% used)
+  [ 8001- 9000]: 867 free, 133 used (13.3% used)
+  [ 9001-10000]: 974 free, 26 used (2.6% used)
+
+Free diff gap stats (gaps between consecutive free diffs):
+  Min gap: 0
+  Max gap: 527
+  Mean gap: 1.06
+  Runs of 1 (consecutive free): 3361
+
+Longest consecutive runs of free diffs (len>=5): 217 runs
+  Length 225 starting at 9776
+  Length 117 starting at 9499
+  Length 107 starting at 9391
+  Length 98 starting at 9647
+  Length 93 starting at 9267
+  Length 47 starting at 9195
+  Length 46 starting at 8691
+  Length 45 starting at 9076
+  Length 43 starting at 8838
+  Length 40 starting at 8963
+
+--- Blocker Analysis ---
+(Computed in 0.2s)
+Non-members: 9899
+Blocker count stats:
+  Min: 43
+  Max: 96
+  Mean: 71.46
+
+Distribution of blocker counts (count: # of non-members):
+  43 blockers: 1 non-members
+  44 blockers: 14 non-members
+  45 blockers: 3 non-members
+  46 blockers: 23 non-members
+  47 blockers: 11 non-members
+  48 blockers: 54 non-members
+  49 blockers: 17 non-members
+  50 blockers: 105 non-members
+  51 blockers: 40 non-members
+  52 blockers: 144 non-members
+  53 blockers: 52 non-members
+  54 blockers: 186 non-members
+  55 blockers: 76 non-members
+  56 blockers: 208 non-members
+  57 blockers: 81 non-members
+  58 blockers: 264 non-members
+  59 blockers: 91 non-members
+  60 blockers: 322 non-members
+  61 blockers: 119 non-members
+  62 blockers: 360 non-members
+
+Best 20 non-members (fewest blockers):
+  c=9931: 43 blockers = [2337, 2489, 3023, 3578, 3805, 4456, 4518, 4654, 5002, 5145]...
+  c=9660: 44 blockers = [1332, 2337, 2829, 2854, 3635, 3793, 4456, 4571, 4654, 5002]...
+  c=9743: 44 blockers = [1169, 2212, 2337, 2547, 3578, 3635, 4007, 4268, 4328, 4571]...
+  c=9839: 44 blockers = [938, 1574, 1868, 2337, 2479, 2520, 2849, 3578, 3931, 4456]...
+  c=9883: 44 blockers = [385, 1212, 1963, 2829, 3023, 3793, 3931, 4571, 4654, 4927]...
+  c=9885: 44 blockers = [844, 2479, 2489, 2854, 3578, 3635, 3931, 4518, 4571, 4648]...
+  c=9911: 44 blockers = [1104, 1963, 2613, 2849, 3578, 3719, 3793, 4648, 4654, 5002]...
+  c=9913: 44 blockers = [1104, 1169, 2075, 3635, 3805, 3931, 4007, 4571, 4654, 4835]...
+  c=9920: 44 blockers = [1183, 1574, 2075, 2212, 2829, 4007, 4268, 4328, 4537, 4571]...
+  c=9932: 44 blockers = [1001, 1104, 1963, 2489, 2613, 3578, 3635, 3793, 4328, 4518]...
+  c=9946: 44 blockers = [586, 2849, 2854, 3023, 4007, 4537, 4648, 4835, 5413, 5666]...
+  c=9957: 44 blockers = [1183, 1963, 2075, 2337, 3805, 3931, 4518, 4648, 4721, 4835]...
+  c=9971: 44 blockers = [1633, 1679, 1963, 2212, 3195, 4518, 4648, 4721, 5002, 5413]...
+  c=9981: 44 blockers = [844, 2075, 2337, 2388, 2479, 2849, 3635, 3793, 3931, 4007]...
+  c=9995: 44 blockers = [844, 1186, 1212, 1574, 2075, 2388, 2849, 3578, 4518, 4571]...
+  c=9948: 45 blockers = [1183, 1868, 2479, 2613, 2829, 2854, 3023, 3719, 3931, 4328]...
+  c=9967: 45 blockers = [586, 2075, 2337, 2547, 2829, 4268, 4518, 4571, 4648, 5002]...
+  c=9982: 45 blockers = [1420, 2075, 2388, 2829, 3023, 3195, 3793, 3805, 3931, 4328]...
+  c=9680: 46 blockers = [1104, 1868, 2075, 2489, 2849, 3195, 3719, 3931, 4571, 4721]...
+  c=9691: 46 blockers = [1001, 2388, 2489, 2849, 3578, 3635, 3719, 4268, 4571, 4654]...
+
+--- Trading Analysis ---
+For best candidates (fewest blockers), check if removing blocking elements
+would allow adding more elements than removed.
+
+Focusing on c=9931 (43 blockers):
+  Blocking elements: [2337, 2489, 3023, 3578, 3805, 4456, 4518, 4654, 5002, 5145, 5167, 5413, 5666, 5839, 6134, 6457, 6492, 6537, 6592, 6608, 6763, 6919, 7052, 7197, 7199, 7489, 7686, 8029, 8093, 8421, 8506, 8510, 8739, 8776, 8962, 9014, 9075, 9194, 9266, 9627, 9745, 9766, 9775]
+  After removing 43 blockers (59 elements remain):
+  Elements that become addable: 84
+  Net change: remove 43, gain 84
+  *** NET GAIN! New set size could be 143 ***
+  Addable elements (first 5): [2337, 2489, 3023, 3578, 3805]
+
+--- Minimal Removal Trading ---
+Can we add a non-member by removing just 1 Singer element?
+
+Can we remove 2 elements and add 3+ new ones?
+  Best trade found (checked 3828 pairs): net gain = 0
+
+Total elapsed: 127.5s

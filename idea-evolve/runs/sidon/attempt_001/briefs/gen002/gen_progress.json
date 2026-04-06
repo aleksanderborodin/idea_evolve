@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "agents": {
+    "exploit_1": {
+      "status": "complete",
+      "outputs_moved": true,
+      "completed_at": "2026-04-01T21:44:03.238649+00:00",
+      "solutions": 3
+    },
+    "explore_1": {
+      "status": "complete",
+      "outputs_moved": true,
+      "completed_at": "2026-04-01T21:39:43.517149+00:00",
+      "solutions": 4
+    },
+    "experimentator_1": {
+      "status": "complete",
+      "outputs_moved": true,
+      "completed_at": "2026-04-01T21:20:03.358077+00:00",
+      "solutions": 0
+    },
+    "exploit_2": {
+      "status": "complete",
+      "outputs_moved": true,
+      "completed_at": "2026-04-01T21:39:08.497341+00:00",
+      "solutions": 4
+    },
+    "research_1": {
+      "status": "complete",
+      "outputs_moved": true,
+      "completed_at": "2026-04-01T21:26:08.133805+00:00",
+      "solutions": 0
+    }
+  },
+  "last_updated": "2026-04-01T22:04:49.871811+00:00",
+  "evaluator": {
+    "status": "complete"
+  },
+  "system_critic": {
+    "status": "complete"
+  },
+  "consistency_review": {
+    "status": "complete"
+  },
+  "finalize": {
+    "status": "complete"
+  }
+}
