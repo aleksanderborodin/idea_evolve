@@ -91,7 +91,12 @@
       "agent_full_1": 1342.8,
       "agent_explore_1_work": 1500.1,
       "agent_explore_1_wrap_up": 104.3,
-      "agent_explore_1": 1604.4
+      "agent_explore_1": 1604.4,
+      "evaluator": 518.2,
+      "evaluator_debrief": 24.7,
+      "system_critic": 342.7,
+      "consistency_reviewer": 511.1,
+      "total": 3388.6
     }
   }
 }

@@ -1,4 +1,38 @@
-# Solution-Idea Map — Generations 1-6
+# Solution-Idea Map — Generations 1-7
+
+## Generation 7
+
+### gen007_exploit_1_sol01 (score: 105)
+- Central: idea_022 (Bose-Chowla AP q=107), idea_020 (Rokicki-Dogon Database), idea_024 (VLNS — corrected formulation)
+- Peripheral: idea_023 (Multiplier Optimization — mul=433), idea_019 (CP-SAT — binary VLNS engine)
+- Novel elements: Corrected VLNS formulation (integer vars, domain [0,N]) running 85+ trials. All 106-targets INFEASIBLE. Candidate counting proof: for k≤44, EXACTLY k candidates exist (mathematical impossibility). Binary VLNS proves INFEASIBLE in <0.01s (presolve-level). Remove-50 target-105 → OPTIMAL. **Confirms F₂(10000) = 105 with high confidence. Pattern_016 and pattern_017 created.**
+
+### gen007_explore_1_sol01 (score: 74)
+- Central: idea_025 (Ruzsa-Lindström — 2p-scaled primitive root, p=71)
+- Peripheral: idea_011 (ET Extension + VLNS k=3-15)
+- Novel elements: First implementation of Ruzsa-Lindström. Proved naive formula invalid (264 violations for p=71). 2p-scaled version valid. 71→73 (greedy)→74 (VLNS 90s). **Fact_005 created (naive Ruzsa not valid in integers).**
+
+### gen007_explore_1_sol02 (score: 65)
+- Central: idea_001 (Randomized Greedy — best of 20 seeds)
+- Peripheral: idea_002 (Local Search — aggressive VLNS k=10-40)
+- Novel elements: Multi-seed random greedy (best=62 from 20 trials) + aggressive VLNS for 110s. Result: 65. Confirms random greedy + large-neighborhood search is inferior to algebraic approaches.
+
+### gen007_explore_1_sol03 (score: 75)
+- Central: idea_025 (Ruzsa-Lindström — 2p-scaled, p=61 and p=71), idea_011 (ET Extension + fast VLNS)
+- Peripheral: idea_002 (Local Search — fast blocked-set VLNS)
+- Novel elements: Multi-start from two Ruzsa seeds (p=61→70, p=71→75). Fast blocked-set candidate identification (O(|S|*|diffs|)). Confirms 75-ceiling is same basin as ET(71). **Pattern_018 created (Ruzsa and ET converge to same basin).**
+
+### gen007_full_1 (score: N/A — no solutions)
+- Central: N/A
+- Novel elements: Session interrupted during context reading. Planned binary variable CP-SAT maximize formulation (EXP-5) not implemented. Context gathering confirmed all prior findings.
+
+### gen007_research_1 (score: N/A — no solutions)
+- Central: N/A
+- Novel elements: Live web searches for F₂(10000). Key findings: (1) No published F₂(10000) > 105 anywhere. (2) OEIS A003022 only covers n≤28 proven optimal. (3) cube20.org starts at 160 marks. (4) rokicki_data.py has no BEST_106 entry. (5) Gen6 VLNS code already had y[i]!=fv constraints — "formulation bug" diagnosis likely wrong. (6) Tabu search with swap-then-fill identified as best untried heuristic. (7) Eberhard 2023 confirms dense Sidon sets come from projective planes, but nondesarguesian planes don't exist for prime orders. **Pattern_016 evidence contributed.**
+
+### gen007_experimentator_1 (score: N/A — helper delivery only)
+- Central: idea_019 (CP-SAT), idea_024 (VLNS)
+- Novel elements: Delivered `helpers/cpsat.py` with 3 functions: `solve_sidon_cpsat` (binary/element formulation), `vlns_sidon` (corrected VLNS with unified per-difference constraints), `vlns_batch`. All self-tested. Found and fixed free-to-free diff collision bug in initial implementation. 9 real VLNS trials: all OPTIMAL at 105 in <0.1s. **Resolves 3-generation-old request for cpsat.py helper.**
 
 ## Generation 6
 

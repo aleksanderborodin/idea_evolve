@@ -1,138 +1,238 @@
-# System Recommendations — Generation 6
+# System Recommendations — Generation 7
 
-**Supersedes:** gen 5 recommendations
-**Current best:** 105 (Rokicki-Dogon Bose-Chowla AP q=107, mul=433)
-**Algebraic ceiling:** 105 (exhaustively confirmed, all q, all multipliers)
-**Perturbation ceiling:** 105 (remove-k k=2-104 with 27K+ trials, structural self-healing property)
+**Supersedes:** gen 6 recommendations
+**Current best:** 105 (Rokicki-Dogon Bose-Chowla AP q=107, mul=433, confirmed gen7)
+**Confirmed:** VLNS from BEST_105 → INFEASIBLE at 106 (85+ trials, genuine infeasibility)
+**Confirmed:** F₂(10000) = 105 with ~0.90 confidence (no published 106-mark construction anywhere)
 **Remaining gap:** ~4 elements to theoretical upper bound (~109)
+**Pipeline state:** Terminal convergence — one viable experiment remains
 
 ---
 
-## Priority 1 — Critical (must do before gen 7 agents launch)
+## Priority 0 — Structural Fixes (require orchestrator changes, not prompts)
 
-### [REC-1] Assign research_1 with web-first ordering enforcement
+### [REC-0A] Add `to_delete/` routing in Evaluator output
 
-The F₂(10000) published record has been unknown for **5 consecutive generations**. This must be resolved before any further CP-SAT compute is allocated.
+**What to change:** Add an `output/to_delete/` directory that the orchestrator reads during
+`move_evaluator_outputs()`. Each file in `to_delete/` contains a list of absolute paths to
+delete from the knowledge base. After processing, the orchestrator deletes the listed paths.
 
-**What to change:** research_1 brief in gen 7 must begin: "FIRST action (before anything else): run `WebSearch('OEIS A003022 Sidon set maximum')` and `WebSearch('F2 10000 Sidon set record')`. SECOND action: read `problems/sidon/helpers/rokicki_data.py` — it may contain tabulated answers. THIRD action: check `papers/summaries/` for prior research. Report your findings from steps 1–3 before any literature review."
+**Why:** `knowledge/facts/fact_002.md` and `knowledge/facts/fact_004.md` have been WRONG
+since generation 0 and cannot be removed by any existing agent workflow. No orchestrator
+routing path touches `knowledge/facts/`. The stale files will persist indefinitely without
+this structural fix.
 
-**Expected impact:** Resolves 5-generation-old blocking question. If F₂(10000) = 105, halt all CP-SAT and perturbation search. If F₂(10000) ≥ 106, confirms CP-SAT is correctly prioritized.
+**Immediate fix (manual):** Delete `knowledge/facts/fact_002.md` and `knowledge/facts/fact_004.md`
+directly. The corrected versions of both facts exist in `knowledge/ideas/active/` and in
+the evaluator's gen6/gen7 updates. Removing the originals eliminates the data poisoning risk.
 
----
-
-### [REC-2] Assign VLNS formulation fix as first priority in gen 7
-
-The VLNS bug is a 2-line fix with the diagnosis already complete: change `add_abs_equality` domain from [1,N] to [0,N] and add explicit `y[i] != fv` constraints before absolute difference calculation.
-
-**What to change:** Assign a full or exploit agent with explicit brief: "The VLNS formulation has a known bug (see gen006/full_1.md section Phase 2). Fix the domain conflict as described, then run 50+ trials with diverse removal patterns (random-5, random-10, random-15, random-20, targeted-high-blocker). If any trial succeeds (finds 106+), extend to 500+ trials. If all 50 INFEASIBLE, record as genuine (not bug) and archive VLNS."
-
-**Expected impact:** Either finds a path to 106 or conclusively closes the VLNS approach. Either outcome is high-value.
-
----
-
-### [REC-3] Create helpers/cpsat.py before gen 7 agents launch
-
-Three consecutive generations (gen 4 P2, gen 5 gap, gen 6 gap) have requested this helper. Every CP-SAT session re-derives the same formulation and introduces new bugs.
-
-**What to change:** Assign experimentator_1 in gen 7 with sole focus: create `output/helpers/cpsat.py` with:
-- `solve_sidon_cpsat(k, N, hint=None, time_limit=300, num_workers=8)` — standard k-element search with optional warm-start
-- `vlns_sidon(fixed_elements, n_free, N, time_limit=120)` — VLNS with **corrected** formulation (domain [0,N], explicit y[i]!=fv constraints, no abs_equality domain conflict)
-
-Include a self-test that runs k=50, N=1000 (should find feasible quickly) to verify formulation correctness. Do not allocate CP-SAT compute to exploration while the helper is being built.
-
-**Expected impact:** Eliminates CP-SAT formulation errors and 5-10 turns of boilerplate per session. VLNS bug class will not recur.
+**Expected impact:** Eliminates the longest-standing data integrity failure in the pipeline.
 
 ---
 
-### [REC-4] Update State of Affairs for gen 6 findings before gen 7 launches
+### [REC-0B] Add `to_move/` routing in Evaluator output for file relocation
 
-The SoA header says `generation: 5`. Gen 6 produced definitive new findings that must be in the SoA before gen 7 agents read it. The Consistency Reviewer must run or the Evaluator must update the SoA.
+**What to change:** Add an `output/to_move/` directory. Each file contains `source: path`
+and `destination: path` pairs. Orchestrator moves files during post-processing.
 
-**Critical updates required:**
-1. Remove-k perturbation: "exhaustively debunked for k=2-104 (27K+ trials)" — NOT "untested for k≥3"
-2. Self-healing property: "structural invariant — any k-element removal opens exactly k slots (the removed elements)" — add as established pattern
-3. VLNS: "tested (9 trials), likely formulation bug — INFEASIBLE results not yet confirmed genuine"
-4. DFS/backtracking: "confirmed = greedy (27s, baseline 66)" — close idea_005 as debunked
-5. CP-SAT status: "6+ runs, all UNKNOWN, formulation may need rethinking"
-6. Stale fact files: delete fact_002 and fact_004 from `knowledge/facts/` (stale copies with wrong content)
+**Why:** `knowledge/ideas/active/pattern_009.md` and `knowledge/ideas/confirmed/pattern_011.md`
+are in the wrong directory and cannot be moved by any existing workflow.
 
----
-
-## Priority 2 — High Value (gen 7 strategic directions)
-
-### [REC-5] Do NOT allocate CP-SAT with the same AllDifferent formulation as gen 5-6
-
-**Evidence:** k=104 verification returned UNKNOWN in 30s even with the full hint. The AllDifferent-over-5565-diffs formulation is pathologically hard for OR-Tools CP-SAT presolve. More time with the same formulation will not change this.
-
-**What to change:** Any CP-SAT run in gen 7 must use a DIFFERENT formulation. Options from full_1 gen6 and explore_1 gen6:
-- Binary variable formulation: x_i ∈ {0,1} for each candidate element, difference sum uniqueness via explicit pair constraints
-- Maximize-k formulation: instead of "find exactly k=106", maximize k — more solver-friendly
-- Anti-algebraic: add constraint that solution shares ≤50% elements with 105-mark set
+**Immediate fix (manual):** Move pattern_009.md to `knowledge/patterns/confirmed/` and
+pattern_011.md to `knowledge/patterns/confirmed/`.
 
 ---
 
-### [REC-6] Archive stale ideas before gen 7 knowledge dump
+## Priority 1 — Critical (gen 8 must-do before agents launch)
 
-**Evidence:** idea_003, idea_015, idea_016 are 2-3 generations stale and confirmed far below the frontier (ceilings 69-75). They appear in the evaluator knowledge dump and consume context tokens.
+### [REC-1] Gen 8 full_1 brief must include CP-SAT formulation INLINE
 
-**What to change:** Evaluator or Consistency Reviewer should move these to `knowledge/ideas/debunked/`:
-- idea_015 (Fibonacci Ordering): ceiling 69, 3 gens stale → archive
-- idea_016 (Min-Blocking): ceiling 69, 2 gens stale → archive
-- idea_003 (Difference-Aware): ceiling unknown but well below frontier, 2 gens stale → archive
-- pattern_009: merge into pattern_012 or archive
+**What to change:** The gen 8 brief for full_1 (or whatever agent runs EXP-5) must include:
+
+```
+DO NOT read state_of_affairs.md or prior reports. Start immediately with the following code:
+
+from helpers.cpsat import solve_sidon_cpsat
+from problems.sidon.helpers.rokicki_data import BEST_105
+
+# Binary variable maximize-k formulation
+# Variables: x_i ∈ {0,1} for each i in {0,...,10000}
+# Objective: MAXIMIZE sum(x_i)
+# Constraints: for each sum s, at most one pair (i,j) with i<j, i+j=s, x_i=x_j=1
+# Warm-start: x_i=1 for i in BEST_105, x_i=0 otherwise
+# Time limit: 3600s, workers: 8
+
+status, solution = solve_sidon_cpsat(k=None, N=10000, hint=BEST_105,
+    time_limit=3600, num_workers=8, maximize=True)
+```
+
+**Why:** full_1 was interrupted during context reading for the SECOND consecutive generation.
+The agent's own debrief says: "Skip context reading entirely and immediately implement." The
+brief design is causing the failure. Providing the formulation inline eliminates the reading phase.
+
+**Expected impact:** Executes the only remaining viable experiment that could either find 106
+or definitively prove 105 optimal.
 
 ---
 
-### [REC-7] Add C-extension helper for inner-loop Sidon validation
+### [REC-2] Consistency Reviewer MUST run in gen 8
 
-**Evidence:** Multiple agents cite ~200 trials/second in Python as a bottleneck. C-extension would give 10-100x speedup, enabling perturbation-style experiments that are currently compute-limited.
+**What to change:** Force the Consistency Reviewer to run in gen 8 (override the 3-gen
+interval if needed). The SoA is now factually wrong on 4 key points:
+1. "VLNS: 0 valid trials (formulation bug)" → should be "85+ trials, INFEASIBLE genuine"
+2. "CRITICAL: Fix abs-equality domain bug" → should be "no bug; infeasibility confirmed"
+3. "helpers/cpsat.py still missing" → should be "delivered gen7, self-tested"
+4. "idea_025 (Ruzsa-Lindström): 0 trials" → should be "tested, ceiling 75, same basin as ET"
 
-**What to change:** Assign experimentator to write `helpers/sidon_fast.c` compiled via ctypes with:
-- `is_sidon_fast(arr, n)` — C implementation of difference uniqueness check
-- `can_add_fast(arr, n, element)` — O(k) check using hash set
-- Python wrapper `helpers/sidon_fast.py` using ctypes
+Agents reading the current SoA will waste compute on a "CRITICAL" bug that doesn't exist.
 
-**Note:** This is a multi-turn implementation. If session budget is tight, defer to a dedicated experimentator gen.
+**Expected impact:** Prevents one generation of misdirected work.
 
 ---
 
-### [REC-8] Enforce single-agent ownership for external data fetches (carry forward from gen 5)
+### [REC-3] Delete stale fact files immediately (pre-gen8 action)
 
-**Status from gen 5 REC-8:** Was listed as "what to change: Add to architect.md." Status unknown — not confirmed as implemented.
+**What to change:** Manually delete or overwrite:
+- `knowledge/facts/fact_002.md` — says upper bound "~100-102" (WRONG: ~109)
+- `knowledge/facts/fact_004.md` — says validator extracts subsets (WRONG: sentinel scoring)
 
-**What to change:** Add to `agents/architect.md` Recurring Helper Needs section: "Any brief that requires fetching external data (web search, paper download, database lookup) must designate exactly ONE agent for the fetch. Other agents that need the data must reference the first agent's output path in their brief, not perform the fetch themselves."
+These files have been wrong for 7 generations and flagged for 5. They are the highest
+data integrity risk in the knowledge base. Any agent that reads them receives misinformation
+that could fundamentally alter their strategy (believing the ceiling is 100-102 when it's ~109,
+or believing invalid solutions get partial credit).
+
+**Expected impact:** Eliminates active misinformation that has persisted 7 generations.
+
+---
+
+## Priority 2 — High Value (gen 8 strategic directions)
+
+### [REC-4] Create helpers/extend.py before gen 8 agents launch
+
+**What to change:** Assign experimentator or system operator to create
+`problems/sidon/helpers/extend.py` with:
+```python
+def greedy_extend(base_set, N):
+    """Extend a valid Sidon set greedily up to N."""
+    s = set(base_set)
+    diffs = set()
+    for a in s:
+        for b in s:
+            if a != b:
+                diffs.add(abs(a-b))
+    for candidate in range(N+1):
+        if candidate in s:
+            continue
+        new_diffs = {abs(candidate - x) for x in s}
+        if not new_diffs & diffs and len(new_diffs) == len(s):
+            s.add(candidate)
+            diffs |= new_diffs
+    return sorted(s)
+```
+
+**Why:** explore_1 and research_1 both flagged `helpers/extend.py` as missing for the
+second consecutive generation. Every explore agent reimplements this inline. It is the
+single most-requested helper after cpsat.py.
+
+**Expected impact:** Saves 2-5 turns per explore/exploit session. Eliminates a class of
+inline reimplementation bugs.
+
+---
+
+### [REC-5] Retire "look up F₂(10000)" from research_1 briefs
+
+**What to change:** Remove all references to "find F₂(10000) via literature search" from
+research_1 briefs. The question has been conclusively answered: it is not tabulated anywhere
+accessible. The research agent has confirmed this via live web searches in gen7.
+
+Replace with one of:
+- "Investigate why BEST_105 has the self-healing property — is this a known algebraic result?"
+- "Survey tabu search methods for combinatorial optimization — specifically swap-then-fill for
+  constraint satisfaction"
+- "Analyze the structure of Sidon sets near the theoretical upper bound"
+
+**Why:** 7 generations of research attempts on this question have consumed compute with
+diminishing returns. The question is inherently unanswerable with available tools.
+
+**Expected impact:** Research slot becomes productive again.
+
+---
+
+### [REC-6] Define pipeline exit criteria
+
+**What to change:** Add to `user/config.yaml` or CLAUDE.md:
+```yaml
+exit_criteria:
+  - condition: "binary_cpsat_maximize_returns_INFEASIBLE_at_106"
+    action: "halt — F₂(10000) = 105 confirmed computationally"
+  - condition: "binary_cpsat_maximize_finds_106"
+    action: "continue — record breakthrough, explore 107+"
+  - condition: "plateau_generations >= 5 AND all_experiments_exhausted"
+    action: "recommend halt to user"
+```
+
+**Why:** The Architect explicitly asked for exit criteria. Without formal criteria, the
+pipeline may continue running well past the point of useful exploration. After gen8's
+EXP-5, one of two outcomes defines the pipeline's future:
+- INFEASIBLE → halt (F₂(10000) = 105 proven)
+- Found 106 → major reorientation
+
+**Expected impact:** Prevents indefinite compute waste after the search space is exhausted.
+
+---
+
+### [REC-7] Add VLNS-from-BEST_104 to gen 8 experiments
+
+**What to change:** Add a VLNS trial from BEST_104 (Singer q=103, mul=400, 104 elements)
+to either exploit_1 or explore_1 brief in gen 8.
+
+**Why:** The self-healing property has been confirmed for BEST_105 only. If BEST_104 is also
+self-healing, the property is structural (applies to all near-optimal Sidon sets in [0,10000]).
+If BEST_104 VLNS finds a 105-element replacement that IS NOT BEST_105, we have a second
+independently discovered 105-mark construction — which may have different algebraic properties.
+Experimentator_1 specifically requested this in their gen7 debrief.
+
+**Expected impact:** Takes <30min. Either confirms self-healing universality or finds new
+105-mark construction. High information/cost ratio.
 
 ---
 
 ## Priority 3 — Process Improvements
 
-### [REC-9] Add decision rule for CP-SAT UNKNOWN to prevent compute waste
+### [REC-8] Distinguish "diagnosis proposed" from "diagnosis confirmed" in SoA
 
-**Evidence:** CP-SAT has returned UNKNOWN in 6+ runs across gens 4-6, totaling ~5400s of compute. The current prompt does not tell agents to stop when they see UNKNOWN from the same formulation.
+**What to change:** Add a convention to the State of Affairs: when an approach is labeled
+as having a "bug" or "flaw," include a confidence label:
+- `[DIAGNOSIS: proposed, 1 agent]` — plausible, unverified
+- `[DIAGNOSIS: confirmed, N agents]` — multiple independent confirmations
 
-**What to change:** Add to full.md and exploit.md agent templates: "If CP-SAT returns UNKNOWN with the same formulation and k value as a previous session (check `knowledge/experiments/` for prior CP-SAT results), do NOT run it again with the same settings. Either (a) change the formulation, (b) change k, or (c) move to a different approach."
-
----
-
-### [REC-10] Research brief must cite sources or label claims "training data"
-
-**Evidence:** research_1 gen6 produced Ruzsa-Lindström, GRASP, tabu search recommendations from training data without web search. These may be correct but cannot be verified.
-
-**What to change:** Add to `agents/research.md`: "Every factual claim must be labeled with its source: [OEIS A00xxxx], [paper: Author Year], [web: URL], or [training data: unverified]. Claims labeled 'training data' must be noted as such in findings.md so downstream agents can weigh them appropriately."
+**Why:** The gen6 VLNS "formulation bug" was labeled "CRITICAL" and "almost certainly" correct
+based on one agent's analysis. Three gen7 agents independently refuted it. One generation of
+compute was spent pursuing a phantom bug. The knowledge system needs better uncertainty markers.
 
 ---
 
-## Tracking: Previous Recommendations Status
+### [REC-9] Carry forward from gen6 (still not confirmed resolved)
 
-| Recommendation | Status |
-|----------------|--------|
-| Do NOT assign CP-SAT k≤105 (gen5 REC-1) | RESOLVED — gen6 targeted k=106 only |
-| Update SoA before gen6 (gen5 REC-2) | PARTIAL — Consistency Review ran but SoA still gen5 header |
-| Fix idea_022 Bose-Chowla formula (gen5 REC-3) | UNKNOWN — not mentioned in gen6 reports |
-| Assign remove-k perturbation k=3-10 (gen5 REC-4) | RESOLVED — exploit_1 completed exhaustively |
-| Create helpers/extend.py (gen5 REC-5) | RESOLVED — experimentator_1 created |
-| Save 105-mark set in helpers/ (gen5 REC-6) | RESOLVED — rokicki_data.py created |
-| Test alternative ILP solvers HiGHS/SCIP (gen5 REC-7) | PARTIAL — HiGHS not tested, full_1 used CP-SAT only |
-| Single-agent ownership for data fetches (gen5 REC-8) | UNKNOWN — not confirmed in architect.md |
-| Require algebraic briefs to specify formulas (gen5 REC-9) | UNKNOWN |
-| Archive/test idea_005 backtracking (gen5 REC-10) | RESOLVED — explore_1 confirmed DFS = greedy |
+| From gen6 | Status |
+|-----------|--------|
+| REC-8: Single-agent ownership for external data fetches → Add to architect.md | **UNKNOWN** — not confirmed |
+| REC-9: Add CP-SAT UNKNOWN decision rule → Add to full.md, exploit.md | **UNKNOWN** — full_1 spent turns on UNKNOWN-equivalent in gen7 |
+| REC-10: Research cites sources or labels as "training data" → Add to research.md | **RESOLVED in gen7** — research_1 performed live searches and labeled OEIS, arXiv, cube20.org |
+
+---
+
+## Tracking: Gen 6 Recommendations Status
+
+| Recommendation | Status | Notes |
+|----------------|--------|-------|
+| REC-1: Research web-first ordering | **RESOLVED** | research_1 performed live web searches (first time in 7 gens) |
+| REC-2: VLNS formulation fix as gen7 priority | **RESOLVED** (finding: no bug) | exploit_1 confirmed 85+ trials INFEASIBLE, genuine |
+| REC-3: Create helpers/cpsat.py | **RESOLVED** | experimentator_1 delivered, self-tested |
+| REC-4: Update SoA before gen7 | **PARTIAL** | SoA not updated; Consistency Reviewer did not run gen7 |
+| REC-5: Different CP-SAT formulation | **PARTIAL** | Binary VLNS used; binary maximize-k NOT run (full_1 failed) |
+| REC-6: Archive stale ideas (idea_015, idea_016, idea_003) | **UNKNOWN** | Not mentioned in gen7 reports |
+| REC-7: C-extension helper for validation | **NOT STARTED** | No experimentator slot available |
+| REC-8: Single-agent ownership for data fetches | **UNKNOWN** | Not confirmed in architect.md |
+| REC-9: CP-SAT UNKNOWN decision rule | **NOT STARTED** | full_1 still ran same-class formulations |
+| REC-10: Research source labeling | **RESOLVED** | research_1 cited OEIS, arXiv, cube20.org URLs |

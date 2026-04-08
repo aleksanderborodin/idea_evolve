@@ -1,72 +1,66 @@
 ---
-generation: 6
+generation: 7
 best_score: 105
 trajectory: plateaued
-last_updated_gen: 6
+last_updated_gen: 7
 ---
 
-# State of Affairs — Generation 6
+# State of Affairs — Generation 7
 
 ## Current Standing
 
-Best score: **105** (Bose-Chowla affine plane q=107, multiplier=433, span=9884). Achieved gen 5 by experimentator_1, independently confirmed by research_1 and reproduced in gen 6 (exploit_1, full_1). This score has held for 2 generations.
-6 generations completed. ~65 solutions evaluated. Trajectory: **plateaued** — no improvement since gen 5.
-Theoretical upper bound: **~109** (sqrt(N) + O(N^{1/4}), Carter-Hunter-O'Bryant). Gap: 4 elements.
-**Algebraic ceiling: 105** — exhaustive multiplier search over all primes q<=109 and both construction types (Singer pp, Bose-Chowla ap) confirms no 106-mark algebraic set fits in N=10000. The 105-mark set is also **perfectly self-healing**: removing any k elements opens exactly k addable slots, which are always the removed elements (pattern_014, 27K+ trials). Perturbation is provably futile.
+Best score: **105** (Bose-Chowla affine plane q=107, multiplier=433, span=9884). Achieved gen 5, held for 3 generations. 7 generations completed, ~75 solutions evaluated. Trajectory: **plateaued**.
+
+Theoretical upper bound: **~109** (sqrt(N) + O(N^{1/4}), O'Bryant 2022). Gap: 4 elements.
+
+**Key gen 7 result:** VLNS infeasibility at 106 is **genuine**, not a formulation bug as gen 6 believed. Three independent agents confirmed this. 85+ VLNS trials with corrected formulation, all INFEASIBLE for target 106, all OPTIMAL for target 105. The 105-mark set is algebraically rigid — for k≤44 removed elements, exactly k valid candidates exist (mathematical impossibility to improve). Pattern_016 assigns **0.90 confidence** to F₂(10000) = 105. CP-SAT returned UNKNOWN (solver limitation), not INFEASIBLE (proof), so 0.10 uncertainty remains.
 
 ## What Works
 
-- **Bose-Chowla ap q=107, mul=433** (idea_022, established, 0.95): 105 elements, span=9884. Pipeline best. Greedy-maximal with zero combinatorial slack.
-- **Multiplier optimization** (idea_023, established, 0.9): Essential for all algebraic constructions. Singer q=103 with mul=400 gives 104 (vs 102 with mul=1).
-- **Singer pp q=101** (idea_008, established, 0.95): 102 elements. Best Singer-type construction.
-- **Rokicki-Dogon database** (idea_020, established, 0.95): Verified source of near-optimal constructions.
-- **105 is algebraic ceiling** (pattern_012, confirmed, 0.95): Exhaustive proof.
-- **105-mark self-healing** (pattern_014, confirmed, 0.95): Perturbation of any size returns same set. NEW gen 6.
-- **All greedy variants ceiling 66-70** (pattern_011/013, confirmed): Beam search k=500+ = 70.
-- **ET(71)+1-opt hard ceiling 75** (pattern_015, confirmed, 0.90): 30+ restarts all converge. NEW gen 6.
-- **DFS/backtracking = greedy** (idea_005, debunked gen 6): Sequential DFS IS greedy (66).
+- **Bose-Chowla ap q=107, mul=433** (idea_022, established, 0.95): 105 elements, pipeline best. Self-healing: removing any k elements always recovers to 105 (27K+ trials, pattern_014).
+- **VLNS confirms rigidity** (idea_024, established, 0.85): 85+ trials prove 106 INFEASIBLE from any 105-mark subset. cpsat.py helper now available.
+- **Singer pp q=103, mul=400** (idea_006+idea_023, established): 104 elements. Second-best algebraic.
+- **Singer pp q=101** (idea_008, established, 0.95): 102 elements. Third-best.
+- **105 is algebraic ceiling** (pattern_012, confirmed, 0.95): Exhaustive search over all primes q≤109, both construction types, all multipliers.
+- **All greedy/search methods ceiling 66-75** (cluster_002, exhausted): Beam search 70, ET(71)+search 75.
 
 ## Current Frontier
 
-All algebraic constructions and perturbation methods are exhausted. The only path to 106+ is computational search:
+All algebraic constructions and perturbation methods exhausted. Remaining avenues:
 
-1. **VLNS with fixed formulation** (idea_024, active, CRITICAL): Fix abs-equality domain bug ([1,N] -> [0,N]), retry 50+ removal patterns. Each trial is cheap (<1s if infeasible, ~120s if tractable). Current 9 trials all INFEASIBLE due to formulation bug, not genuine infeasibility. **Highest-value next step.**
-2. **CP-SAT maximize formulation** (idea_019, active): Instead of decision "find k=106", maximize k. More solver-friendly. Three generations of k=106 decision CP-SAT (6000s total) returned UNKNOWN.
-3. **Overnight CP-SAT k=106** (4h+, 16 workers): Previous longest run was 1200s. k=106 is hard even at N=15000, so difficulty is inherent.
-4. **F₂(10000) lookup**: OEIS A003022 or `problems/sidon/helpers/rokicki_data.py`. 5 minutes of work that could redirect the entire pipeline. Unanswered for 6 generations due to systemic research agent failure.
+1. **Binary maximize-k CP-SAT** (idea_019, active): Only untested CP-SAT formulation. Binary variables x_i ∈ {0,1}, maximize Σx_i subject to all-different pairwise sums. Risk: ~25M constraints for N=10000 may exceed memory. If k_max=105, CP-SAT direction exhausted. **Highest priority.**
+2. **VLNS from non-105-mark seeds** (idea_024): Test if self-healing is specific to Bose-Chowla q=107 or universal. E.g., VLNS from Singer q=103 104-mark set targeting 106. Medium priority.
+3. **Tabu search with swap-then-fill** (unexplored): research_1 identified as best untried heuristic per literature. Prevents self-healing return by tabu-listing removed elements. Medium priority.
 
-## Coverage Map
+## Coverage Map (grounded in coverage matrix)
 
-**Well-explored (ceilings confirmed):**
-- Bose-Chowla ap q=107: 2+ trials, ceiling 105 (self-healing, perturbation futile k=1-104)
-- Singer pp q=103 + mul=400: 3 trials, ceiling 104
+**Exhaustively explored (ceilings proven):**
+- Bose-Chowla ap q=107: 5+ trials, ceiling 105, self-healing (27K+ perturbation trials)
+- VLNS from 105-mark subsets: 85+ trials, all INFEASIBLE at 106
+- Singer pp q=103 mul=400: 3 trials, ceiling 104
 - Singer pp q=101: 8 trials, ceiling 102
-- All greedy variants: 30+ trials, ceiling 70 (beam search)
-- ET(71)+1-opt: 6 trials, ceiling 75 (hard, 30+ restarts)
-- Singer perturbation all k: 4000+ trials, zero improvement
-- SA from any seed: 4+ trials, zero improvement
-- Remove-k perturbation of 105-mark set (k=1-104): 27K+ trials, perfectly futile
-- DFS/backtracking: 1 trial, equals greedy (66)
-- CP-SAT k=106 decision: 6000s total compute, UNKNOWN
+- All greedy variants: 30+ trials, ceiling 70 (beam search k=500+)
+- ET(71)+search: 7 trials, ceiling 75; Ruzsa(71)+search: 2 trials, same 75 ceiling
+- Singer perturbation all k: 4000+ trials, futile
+- CP-SAT k=106 decision: 6000s total, UNKNOWN
 
-**Under-explored or untested:**
-- VLNS with corrected formulation: 0 valid trials (9 trials had bug)
-- CP-SAT maximize formulation: 0 trials
+**Unexplored:**
+- Binary maximize-k CP-SAT: 0 trials
+- VLNS from non-105-mark algebraic seeds: 0 trials
+- Tabu search (swap-then-fill): 0 trials
 - Alternative solvers (Gurobi, SCIP): 0 trials
-- Ruzsa-Lindström construction as SA seed (idea_025): 0 trials
-- Tabu search with "swap then fill" moves: 0 trials
 
 ## Dead Ends
 
-- **All greedy/search variants** (cluster_002, exhausted): Ceiling 70. 35-element gap to algebraic.
-- **All hybrid approaches** (cluster_003, exhausted): Singer perturbation, SA from algebraic seed, multi-Singer hybrid — all debunked.
-- **Remove-k perturbation of 105-mark set**: Self-healing property makes this provably futile for all k.
-- **DFS/backtracking** (idea_005): DFS IS greedy. Debunked gen 6.
+- **Cluster_002** (search-based, exhausted): All greedy/search variants ceiling 66-75. 30-element gap to algebraic. Includes randomized greedy, LNS, SA, beam search, ET extension, Ruzsa-Lindström, backtracking.
+- **Cluster_003** (hybrid, exhausted): Singer perturbation, SA from algebraic seed, multi-Singer hybrid — all debunked. 43-blocker minimum makes perturbation structurally impossible.
+- **Remove-k perturbation of 105-mark set**: Self-healing property proven for all k (pattern_014). Provably futile.
+- **Ruzsa-Lindström as different basin** (idea_025, debunked gen 7): Converges to same 75 ceiling as ET(71). Naive formula invalid in integer arithmetic; only 2p-scaled works (fact_005).
 
 ## Open Questions
 
-1. **Can k=106 be achieved for N=10000?** CP-SAT returned UNKNOWN (not INFEASIBLE). VLNS results are artifacts of a formulation bug. Fix VLNS and retry before concluding.
-2. **What is F₂(10000)?** Check OEIS A003022 and `problems/sidon/helpers/rokicki_data.py`. This single number determines if 106 is ambitious or already known. Unanswered for 6 generations — systemic research failure.
-3. **Is the VLNS formulation genuinely fixable?** The abs-equality domain conflict diagnosis is plausible but untested. Must fix and verify.
-4. **DANGER: Stale fact files.** `facts/fact_002` says upper bound "~100-102" (WRONG: ~109). `facts/fact_004` says validator extracts subsets (WRONG: sentinel scoring). Corrected copies exist in `ideas/active/` but originals persist and could mislead agents.
-5. **helpers/cpsat.py still missing.** Requested for 3 consecutive generations. Agents re-derive CP-SAT formulation from scratch each time, introducing bugs.
+1. **Is 105 truly F₂(10000)?** Confidence 0.90. CP-SAT returned UNKNOWN, not INFEASIBLE. Binary maximize-k is the last formulation that could settle this. Theoretical gap of 4 to ~109 bound.
+2. **Can binary maximize-k CP-SAT even build?** ~25M constraints for N=10000. full_1 interrupted before testing. Memory feasibility unknown.
+3. **Is self-healing universal or construction-specific?** VLNS from Singer q=103 (104-mark) targeting 106 untested. If also INFEASIBLE, strengthens F₂=105 claim.
+4. **DANGER: Stale fact files persist.** facts/fact_002.md says upper bound "~100-102" (WRONG: ~109). facts/fact_004.md says validator extracts subsets (WRONG: sentinel scoring). 4-generation architectural issue — no orchestrator path updates facts/. Agents reading facts/ will be misled.
+5. **Epistemological lesson:** Gen 6 assigned high confidence to wrong VLNS "bug" diagnosis (1 agent). Gen 7 refuted it (3 agents). Critical claims need evidence-source counts, not just confidence numbers.

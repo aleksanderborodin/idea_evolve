@@ -136,14 +136,15 @@
     3,
     4,
     5,
-    6
+    6,
+    7
   ],
   "pid": 40551,
   "started_at": "2026-04-08T13:31:28.132792+00:00",
   "target_gen": 30,
-  "status": "running",
+  "status": "stopped",
   "current_gen": 7,
-  "current_phase": "evaluator",
+  "current_phase": "idle",
   "agents": {},
-  "last_updated": "2026-04-08T14:04:39.887442+00:00"
+  "last_updated": "2026-04-08T14:27:56.690133+00:00"
 }

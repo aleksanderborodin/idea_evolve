@@ -3,32 +3,35 @@ type: cluster
 id: cluster_004
 name: "Exact Methods (ILP / Constraint Programming)"
 member_ideas: [idea_019, idea_024]
-best_score: 102
-best_solution: gen004_full_1_sol01
+best_score: 105
+best_solution: gen007_exploit_1_sol01
 status: active
-last_updated: generation_6
+last_updated: generation_7
 ---
 
 This cluster contains ideas based on exact optimization methods — ILP, CP-SAT, and
 constraint programming solvers.
 
-**Gen 6 results (full_1) — major new evidence:**
+**Gen 7 consistency review update:**
+- **idea_024 promoted to established** (was active). VLNS formulation confirmed correct by
+  3 independent agents. 85+ trials with corrected formulation → ALL INFEASIBLE at 106, ALL
+  OPTIMAL at 105. Gen 6 "formulation bug" diagnosis was wrong — infeasibility is genuine.
+- **cpsat.py helper delivered** by experimentator_1. 3 functions: solve_sidon_cpsat,
+  vlns_sidon, vlns_batch. Self-tested and verified. Resolves 3-generation request.
 
-1. **CP-SAT k=106 (1200s, 16 workers, 105-mark hint):** UNKNOWN. No feasible solution.
-2. **k=104 verification (30s):** UNKNOWN — surprisingly hard even with full hint.
-3. **Binary search on N:** k=106 UNKNOWN at N=10000, 10200, 10500, 11000, 12000, 15000.
-   Difficulty is inherent to k=106, not driven by tight N bound.
-4. **VLNS (idea_024, NEW):** Fix 85 elements, solve for 21 free → all 9 trials INFEASIBLE
-   in <1s. **Likely formulation bug** (abs-equality domain conflict), not genuine infeasibility.
+**Cumulative CP-SAT compute for k>=103:** ~7000s across gens 4-7. Zero feasible solutions
+for k=106. VLNS proves INFEASIBLE in <0.01s (presolve-level). AllDifferent formulation
+returns UNKNOWN.
 
-**Cumulative CP-SAT compute for k≥103:** ~6000s across gens 4-6, zero feasible solutions found.
+**Cluster status: ACTIVE** — one untested formulation remains.
 
-**New member: idea_024 (VLNS)** — decompose intractable k=106 into smaller sub-problems.
-Promising concept but needs formulation fix before real testing.
+**Only remaining viable experiment:**
+- **Binary variable maximize-k CP-SAT** (EXP-5): x_i in {0,1} for i=0..10000, maximize
+  sum(x_i), warm-start from BEST_105. Risk: ~25M constraints may exceed memory. If
+  k_max=105, this cluster is exhausted. If k_max=106, breakthrough. **Highest priority.**
 
-**Next steps (priority order):**
-1. Fix VLNS formulation bug and retry with 50+ patterns
-2. Overnight CP-SAT k=106 (4h+, 16 workers)
-3. CP-SAT maximize formulation (find max k, not decision for fixed k)
-4. Alternative solvers: Gurobi, SCIP, HiGHS
-5. VLNS with maximize objective (find max elements given fixed subset)
+**Lower-priority experiments:**
+- Anti-algebraic CP-SAT (force <=52 overlap with BEST_105)
+- VLNS from non-BEST_105 seeds (e.g., BEST_104 Singer q=103 targeting 106)
+- Tabu search with swap-then-fill (research_1 identified as best untried heuristic)
+- Alternative solvers (Gurobi, SCIP) — unlikely to be installed
