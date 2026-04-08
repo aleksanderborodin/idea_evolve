@@ -1,257 +1,211 @@
 # Idea Evolve
 
-Evolutionary code optimization through collaborative AI agent work sessions. Multiple specialized Claude agents (architects, explorers, exploiters, researchers) work in parallel to evolve increasingly better solutions to hard optimization problems.
+Evolutionary code optimization through collaborative AI agent work sessions. Multiple specialized Claude agents — architects, explorers, exploiters, researchers — work in parallel to evolve increasingly better solutions to hard optimization problems.
+
+![Dashboard Overview](images/overview.png)
+
+## How It Works
+
+A stateless orchestrator runs generations of AI agents. Each generation, an Architect agent plans the strategy, then 3-8 specialized agents work in parallel — writing solutions, evaluating them, and iterating. An Evaluator extracts knowledge (ideas, patterns, facts) from all results. Over many generations, the system builds a shared knowledge base that guides future exploration.
+
+```
+Architect  →  Agent Work  →  Evaluator  →  System Critic  →  Consistency  →  Finalize
+ (plan)      (parallel AI     (score +       (diagnose         (audit           (rank +
+              agents write     extract        pipeline          knowledge        update
+              solutions)       knowledge)     issues)           base)            scores)
+```
+
+All state lives in files. If the orchestrator crashes, it resumes from exactly where it left off.
 
 ## Prerequisites
 
-| Requirement | How to install | Purpose |
-|------------|---------------|---------|
+| Requirement | Install | Purpose |
+|------------|---------|---------|
 | **Python 3.12+** | `sudo apt install python3 python3-venv` | Orchestrator, dashboard, evaluation |
-| **Node.js 18+** | `sudo apt install nodejs npm` | Claude Code CLI runtime |
+| **Node.js 22+** | [NodeSource](https://github.com/nodesource/distributions#installation-instructions) | Claude Code CLI runtime (`npx`) |
 | **Claude Code** | `npm install -g @anthropic-ai/claude-code` | AI agent sessions |
 | **Anthropic API key** | [console.anthropic.com](https://console.anthropic.com) | Set `ANTHROPIC_API_KEY` env var |
-| **g++ 11+** | `sudo apt install g++` | GEMM problem: compiling C++ solutions |
-| **Google Benchmark** | `sudo apt install libgoogle-benchmark-dev` | GEMM problem: benchmarking |
-| **cgroup tools** | `sudo apt install cgroup-tools` | GEMM problem: CPU pinning (optional) |
 
-## Setup (from scratch)
+Some problems may have additional dependencies (e.g., `g++` for GEMM compilation). Check `problems/{id}/description.md` for problem-specific requirements.
+
+## Setup
 
 ```bash
-# 1. Clone
-git clone <repo-url> && cd project_alpha
+git clone <repo-url> && cd idea-evolve
 
-# 2. Python environment
+# Install Node.js 22+ (required for Claude Code CLI)
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Install Claude Code CLI
+npm install -g @anthropic-ai/claude-code
+
+# Python environment
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt      # PyYAML + Flask (minimal)
+pip install -r requirements.txt
 
-# 3. API key
+# API key
 export ANTHROPIC_API_KEY="sk-ant-..."  # add to ~/.bashrc for persistence
-
-# 4. Verify Claude Code works
-npx @anthropic-ai/claude-code --version
 ```
 
 ## Running the Orchestrator
 
-The orchestrator is the main loop. It launches AI agents, collects results, and evolves solutions.
+**Always `cd idea-evolve` first.** The orchestrator takes `.` as the project root.
 
 ```bash
 source venv/bin/activate
 cd idea-evolve
 
-# Start a new attempt on the GEMM problem (creates runs/gemm/attempt_001/)
-python3 orchestrator.py . --problem gemm --new-attempt --single
+# Start a new attempt on a problem
+python3 orchestrator.py . --problem sidon --new-attempt --single
 
-# Continue an existing attempt
-python3 orchestrator.py . --problem gemm --single          # latest attempt, 1 gen
-python3 orchestrator.py . --problem gemm                    # full run (30 gens)
-python3 orchestrator.py . --problem gemm --start-gen 5      # resume from gen 5
+# Continue the latest attempt (1 generation)
+python3 orchestrator.py . --problem sidon --single
+
+# Full run (all generations)
+python3 orchestrator.py . --problem sidon
+
+# Resume from a specific generation
+python3 orchestrator.py . --problem sidon --start-gen 5
 
 # Use a specific attempt
-python3 orchestrator.py . --problem gemm --attempt attempt_002
+python3 orchestrator.py . --problem sidon --attempt attempt_002
 
 # Preview without launching agents
-python3 orchestrator.py . --problem gemm --dry-run
+python3 orchestrator.py . --problem sidon --dry-run
 
 # Background with logging
-python3 orchestrator.py . --problem gemm --single >> /tmp/run.log 2>&1 &
+python3 orchestrator.py . --problem sidon --single >> /tmp/run.log 2>&1 &
 tail -f /tmp/run.log
 ```
 
-On first run with `--new-attempt`, the orchestrator:
-1. Creates the run directory skeleton (`runs/gemm/attempt_001/`)
-2. Bootstraps initial knowledge from `user/initial_ideas.md` and `user/initial_facts.md`
-3. Runs the first generation
+Two orchestrators can run simultaneously on different problems — each works in its own isolated run directory with no shared state.
 
-On subsequent runs, it detects where the previous run left off and resumes. If it crashed, completed agents are skipped automatically. Two orchestrators can run simultaneously on different problems — each works in its own isolated run directory.
+## Defining a Problem
 
-## Running the Dashboard
+Each problem lives in `problems/{id}/` with:
+
+| File | Purpose |
+|------|---------|
+| `description.md` | Problem statement and context |
+| `constraints.md` | Hard constraints solutions must satisfy |
+| `evaluate.py` | Evaluation harness (caches results by content hash) |
+| `validate.py` | Correctness check — invalid solutions get sentinel score |
+| `metrics.yaml` | Fitness direction (higher/lower is better), target, decimals |
+| `helpers/` | Shared utility functions available to all agents |
+| `initial_programs/` | Baseline solutions to seed generation 0 |
+
+See existing problems (`gemm`, `permcodes`, `sidon`) for examples.
+
+## Dashboard
 
 ```bash
 source venv/bin/activate
 python dashboard/app.py              # http://localhost:5000
 python dashboard/app.py --port 8080  # custom port
-python dashboard/app.py --debug      # hot reload for development
+python dashboard/app.py --debug      # hot reload
 ```
 
-The dashboard reads directly from the filesystem -- no database. It auto-detects problems and attempts from the `problems/` and `runs/` directories.
+The dashboard reads directly from the filesystem — no database. It auto-detects all problems and attempts from `problems/` and `runs/`. Click the breadcrumb in the header to switch between problems and attempts.
 
-## How a Generation Works
+### Overview
 
-Each generation goes through 6 phases:
+Score progression chart, generation timeline, and key metrics at a glance. Toggle the "Frontier" button to see annotated callouts on record-breaking solutions. The status beacon shows whether the orchestrator is running (green), idle (gray), stale (amber), or crashed (red).
 
-```
-Architect  ->  Agent Work  ->  Evaluator  ->  System Critic  ->  Consistency  ->  Finalize
- (plan)      (parallel AI)    (score +       (diagnose         (audit            (rank +
-              agents write     extract        pipeline          knowledge         update
-              solutions)       knowledge)     issues)           base)             scores)
-```
+![Overview](images/overview.png)
 
-1. **Architect** (opus) -- reads current knowledge, scores, and reports. Writes a manifest (`manifest.yaml`) specifying which agents to launch with what goals.
-2. **Agent Work** -- 3-8 specialized agents run in parallel. Each reads its brief, writes solutions (`sol*.py`), runs `evaluate.py`, iterates, and writes a debrief report.
-3. **Evaluator** (opus) -- reviews all new solutions, extracts ideas/patterns/facts, updates clusters, writes coverage matrix and solution-idea map.
-4. **System Critic** (sonnet) -- reads agent reports, identifies pipeline problems, writes recommendations.
-5. **Consistency Review** (opus, every N gens) -- audits the entire knowledge base, rewrites State of Affairs.
-6. **Finalize** -- updates rankings (`population/best.py`), score progression, generation snapshot.
+### Pipeline
 
-### Agent Types
+Live view of the current generation's agent pipeline. Shows per-agent status (waiting/running/done/failed), agent type stats, recent errors, and data flow between phases. Reads from durable `gen_progress.json` — survives orchestrator crashes.
+
+![Pipeline](images/pipeline.png)
+
+### Architecture
+
+Visual map of the run directory structure, knowledge hierarchy (State of Affairs → Clusters → Ideas/Patterns/Facts), and idea lifecycle stages.
+
+![Architecture](images/architecture.png)
+
+### Solutions
+
+Sortable, filterable table of every evaluated solution. Sorted best-first (respects fitness direction). Color-coded: green (valid), red (invalid), orange (error). Click any row to see details.
+
+![Solutions](images/solutions.png)
+
+### Knowledge
+
+The three-layer knowledge hierarchy built up across generations:
+- **State of Affairs** (L0) — strategic overview, updated periodically
+- **Clusters** (L1) — groups of related ideas
+- **Ideas, Patterns, Facts** (L2) — individual knowledge items with lifecycle tracking
+
+![Knowledge](images/knowledge.png)
+
+### Reports
+
+Agent debrief reports and system feedback grouped by generation. Includes critic analyses, consistency reviews, and per-agent reports summarizing what was tried, what worked, and insights for future agents.
+
+![Reports](images/reports.png)
+
+## Agent Types
 
 | Agent | Model | Purpose |
 |-------|-------|---------|
-| `explore` | sonnet | Novel approaches -- structurally different from existing solutions |
+| `explore` | sonnet | Novel approaches — structurally different from existing solutions |
 | `exploit` | sonnet | Refine top solutions with targeted improvements |
 | `genetic` | sonnet | Crossover: combine strengths from two parent solutions |
-| `full` | sonnet | Full autonomy -- read everything, try anything |
-| `research` | sonnet | Mathematical research -- read papers, derive new approaches |
+| `full` | sonnet | Full autonomy — read everything, try anything |
+| `research` | sonnet | Mathematical research — read papers, derive new approaches |
 | `experimentator` | opus | Create shared helper utilities for all agents |
-
-## Dashboard Guide
-
-### Problem/Attempt Selector
-
-Click the breadcrumb in the header (e.g., `gemm / attempt_001`) to open the flyout panel. Shows all problems with their attempts, status indicators (running/idle/crashed), generation count, solution count, and best score. Click an attempt to switch context -- all tabs update.
-
-### Overview Tab
-
-![Dashboard Overview](images/score_progression.png)
-
-The overview shows at a glance:
-- **Best Fitness Score** with a gauge showing progress toward target (respects lower-is-better for GEMM)
-- **Generation count**, solution count, idea count, knowledge stats
-- **Current Phase** strip -- which phase the current generation is in
-- **Score Progression Chart** -- interactive canvas chart with:
-  - Gray dots: all evaluated solutions
-  - Blue circles: per-generation best
-  - Green stars: new all-time records
-  - Green fill: running best (record line)
-  - Dashed lines: baseline and target
-  - **Frontier toggle**: click "Frontier" to overlay annotated callouts on record-breaking solutions showing agent name, score improvement %, and which ideas drove the breakthrough
-  - Scroll to zoom, double-click to reset, hover for tooltips
-- **Generation Timeline** -- cards for each completed generation with best score and solution count
-
-### Pipeline Tab
-
-![Pipeline View](images/pipeline_tab.png)
-
-Shows the current generation's pipeline state:
-- Per-agent cards with status (waiting/running/done/failed), solution count, best score
-- Agent briefs showing what the Architect assigned
-- Reads from durable `gen_progress.json` -- survives orchestrator crashes
-
-### Solutions Tab
-
-![Solutions Table](images/solutions_tab.png)
-
-Sortable, filterable table of every solution:
-- Sorted best-first (lower is better for GEMM)
-- Filter by generation, agent type, or status
-- Color-coded: green (valid), red (invalid), orange (error), gray (pending)
-- Click error rows to expand and see the error message
-
-### Knowledge Tab
-
-Three-layer knowledge hierarchy:
-- **State of Affairs** (L0) -- strategic overview with staleness indicator
-- **Clusters** (L1) -- groups of related ideas
-- **Ideas** (L2) -- individual optimization concepts with lifecycle (active/established/disputed/debunked)
-- Also: facts, patterns, and research findings
-- Click any item for a detail modal with full body, metadata, and relationships
-
-### Reports Tab
-
-Agent debrief reports grouped by generation. Each agent writes a report summarizing what it tried, what worked, what failed, and insights for future agents.
 
 ## Project Structure
 
 ```
-project_alpha/
-├── idea-evolve/
-│   ├── orchestrator.py          # Main loop (~3200 lines)
-│   │
-│   ├── agents/                  # Prompt templates (10 agent types)
-│   │   ├── architect.md         #   Plans each generation
-│   │   ├── explore.md           #   Novel approaches
-│   │   ├── exploit.md           #   Refine existing solutions
-│   │   ├── genetic.md           #   Crossover parents
-│   │   ├── full.md              #   Full autonomy
-│   │   ├── research.md          #   Math/paper research
-│   │   ├── experimentator.md    #   Build shared helpers
-│   │   ├── evaluator.md         #   Score + extract knowledge
-│   │   ├── system_critic.md     #   Diagnose pipeline issues
-│   │   └── consistency_review.md #  Audit knowledge base
-│   │
-│   ├── prompts/                 # Shared prompt fragments
-│   │   ├── debrief_instructions.md
-│   │   ├── analysis_debrief.md
-│   │   └── debrief_recovery.md
-│   │
-│   ├── user/                    # User configuration
-│   │   ├── config.yaml          #   Turn limits, timeouts, agent config
-│   │   ├── initial_ideas.md     #   Seed ideas for gen 1
-│   │   ├── initial_facts.md     #   Seed facts for gen 1
-│   │   └── interventions.md     #   Manual guidance for the Architect
-│   │
-│   ├── problems/                # Problem definitions (read-only at runtime)
-│   │   ├── gemm/                #   Binary-ternary GEMM optimization
-│   │   │   ├── description.md   #     Problem statement
-│   │   │   ├── constraints.md   #     Hard constraints
-│   │   │   ├── evaluate.py      #     Evaluation harness (caches results)
-│   │   │   ├── validate.py      #     Compile, correctness check, benchmark
-│   │   │   ├── metrics.yaml     #     Fitness direction, target, sentinel values
-│   │   │   ├── helpers/         #     Shared utilities (core.py + agent-created)
-│   │   │   └── initial_programs/#     Baseline solutions
-│   │   └── permcodes/           #   Permutation codes (archived)
-│   │
-│   └── runs/                    # Evolution data (per problem + attempt)
-│       └── gemm/
-│           └── attempt_001/     # One self-contained run
-│               ├── population/  #   genNNN/{agent}/sol*.py + .score
-│               ├── knowledge/   #   state_of_affairs.md, ideas/, clusters/
-│               ├── history/     #   all_scores.json, eval_cache.json, run_state.json
-│               ├── briefs/      #   genNNN/manifest.yaml + agent briefs + gen_progress.json
-│               ├── reports/     #   genNNN/{agent}.md debrief reports
-│               ├── feedback/    #   system_recommendations.md, analyses
-│               └── workspace/   #   ephemeral agent workspaces
+idea-evolve/
+├── orchestrator.py          # Stateless main loop
+├── agents/                  # Prompt templates (10 agent types)
+├── prompts/                 # Shared prompt fragments
+├── user/                    # config.yaml, initial_ideas.md, interventions.md
 │
-├── dashboard/                   # Flask web UI
-│   ├── app.py                   # Entry point
-│   ├── data/                    # Filesystem scanning (no database)
-│   │   ├── config.py            #   Problem/attempt discovery
-│   │   ├── helpers.py           #   Score extraction, frontmatter parsing
-│   │   └── scanner.py           #   All data scanning functions
-│   ├── routes/
-│   │   ├── api.py               #   /api/* JSON endpoints
-│   │   └── pages.py             #   HTML routes
-│   ├── templates/               # Jinja2 (base.html + tab partials)
-│   └── static/                  # CSS + vanilla JS (no build step)
+├── problems/                # Problem definitions (read-only at runtime)
+│   ├── gemm/                #   Binary-ternary GEMM optimization
+│   ├── permcodes/           #   Permutation codes M(n,d)
+│   └── sidon/               #   Sidon sets (B₂ sequences)
 │
-├── fast-conv/                   # C++ reference implementations + benchmark harness
-├── images/                      # Dashboard screenshots
-├── requirements.txt             # PyYAML + Flask
-└── CLAUDE.md                    # Operational reference + all known issues
-```
+└── runs/                    # All evolution data, per problem + attempt
+    └── {problem}/
+        └── {attempt}/       # Self-contained run
+            ├── population/  #   genNNN/{agent}/sol*.py + .score
+            ├── knowledge/   #   state_of_affairs.md, ideas/, clusters/
+            ├── history/     #   all_scores.json, eval_cache.json
+            ├── briefs/      #   genNNN/manifest.yaml + agent briefs
+            ├── reports/     #   genNNN/{agent}.md debrief reports
+            ├── feedback/    #   system_recommendations.md, analyses
+            └── workspace/   #   ephemeral agent workspaces
 
-The orchestrator works entirely inside the run directory (`runs/gemm/attempt_001/`). No symlinks are created. Global resources (`agents/`, `prompts/`, `user/`) and problem files (`problems/gemm/`) are accessed via the module-level `CTX` context. This means two orchestrators can run simultaneously on different problems without conflicts.
+dashboard/                   # Flask web UI (no database, reads filesystem)
+├── data/                    #   Scanning + config
+├── routes/                  #   API + page routes
+├── templates/               #   Jinja2 templates
+└── static/                  #   CSS + vanilla JS
+```
 
 ## Error Recovery
 
-If the orchestrator crashes mid-generation, just restart with the same command:
+If the orchestrator crashes, restart with the same command:
 
 ```bash
-python3 orchestrator.py . --problem gemm --single
+python3 orchestrator.py . --problem sidon --single
 ```
 
-What happens:
-- **Completed agents are skipped** (tracked in `gen_progress.json`)
-- **Orphaned agent processes are killed** (verified via `/proc/{pid}/cmdline`)
-- **Interrupted output moves are retried** before re-running
-- **Each phase checks completion** before re-running
-
-No manual cleanup needed.
+- Completed agents are skipped (tracked in `gen_progress.json`)
+- Orphaned agent processes are killed automatically
+- Each phase checks completion before re-running
+- No manual cleanup needed
 
 ## Documentation
 
-- **[CLAUDE.md](CLAUDE.md)** -- Operational reference, all 45 bug fixes, scaling improvements, known issues. Updated with every change.
-- **[IDEA_EVOLVE_COMPLETE_V4.md](IDEA_EVOLVE_COMPLETE_V4.md)** -- Full system specification (architecture, agent roles, knowledge model, file formats).
-- **[dashboard/README.md](dashboard/README.md)** -- Dashboard architecture, API endpoints, chart internals.
+- **[CLAUDE.md](CLAUDE.md)** — Operational reference, all known issues, architectural decisions
+- **[IDEA_EVOLVE_COMPLETE_V4.md](IDEA_EVOLVE_COMPLETE_V4.md)** — Full system specification
+- **[dashboard/README.md](dashboard/README.md)** — Dashboard architecture and API endpoints

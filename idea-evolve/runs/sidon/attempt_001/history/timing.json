@@ -76,6 +76,22 @@
       "consistency_reviewer": 490.2,
       "consistency_reviewer_debrief": 26.8,
       "total": 4406.2
+    },
+    "gen007": {
+      "architect": 387.3,
+      "agent_exploit_1_work": 866.1,
+      "agent_exploit_1": 866.1,
+      "agent_research_1_work": 900.1,
+      "agent_research_1_wrap_up": 211.1,
+      "agent_research_1": 1111.2,
+      "agent_experimentator_1_work": 1200.1,
+      "agent_experimentator_1": 1200.1,
+      "agent_full_1_work": 1289.9,
+      "agent_full_1_wrap_up": 52.8,
+      "agent_full_1": 1342.8,
+      "agent_explore_1_work": 1500.1,
+      "agent_explore_1_wrap_up": 104.3,
+      "agent_explore_1": 1604.4
     }
   }
 }

@@ -1,1 +1,0 @@
-gen005/research_1/sol02.py

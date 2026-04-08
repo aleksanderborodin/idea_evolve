@@ -72,6 +72,62 @@
       "type": "timeout",
       "message": "Timed out after 2700s",
       "ts": "2026-04-06T19:45:10.219064+00:00"
+    },
+    {
+      "gen": 7,
+      "phase": "agents",
+      "agent": "explore_1",
+      "type": "error",
+      "message": "Exited with code 127: taskset: failed to execute npx: No such file or directory\n",
+      "ts": "2026-04-08T13:26:55.505585+00:00"
+    },
+    {
+      "gen": 7,
+      "phase": "agents",
+      "agent": "exploit_1",
+      "type": "error",
+      "message": "Exited with code 127: taskset: failed to execute npx: No such file or directory\n",
+      "ts": "2026-04-08T13:26:55.512608+00:00"
+    },
+    {
+      "gen": 7,
+      "phase": "agents",
+      "agent": "full_1",
+      "type": "error",
+      "message": "Exited with code 127: taskset: failed to execute npx: No such file or directory\n",
+      "ts": "2026-04-08T13:26:55.515227+00:00"
+    },
+    {
+      "gen": 7,
+      "phase": "agents",
+      "agent": "research_1",
+      "type": "timeout",
+      "message": "Timed out after 900s",
+      "ts": "2026-04-08T13:52:55.590625+00:00"
+    },
+    {
+      "gen": 7,
+      "phase": "agents",
+      "agent": "experimentator_1",
+      "type": "timeout",
+      "message": "Timed out after 1200s",
+      "ts": "2026-04-08T13:57:55.567271+00:00"
+    },
+    {
+      "gen": 7,
+      "phase": "agents",
+      "agent": "full_1",
+      "type": "error",
+      "message": "Exited with code 1: no stderr",
+      "ts": "2026-04-08T13:59:25.400309+00:00"
+    },
+    {
+      "gen": 7,
+      "phase": "agents",
+      "agent": "explore_1",
+      "type": "timeout",
+      "message": "Timed out after 1500s",
+      "ts": "2026-04-08T14:02:55.589269+00:00"
     }
   ],
   "completed_gens": [
@@ -82,12 +138,12 @@
     5,
     6
   ],
-  "pid": 381200,
-  "started_at": "2026-04-06T18:55:26.310795+00:00",
+  "pid": 40551,
+  "started_at": "2026-04-08T13:31:28.132792+00:00",
   "target_gen": 30,
-  "status": "stopped",
-  "current_gen": 6,
-  "current_phase": "idle",
+  "status": "running",
+  "current_gen": 7,
+  "current_phase": "evaluator",
   "agents": {},
-  "last_updated": "2026-04-06T20:08:52.533240+00:00"
+  "last_updated": "2026-04-08T14:04:39.887442+00:00"
 }
