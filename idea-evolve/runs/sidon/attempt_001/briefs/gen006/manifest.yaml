@@ -1,0 +1,28 @@
+generation: 6
+strategy_summary: "Remove-k perturbation of 105-mark set + CP-SAT k=106 with alt solvers + create shared helpers + backtracking from scratch (idea_005) + literature search for F2(10000)"
+agents:
+  - type: exploit
+    instance: 1
+    model: opus
+    brief: "briefs/gen006/exploit_1.md"
+    timeout: 2700
+  - type: full
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen006/full_1.md"
+    timeout: 2700
+  - type: experimentator
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen006/experimentator_1.md"
+    timeout: 900
+  - type: explore
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen006/explore_1.md"
+    timeout: 1500
+  - type: research
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen006/research_1.md"
+    timeout: 900

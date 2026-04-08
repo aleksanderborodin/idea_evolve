@@ -159,3 +159,77 @@ Files modified since gen 3:
 - knowledge/ideas/debunked/idea_017.md
 - knowledge/ideas/established/idea_004.md
 - knowledge/ideas/established/idea_006.md
+
+## Generation 5
+Files modified since gen 4:
+- knowledge/state_of_affairs.md
+- knowledge/clusters/cluster_004.md
+- knowledge/clusters/cluster_001.md
+- knowledge/clusters/cluster_002.md
+- knowledge/experiments/gen005/experimentator_1/observations.md
+- knowledge/experiments/gen005/experimentator_1/sol01.score
+- knowledge/experiments/gen005/experimentator_1/sol02.score
+- knowledge/experiments/gen005/experimentator_1/sol01.py
+- knowledge/experiments/gen005/experimentator_1/sol03.py
+- knowledge/experiments/gen005/experimentator_1/sol03.score
+- knowledge/experiments/gen005/experimentator_1/experiment_results.md
+- knowledge/experiments/gen005/experimentator_1/sol02.py
+- knowledge/experiments/gen005/experimentator_1/sandbox/notes.md
+- knowledge/experiments/gen005/experimentator_1/__pycache__/sol02.cpython-312.pyc
+- knowledge/experiments/gen005/experimentator_1/__pycache__/sol03.cpython-312.pyc
+- knowledge/experiments/gen005/experimentator_1/__pycache__/sol01.cpython-312.pyc
+- knowledge/experiments/gen005/experimentator_1/sandbox/scripts/search_ap107.py
+- knowledge/experiments/gen005/experimentator_1/sandbox/scripts/perturb_105.py
+- knowledge/experiments/gen005/experimentator_1/sandbox/scripts/search_106.py
+- knowledge/experiments/gen005/experimentator_1/sandbox/scripts/extend_105.py
+- knowledge/experiments/gen005/experimentator_1/sandbox/scripts/search_pp109.py
+- knowledge/research/gen005/research_1/sol01.score
+- knowledge/research/gen005/research_1/findings.md
+- knowledge/research/gen005/research_1/sol02.score
+- knowledge/research/gen005/research_1/sol01.py
+- knowledge/research/gen005/research_1/sol02.py
+- knowledge/patterns/confirmed/pattern_012.md
+- knowledge/patterns/confirmed/pattern_013.md
+- knowledge/ideas/confirmed/pattern_011.md
+- knowledge/ideas/active/fact_004.md
+- knowledge/ideas/active/idea_005.md
+- knowledge/ideas/active/idea_011.md
+- knowledge/ideas/active/idea_015.md
+- knowledge/ideas/active/fact_002.md
+- knowledge/ideas/active/idea_016.md
+- knowledge/ideas/active/idea_021.md
+- knowledge/ideas/active/idea_019.md
+- knowledge/ideas/established/idea_020.md
+- knowledge/ideas/established/idea_023.md
+- knowledge/ideas/established/idea_022.md
+
+## Generation 6
+Files modified since gen 5:
+- knowledge/state_of_affairs.md
+- knowledge/clusters/cluster_004.md
+- knowledge/clusters/cluster_001.md
+- knowledge/clusters/cluster_002.md
+- knowledge/experiments/gen006/experimentator_1/experiment_results.md
+- knowledge/experiments/gen006/experimentator_1/helpers/extend.py
+- knowledge/experiments/gen006/experimentator_1/helpers/rokicki_data.py
+- knowledge/experiments/gen006/experimentator_1/helpers/__pycache__/extend.cpython-312.pyc
+- knowledge/experiments/gen006/experimentator_1/helpers/__pycache__/rokicki_data.cpython-312.pyc
+- knowledge/research/gen006/research_1/findings.md
+- knowledge/patterns/confirmed/pattern_014.md
+- knowledge/patterns/confirmed/pattern_015.md
+- knowledge/ideas/active/fact_004.md
+- knowledge/ideas/active/idea_011.md
+- knowledge/ideas/active/fact_002.md
+- knowledge/ideas/active/fact_001.md
+- knowledge/ideas/active/idea_025.md
+- knowledge/ideas/active/idea_024.md
+- knowledge/ideas/active/idea_019.md
+- knowledge/ideas/debunked/idea_013.md
+- knowledge/ideas/debunked/idea_005.md
+- knowledge/ideas/archived/idea_021.md
+- knowledge/ideas/archived/idea_003.md
+- knowledge/ideas/archived/idea_015.md
+- knowledge/ideas/archived/idea_016.md
+- knowledge/ideas/established/idea_009.md
+- knowledge/ideas/established/idea_020.md
+- knowledge/ideas/established/idea_022.md

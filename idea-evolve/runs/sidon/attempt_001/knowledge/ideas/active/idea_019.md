@@ -1,42 +1,39 @@
 ---
-type: idea
 id: idea_019
-name: "CP-SAT Integer Formulation (Constraint Programming)"
+type: idea
+name: "CP-SAT / ILP Constraint Programming"
 lifecycle: active
-confidence: 0.6
+confidence: 0.4
 first_seen: generation_4
-last_updated: generation_4
-last_confirmed_gen: 4
-supported_by: [gen004_full_1_sol01]
-contradicted_by: []
-related_ideas: [idea_008, idea_005]
+last_updated: generation_6
+last_confirmed_gen: 6
 cluster: cluster_004
-tags: [constraint-programming, ILP, exact, CP-SAT, ortools]
+supported_by: [gen004_full_1_sol01, gen005_full_1_sol01]
+contradicted_by: []
+related_ideas: [idea_005, idea_008, idea_020, idea_022]
+tags: [exact-method, constraint-programming, ilp, cp-sat]
 ---
 
-Use Google OR-Tools CP-SAT solver with an integer element formulation: k ordered integer
-variables e_0 < e_1 < ... < e_{k-1} in {0,...,N}, C(k,2) difference variables d_{i,j} = e_j - e_i,
-and a single AddAllDifferent constraint on all differences. This enforces the Sidon property
-exactly. The formulation has only O(k²) variables — far more compact than indicator variable
-formulations (which would need ~50M variables for N=10000, k=103).
+Uses Google OR-Tools CP-SAT solver with k integer variables + AllDifferent on differences.
+Proved Singer suboptimal for small N (q=7: 8→10 optimal, q=11: 12→13 optimal).
 
-**Generation 4 evidence (full_1)**:
-- Validated at small N: found optimal solutions for N=56 (k=10, beating Singer's k=8) and
-  N=132 (k=13, beating Singer's k=12). Singer is provably suboptimal for small N.
-- At N=10000, k=103: ran 600s total (300s with Singer hint, 300s without). Status: UNKNOWN
-  (neither found a solution nor proved infeasibility). The solver cannot handle this scale
-  in 600s but did not prove 103 impossible.
-- Singer 102-element hint warm-starts the search correctly.
+**Gen 5 results:** Three 600s CP-SAT phases for k=103 all UNKNOWN. Key insight: optimal
+sets share almost no elements with Singer (3/8 overlap q=7, 1/12 overlap q=11).
 
-**Critical insight**: CP-SAT returned UNKNOWN, not INFEASIBLE, for k=103. This means 103
-elements in {0,...,10000} is not ruled out. A longer run (hours) with more workers or a
-commercial solver (Gurobi/CPLEX) might resolve this.
+**Gen 6 results (full_1) — significant new evidence:**
+- k=106 with 105-mark hint, 1200s, 16 workers → UNKNOWN (no feasible solution found)
+- k=104 verification (30s, 8 workers) → UNKNOWN (surprisingly, even with 105-element hint)
+- k=106 with linearization_level=2, symmetry_level=2 (600s) → UNKNOWN
+- Binary search on N: k=106 at N=10000, 10200, 10500, 11000, 12000, 15000 all UNKNOWN
+- **VLNS (fix 85, solve for 21):** 9 trials all INFEASIBLE in <1s — likely formulation bug
+  (abs-equality domain conflict in presolve, not genuine infeasibility)
 
-**Limitations**: CP-SAT's branch-and-bound may not have tight enough LP relaxation bounds
-for this problem. The search space is enormous even with the compact formulation.
+**Gen 6 insights:**
+1. k=106 difficulty is NOT primarily from tight N=10000 bound — still hard at N=15000
+2. The AllDifferent formulation may be too hard for CP-SAT to make search progress
+3. VLNS could work if formulation bug is fixed (domain [1,N] → [0,N] for cross-diffs)
+4. 105-element hint doesn't help even for k=104 — hint propagation may be ineffective
 
-**Next steps**:
-1. Run k=103 for 4+ hours with 16 workers
-2. Try Gurobi MIP formulation (better LP relaxation)
-3. Study the algebraic structure of "Singer+1" solutions at small N (q=7, q=11)
-   to find patterns that generalize to q=101
+**Confidence reduced to 0.4** — three generations of compute (gens 4-6) with zero progress.
+Still the only viable path to 106+ but needs either much longer runs (4h+), fixed VLNS
+formulation, or alternative solvers (Gurobi, SCIP).

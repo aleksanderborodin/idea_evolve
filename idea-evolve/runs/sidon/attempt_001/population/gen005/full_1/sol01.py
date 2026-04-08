@@ -1,0 +1,26 @@
+# fitness: 102
+"""
+CP-SAT search for k=103 Sidon set in {0,...,10000} — all phases returned UNKNOWN.
+Returns Singer q=101 baseline (102 elements) as best known result.
+
+CP-SAT phases run during session:
+- Phase 1: k=103, no hint, portfolio, 16w, 600s -> UNKNOWN
+- Phase 2: k=103, partial Singer hint (51 elems), portfolio, 16w, 600s -> UNKNOWN
+- Phase 3: k=103, full Singer hint, auto, 16w, 600s -> UNKNOWN (terminated early)
+"""
+
+SINGER_102 = [
+    0, 129, 385, 586, 624, 844, 938, 1001, 1008, 1104, 1169, 1183, 1186,
+    1201, 1212, 1225, 1332, 1420, 1574, 1633, 1679, 1868, 1963, 2075, 2212,
+    2235, 2337, 2388, 2479, 2489, 2520, 2547, 2613, 2829, 2849, 2854, 3023,
+    3195, 3578, 3635, 3719, 3793, 3805, 3931, 4007, 4268, 4328, 4456, 4518,
+    4537, 4571, 4648, 4654, 4721, 4835, 4927, 5002, 5145, 5167, 5366, 5413,
+    5666, 5699, 5735, 5789, 5839, 6086, 6094, 6134, 6457, 6492, 6537, 6592,
+    6608, 6636, 6714, 6763, 6919, 7052, 7197, 7199, 7489, 7490, 7599, 7686,
+    8029, 8093, 8191, 8421, 8506, 8510, 8739, 8776, 8962, 9014, 9075, 9194,
+    9266, 9627, 9745, 9766, 9775
+]
+
+
+def entrypoint():
+    return list(SINGER_102)

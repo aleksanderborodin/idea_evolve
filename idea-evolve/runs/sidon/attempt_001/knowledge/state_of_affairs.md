@@ -1,89 +1,72 @@
 ---
-generation: 4
-best_score: 102
+generation: 6
+best_score: 105
 trajectory: plateaued
-last_updated_gen: 4
+last_updated_gen: 6
 ---
 
-# State of Affairs — Generation 4
+# State of Affairs — Generation 6
 
 ## Current Standing
 
-Best score: **102** (Singer q=101 truncation, gen 2). Unchanged for 3 generations.
-4 generations completed. ~40 solutions evaluated. Trajectory: **plateaued**.
-Theoretical upper bound: **~109** (Carter, Hunter, O'Bryant). Gap: 7 elements.
-Singer constructions are exhausted — no prime gives >102 for N=10000.
+Best score: **105** (Bose-Chowla affine plane q=107, multiplier=433, span=9884). Achieved gen 5 by experimentator_1, independently confirmed by research_1 and reproduced in gen 6 (exploit_1, full_1). This score has held for 2 generations.
+6 generations completed. ~65 solutions evaluated. Trajectory: **plateaued** — no improvement since gen 5.
+Theoretical upper bound: **~109** (sqrt(N) + O(N^{1/4}), Carter-Hunter-O'Bryant). Gap: 4 elements.
+**Algebraic ceiling: 105** — exhaustive multiplier search over all primes q<=109 and both construction types (Singer pp, Bose-Chowla ap) confirms no 106-mark algebraic set fits in N=10000. The 105-mark set is also **perfectly self-healing**: removing any k elements opens exactly k addable slots, which are always the removed elements (pattern_014, 27K+ trials). Perturbation is provably futile.
 
 ## What Works
 
-- **Singer q=101 truncation** (idea_008, established, confidence 0.95): Deterministic
-  102 elements. Optimal cyclic shift d=2337. This is the Singer ceiling for N=10000.
-- **Singer difference sets** (idea_006, established, confidence 0.95): Foundation for all
-  competitive solutions. q=101 optimal; q=103 tested gen 4, keeps only 102 in range.
-- **Modular arithmetic structure** (idea_004, established, confidence 0.9): General
-  algebraic principle underlying Singer and ET constructions.
-- **ET(71) + local search** (idea_011, active, confidence 0.6): Best non-Singer result
-  at 75 elements. Robust local optimum confirmed by 25 restarts.
-- **Pattern: All greedy variants ceiling at 66-69** (pattern_011, confidence 0.85):
-  Ascending, Fibonacci, min-blocking, spread-first — all converge. Structural limit.
-- **Pattern: Singer perturbation provably futile** (pattern_009, confidence 0.9):
-  Minimum 43 blockers (corrected from 45). No k-value perturbation can exceed 102.
+- **Bose-Chowla ap q=107, mul=433** (idea_022, established, 0.95): 105 elements, span=9884. Pipeline best. Greedy-maximal with zero combinatorial slack.
+- **Multiplier optimization** (idea_023, established, 0.9): Essential for all algebraic constructions. Singer q=103 with mul=400 gives 104 (vs 102 with mul=1).
+- **Singer pp q=101** (idea_008, established, 0.95): 102 elements. Best Singer-type construction.
+- **Rokicki-Dogon database** (idea_020, established, 0.95): Verified source of near-optimal constructions.
+- **105 is algebraic ceiling** (pattern_012, confirmed, 0.95): Exhaustive proof.
+- **105-mark self-healing** (pattern_014, confirmed, 0.95): Perturbation of any size returns same set. NEW gen 6.
+- **All greedy variants ceiling 66-70** (pattern_011/013, confirmed): Beam search k=500+ = 70.
+- **ET(71)+1-opt hard ceiling 75** (pattern_015, confirmed, 0.90): 30+ restarts all converge. NEW gen 6.
+- **DFS/backtracking = greedy** (idea_005, debunked gen 6): Sequential DFS IS greedy (66).
 
 ## Current Frontier
 
-The pipeline has exhausted Singer-based and greedy approaches. Two paths to 103+:
+All algebraic constructions and perturbation methods are exhausted. The only path to 106+ is computational search:
 
-1. **CP-SAT / ILP** (idea_019, active): First working formulation. k integer variables
-   + AllDifferent on differences. Proved Singer suboptimal for small N (q=7: 8->10,
-   q=11: 12->13). k=103 at N=10000: **UNKNOWN** after 600s — not disproved. Needs
-   longer runs (4h+) or commercial solvers (Gurobi/CPLEX).
-2. **Rokicki-Dogon database** (idea_020, active): Published near-optimal Golomb rulers
-   may contain 104-105 mark sets for span<=10000. Database found but zip not downloaded.
-   **UNVERIFIED** — highest-priority action is to download and parse the actual mark lists.
+1. **VLNS with fixed formulation** (idea_024, active, CRITICAL): Fix abs-equality domain bug ([1,N] -> [0,N]), retry 50+ removal patterns. Each trial is cheap (<1s if infeasible, ~120s if tractable). Current 9 trials all INFEASIBLE due to formulation bug, not genuine infeasibility. **Highest-value next step.**
+2. **CP-SAT maximize formulation** (idea_019, active): Instead of decision "find k=106", maximize k. More solver-friendly. Three generations of k=106 decision CP-SAT (6000s total) returned UNKNOWN.
+3. **Overnight CP-SAT k=106** (4h+, 16 workers): Previous longest run was 1200s. k=106 is hard even at N=15000, so difficulty is inherent.
+4. **F₂(10000) lookup**: OEIS A003022 or `problems/sidon/helpers/rokicki_data.py`. 5 minutes of work that could redirect the entire pipeline. Unanswered for 6 generations due to systemic research agent failure.
 
 ## Coverage Map
 
-**Well-explored (stable ceilings):**
-- Singer q=101 truncation: 8 trials, ceiling 102
-- Singer q=97 perturbation: 4 trials, ceiling 99
-- ET(71) + local search: 3 trials, ceiling 75
-- Non-algebraic greedy (all variants): 15+ trials, ceiling 69
-- SA from any seed type: 4+ trials, zero improvement
+**Well-explored (ceilings confirmed):**
+- Bose-Chowla ap q=107: 2+ trials, ceiling 105 (self-healing, perturbation futile k=1-104)
+- Singer pp q=103 + mul=400: 3 trials, ceiling 104
+- Singer pp q=101: 8 trials, ceiling 102
+- All greedy variants: 30+ trials, ceiling 70 (beam search)
+- ET(71)+1-opt: 6 trials, ceiling 75 (hard, 30+ restarts)
 - Singer perturbation all k: 4000+ trials, zero improvement
-- Multi-Singer hybrid: 1 trial, zero gain (debunked)
+- SA from any seed: 4+ trials, zero improvement
+- Remove-k perturbation of 105-mark set (k=1-104): 27K+ trials, perfectly futile
+- DFS/backtracking: 1 trial, equals greedy (66)
+- CP-SAT k=106 decision: 6000s total compute, UNKNOWN
 
-**Untested or under-explored:**
-- Rokicki-Dogon mark lists (idea_020): 0 trials — download needed
-- CP-SAT extended run (4h+): 0 trials at scale
-- Backtracking with pruning (idea_005): 0 trials
-- Beam search greedy: 0 trials (suggested by agents, no formal idea)
+**Under-explored or untested:**
+- VLNS with corrected formulation: 0 valid trials (9 trials had bug)
+- CP-SAT maximize formulation: 0 trials
+- Alternative solvers (Gurobi, SCIP): 0 trials
+- Ruzsa-Lindström construction as SA seed (idea_025): 0 trials
+- Tabu search with "swap then fill" moves: 0 trials
 
 ## Dead Ends
 
-- **Randomized greedy** (idea_001): 58-63, below deterministic baseline. Debunked.
-- **SA from any seed** (idea_010): Zero improvement from Singer or non-algebraic seeds. Debunked.
-- **Singer q=101 perturbation** (idea_012, idea_017): 43-blocker minimum. Debunked.
-- **Multi-Singer hybrid** (idea_013): Zero compatible elements at base>=70. Debunked gen 4.
-- **Probabilistic alteration** (idea_014): 63, below baseline. Debunked.
-- **SA with violation relaxation** (idea_018): Fails for all seeds. Debunked.
-- **Cluster 003 (Hybrid approaches)**: All ideas debunked or proven futile. Exhausted.
+- **All greedy/search variants** (cluster_002, exhausted): Ceiling 70. 35-element gap to algebraic.
+- **All hybrid approaches** (cluster_003, exhausted): Singer perturbation, SA from algebraic seed, multi-Singer hybrid — all debunked.
+- **Remove-k perturbation of 105-mark set**: Self-healing property makes this provably futile for all k.
+- **DFS/backtracking** (idea_005): DFS IS greedy. Debunked gen 6.
 
 ## Open Questions
 
-1. **What is the published best Sidon set for N=10000?** Four generations of research
-   agents failed to retrieve F(10000). The gap between 102 and 109 could be anywhere.
-   This is the single most important unknown — it determines whether we are near or far
-   from state of the art.
-2. **Does the Rokicki-Dogon database actually contain 104-105 mark sets for span<=10000?**
-   research_1 gen 4 found database entries but never downloaded the zip file. The claim
-   is unverified. If wrong, idea_020 collapses.
-3. **Is k=103 feasible at N=10000?** CP-SAT returned UNKNOWN (not INFEASIBLE). A longer
-   run or better solver could resolve this. ILP proved Singer suboptimal for small N,
-   giving genuine hope.
-4. **DANGER: Stale fact files in facts/ directory.** fact_002 says upper bound is "~100-102"
-   (WRONG: it's ~109). fact_004 says validator extracts subsets (WRONG: sentinel scoring).
-   Corrected versions exist in ideas/active/ but the stale copies persist after 3
-   generations of deletion recommendations. Agents must ignore facts/ originals.
-5. **Do "Singer+1" solutions at small N share generalizable structure?** ILP found larger-
-   than-Singer sets for N=56 and N=132. If the algebraic structure generalizes, it could
-   guide construction at N=10000.
+1. **Can k=106 be achieved for N=10000?** CP-SAT returned UNKNOWN (not INFEASIBLE). VLNS results are artifacts of a formulation bug. Fix VLNS and retry before concluding.
+2. **What is F₂(10000)?** Check OEIS A003022 and `problems/sidon/helpers/rokicki_data.py`. This single number determines if 106 is ambitious or already known. Unanswered for 6 generations — systemic research failure.
+3. **Is the VLNS formulation genuinely fixable?** The abs-equality domain conflict diagnosis is plausible but untested. Must fix and verify.
+4. **DANGER: Stale fact files.** `facts/fact_002` says upper bound "~100-102" (WRONG: ~109). `facts/fact_004` says validator extracts subsets (WRONG: sentinel scoring). Corrected copies exist in `ideas/active/` but originals persist and could mislead agents.
+5. **helpers/cpsat.py still missing.** Requested for 3 consecutive generations. Agents re-derive CP-SAT formulation from scratch each time, introducing bugs.

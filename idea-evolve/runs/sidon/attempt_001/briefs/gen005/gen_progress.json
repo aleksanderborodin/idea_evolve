@@ -2,25 +2,47 @@
   "schema_version": 1,
   "agents": {
     "full_1": {
-      "status": "pending",
-      "started_at": "2026-04-06T17:12:26.313380+00:00"
+      "status": "complete",
+      "outputs_moved": true,
+      "completed_at": "2026-04-06T18:09:42.599779+00:00",
+      "solutions": 1
     },
     "explore_1": {
-      "status": "pending",
-      "started_at": "2026-04-06T17:12:26.314011+00:00"
+      "status": "complete",
+      "outputs_moved": true,
+      "completed_at": "2026-04-06T17:40:37.791969+00:00",
+      "solutions": 7
     },
     "experimentator_1": {
-      "status": "pending",
-      "started_at": "2026-04-06T17:12:26.313731+00:00"
+      "status": "complete",
+      "outputs_moved": true,
+      "completed_at": "2026-04-06T17:24:04.731810+00:00",
+      "solutions": 0
     },
     "explore_2": {
-      "status": "pending",
-      "started_at": "2026-04-06T17:12:26.314435+00:00"
+      "status": "complete",
+      "outputs_moved": true,
+      "completed_at": "2026-04-06T17:34:34.969921+00:00",
+      "solutions": 1
     },
     "research_1": {
-      "status": "pending",
-      "started_at": "2026-04-06T17:12:26.315459+00:00"
+      "status": "complete",
+      "outputs_moved": true,
+      "completed_at": "2026-04-06T17:36:17.441605+00:00",
+      "solutions": 2
     }
   },
-  "last_updated": "2026-04-06T17:12:26.316409+00:00"
+  "last_updated": "2026-04-06T18:43:50.725886+00:00",
+  "evaluator": {
+    "status": "complete"
+  },
+  "system_critic": {
+    "status": "complete"
+  },
+  "consistency_review": {
+    "status": "complete"
+  },
+  "finalize": {
+    "status": "complete"
+  }
 }

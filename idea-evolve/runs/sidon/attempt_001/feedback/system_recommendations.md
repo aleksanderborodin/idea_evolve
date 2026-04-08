@@ -1,229 +1,138 @@
-# System Recommendations — Generation 4
+# System Recommendations — Generation 6
 
-Prioritized by expected impact. Supersedes gen 3 recommendations.
-
----
-
-## PRIORITY 1 (Critical — Act Before Gen 5 Agents Launch)
-
-### REC-1: Fix Agent Permission Mode to Auto-Approve Workspace Writes
-
-**What to change**: Ensure agent sessions are launched with a permission mode that
-auto-approves Write and Edit operations within the agent's workspace directory. The
-current configuration apparently permits the first Write but then prompts for approval
-on subsequent Edit calls — which blocks headless sessions permanently.
-
-**Concrete action**: In `user/config.yaml` or the orchestrator launch logic, ensure the
-`--allowedTools` flag (or equivalent) is paired with a permission setting that doesn't
-require per-call interactive approval. If running in a permission mode that prompts the
-user, switch to auto-approval for workspace paths or pre-authorize the workspace directory.
-
-**Why**: explore_1's entire session was wasted because it could not edit its own output
-files after the first Write. A 1-element bug went unfixed, evaluate.py never ran, no
-iterations happened. This is a total waste of an agent slot.
-
-**Expected impact**: Prevent agent slot waste from permission blocking. HIGH probability
-of recurrence if not fixed.
+**Supersedes:** gen 5 recommendations
+**Current best:** 105 (Rokicki-Dogon Bose-Chowla AP q=107, mul=433)
+**Algebraic ceiling:** 105 (exhaustively confirmed, all q, all multipliers)
+**Perturbation ceiling:** 105 (remove-k k=2-104 with 27K+ trials, structural self-healing property)
+**Remaining gap:** ~4 elements to theoretical upper bound (~109)
 
 ---
 
-### REC-2: Assign a Dedicated Data-Fetch Task for Rokicki-Dogon Database
+## Priority 1 — Critical (must do before gen 7 agents launch)
 
-**What to change**: Assign one agent (experimentator or research) in gen 5 with a single,
-concrete mission:
+### [REC-1] Assign research_1 with web-first ordering enforcement
 
-```
-MISSION: Download cube20.org/golomb-all-00.zip and extract 104-mark and 105-mark
-Sidon set entries for spans ≤ 10000.
+The F₂(10000) published record has been unknown for **5 consecutive generations**. This must be resolved before any further CP-SAT compute is allocated.
 
-Step 1: wget/curl cube20.org/golomb-all-00.zip to workspace
-Step 2: Parse the zip to find entries with marks=104 and marks=105
-Step 3: Extract the integer mark sequences (convert from whatever format the zip uses)
-Step 4: Write each sequence to output/sol_rokicki_104.py and output/sol_rokicki_105.py
-        in the standard solution format
-Step 5: Run evaluate.py on each
-```
+**What to change:** research_1 brief in gen 7 must begin: "FIRST action (before anything else): run `WebSearch('OEIS A003022 Sidon set maximum')` and `WebSearch('F2 10000 Sidon set record')`. SECOND action: read `problems/sidon/helpers/rokicki_data.py` — it may contain tabulated answers. THIRD action: check `papers/summaries/` for prior research. Report your findings from steps 1–3 before any literature review."
 
-This is a pure data-engineering task, not a research task. It requires no mathematical
-insight — just downloading and parsing a known file.
-
-**Why**: research_1 was 20 minutes away from a 104-105 score. Four consecutive generations
-have approached this data without completing the fetch. The pipeline is 3 elements behind
-the published state of the art because we haven't downloaded a file.
-
-**Expected impact**: Jump from score 102 to 104 or 105 in a single agent session.
-This is the highest-ROI action available to the pipeline.
+**Expected impact:** Resolves 5-generation-old blocking question. If F₂(10000) = 105, halt all CP-SAT and perturbation search. If F₂(10000) ≥ 106, confirms CP-SAT is correctly prioritized.
 
 ---
 
-### REC-3: Force a Consistency Review Before Gen 5 Agents Launch
+### [REC-2] Assign VLNS formulation fix as first priority in gen 7
 
-**What to change**: Execute the Consistency Review phase before gen 5 agent work begins.
-Set `consistency_review_interval: 1` temporarily in `user/config.yaml`, or have the
-orchestrator trigger it as a mandatory pre-condition for gen 5.
+The VLNS bug is a 2-line fix with the diagnosis already complete: change `add_abs_equality` domain from [1,N] to [0,N] and add explicit `y[i] != fv` constraints before absolute difference calculation.
 
-**Why**: The State of Affairs (last updated gen 3) does not reflect:
-1. CP-SAT ILP formulation (idea_019) — agents need to know this exists and is validated
-2. Rokicki-Dogon constructive lower bound of 105 (idea_020) — changes the gap framing
-3. Multi-Singer hybrid debunked (idea_013) — prevents agents from wasting time on it
-4. Greedy ceiling confirmed at 69 (pattern_011) — establishes baseline for comparison
-5. Singer suboptimal for small N (pattern_012) — important for ILP strategy
+**What to change:** Assign a full or exploit agent with explicit brief: "The VLNS formulation has a known bug (see gen006/full_1.md section Phase 2). Fix the domain conflict as described, then run 50+ trials with diverse removal patterns (random-5, random-10, random-15, random-20, targeted-high-blocker). If any trial succeeds (finds 106+), extend to 500+ trials. If all 50 INFEASIBLE, record as genuine (not bug) and archive VLNS."
 
-Gen 5 agents operating without these updates will have a materially wrong picture of
-where the pipeline stands and what directions have been closed.
-
-**Expected impact**: All gen 5 agents start with accurate L0 context. High value given
-the size of the gen 4 knowledge update.
+**Expected impact:** Either finds a path to 106 or conclusively closes the VLNS approach. Either outcome is high-value.
 
 ---
 
-### REC-4: Delete Stale Fact Files in knowledge/facts/ (3rd Generation Without Cleanup)
+### [REC-3] Create helpers/cpsat.py before gen 7 agents launch
 
-**What to change**: Delete `knowledge/facts/fact_002` and `knowledge/facts/fact_004`.
-These files contain wrong information that has been known-wrong since gen 3:
-- fact_002: states upper bound ~100-102 (correct: ~109)
-- fact_004: states validator extracts valid subsets (correct: sentinel scoring, no partial credit)
+Three consecutive generations (gen 4 P2, gen 5 gap, gen 6 gap) have requested this helper. Every CP-SAT session re-derives the same formulation and introduces new bugs.
 
-The corrected versions exist in `knowledge/ideas/active/` and are authoritative.
+**What to change:** Assign experimentator_1 in gen 7 with sole focus: create `output/helpers/cpsat.py` with:
+- `solve_sidon_cpsat(k, N, hint=None, time_limit=300, num_workers=8)` — standard k-element search with optional warm-start
+- `vlns_sidon(fixed_elements, n_free, N, time_limit=120)` — VLNS with **corrected** formulation (domain [0,N], explicit y[i]!=fv constraints, no abs_equality domain conflict)
 
-**Concrete action**: This cannot be done via agent prompt warnings — it requires the
-Architect (or a pre-gen-5 orchestrator action) to explicitly delete these files. If
-agents keep browsing `knowledge/facts/` they will keep finding the wrong information.
+Include a self-test that runs k=50, N=1000 (should find feasible quickly) to verify formulation correctness. Do not allocate CP-SAT compute to exploration while the helper is being built.
 
-**Why**: explore_2 was explicitly misled by fact_002 in gen 4 (reported the wrong upper
-bound in its debrief). REC-4 from gen 3 went unimplemented. Warnings in briefs are not
-sufficient — agents read files and trust them.
-
-**Expected impact**: Eliminates ongoing knowledge corruption. Prevents gen 5+ agents from
-starting with false beliefs about the problem bounds.
+**Expected impact:** Eliminates CP-SAT formulation errors and 5-10 turns of boilerplate per session. VLNS bug class will not recur.
 
 ---
 
-## PRIORITY 2 (High — Unlock Next Score Tier)
+### [REC-4] Update State of Affairs for gen 6 findings before gen 7 launches
 
-### REC-5: Assign Beam Search Greedy to One Agent in Gen 5
+The SoA header says `generation: 5`. Gen 6 produced definitive new findings that must be in the SoA before gen 7 agents read it. The Consistency Reviewer must run or the Evaluator must update the SoA.
 
-**What to change**: Brief one explore or exploit agent specifically on beam search greedy:
-
-```
-Implement beam_search_sidon(N, k_beams, seed=None):
-  - Maintain k_beams partial Sidon sets simultaneously
-  - At each step, for each beam: enumerate all valid extensions
-  - Keep the k_beams sets with the best heuristic score (e.g., min blocking count)
-  - Return the best set found
-
-Parameters to try: k_beams = 20, 50, 100
-Expected score: 75-85 based on multiple independent estimates
-```
-
-**Why**: This direction has been flagged by agents across gens 3-4 as the most promising
-untested non-algebraic approach. Expected score 75-85 would set a new non-algebraic ceiling
-and validate/disprove the "greedy ceiling is 69" hypothesis. It costs one agent slot.
-
-**Expected impact**: First confirmed non-Singer score above 70. Resolves a 3-generation
-knowledge gap about non-algebraic search ceilings.
+**Critical updates required:**
+1. Remove-k perturbation: "exhaustively debunked for k=2-104 (27K+ trials)" — NOT "untested for k≥3"
+2. Self-healing property: "structural invariant — any k-element removal opens exactly k slots (the removed elements)" — add as established pattern
+3. VLNS: "tested (9 trials), likely formulation bug — INFEASIBLE results not yet confirmed genuine"
+4. DFS/backtracking: "confirmed = greedy (27s, baseline 66)" — close idea_005 as debunked
+5. CP-SAT status: "6+ runs, all UNKNOWN, formulation may need rethinking"
+6. Stale fact files: delete fact_002 and fact_004 from `knowledge/facts/` (stale copies with wrong content)
 
 ---
 
-### REC-6: Create solve_sidon_cpsat Helper (Experimentator Task)
+## Priority 2 — High Value (gen 7 strategic directions)
 
-**What to change**: Assign an experimentator to package full_1's CP-SAT formulation as
-`problem/helpers/cpsat_sidon.py` with function signature:
+### [REC-5] Do NOT allocate CP-SAT with the same AllDifferent formulation as gen 5-6
 
-```python
-def solve_sidon_cpsat(k, N, hint=None, time_limit=60, num_workers=8):
-    """
-    Try to find a k-element Sidon set in {0,...,N}.
-    Returns (status, elements) where status is 'FEASIBLE'/'INFEASIBLE'/'UNKNOWN'.
-    hint: optional list of elements to use as warm start.
-    """
-```
+**Evidence:** k=104 verification returned UNKNOWN in 30s even with the full hint. The AllDifferent-over-5565-diffs formulation is pathologically hard for OR-Tools CP-SAT presolve. More time with the same formulation will not change this.
 
-**Why**: full_1 and evaluator both independently requested this. The current formulation
-is non-obvious and took full_1 significant session time to develop. Future agents using
-ILP (the current highest-priority exact direction) will re-derive it from scratch without
-this helper. This is exactly the recurring helper need pattern from DESIGN-11.
-
-**Expected impact**: Future ILP experiments start 20-30 turns sooner. CP-SAT becomes
-a reusable primitive rather than a one-generation discovery.
+**What to change:** Any CP-SAT run in gen 7 must use a DIFFERENT formulation. Options from full_1 gen6 and explore_1 gen6:
+- Binary variable formulation: x_i ∈ {0,1} for each candidate element, difference sum uniqueness via explicit pair constraints
+- Maximize-k formulation: instead of "find exactly k=106", maximize k — more solver-friendly
+- Anti-algebraic: add constraint that solution shares ≤50% elements with 105-mark set
 
 ---
 
-### REC-7: Schedule an Extended CP-SAT Run Outside Normal Agent Sessions
+### [REC-6] Archive stale ideas before gen 7 knowledge dump
 
-**What to change**: Run the CP-SAT k=103 search for 4+ hours with 16 workers. This
-cannot be done within the normal 900s agent session budget. Options:
-1. Orchestrator runs evaluate.py / a standalone script directly with extended timeout
-2. A special "long-run" agent session with 4-hour wall clock budget
-3. Background process with output written to workspace when done
+**Evidence:** idea_003, idea_015, idea_016 are 2-3 generations stale and confirmed far below the frontier (ceilings 69-75). They appear in the evaluator knowledge dump and consume context tokens.
 
-**Why**: full_1's UNKNOWN result after 600s means k=103 is neither proven possible nor
-impossible. A 4+ hour run with more workers may be the difference between UNKNOWN and
-FEASIBLE/INFEASIBLE. This is a time-bounded question with a definitive answer.
-
-**Expected impact**: Either (a) proof that 103 is infeasible, closing the ILP direction
-below 103, or (b) a 103-element solution, beating the current best. Both are high-value.
+**What to change:** Evaluator or Consistency Reviewer should move these to `knowledge/ideas/debunked/`:
+- idea_015 (Fibonacci Ordering): ceiling 69, 3 gens stale → archive
+- idea_016 (Min-Blocking): ceiling 69, 2 gens stale → archive
+- idea_003 (Difference-Aware): ceiling unknown but well below frontier, 2 gens stale → archive
+- pattern_009: merge into pattern_012 or archive
 
 ---
 
-### REC-8: Investigate "Singer+1" Structure at Small N
+### [REC-7] Add C-extension helper for inner-loop Sidon validation
 
-**What to change**: Assign one agent (full or exploit) to analyze the ILP-optimal sets
-found by full_1:
-- N=56 (q=7): Singer=8, ILP optimal=10. What are the 10 elements? How do they differ from Singer?
-- N=132 (q=11): Singer=12, ILP finds 13. Same question.
-- N=306 (q=17): Expected Singer=18, ILP optimal=?
+**Evidence:** Multiple agents cite ~200 trials/second in Python as a bottleneck. C-extension would give 10-100x speedup, enabling perturbation-style experiments that are currently compute-limited.
 
-The goal is to identify a pattern in the "extra" elements that ILP finds beyond Singer.
-If there's a generalizable construction rule, it might give 103+ for N=10000.
+**What to change:** Assign experimentator to write `helpers/sidon_fast.c` compiled via ctypes with:
+- `is_sidon_fast(arr, n)` — C implementation of difference uniqueness check
+- `can_add_fast(arr, n, element)` — O(k) check using hash set
+- Python wrapper `helpers/sidon_fast.py` using ctypes
 
-**Expected impact**: Either reveals a new construction family (potentially high value)
-or confirms that Singer+k is not algebraically principled (closes this direction).
+**Note:** This is a multi-turn implementation. If session budget is tight, defer to a dedicated experimentator gen.
 
 ---
 
-## PRIORITY 3 (Moderate — Process Hygiene)
+### [REC-8] Enforce single-agent ownership for external data fetches (carry forward from gen 5)
 
-### REC-9: Save Singer-102 Set as JSON Seed (3rd Generation Without Implementation)
+**Status from gen 5 REC-8:** Was listed as "what to change: Add to architect.md." Status unknown — not confirmed as implemented.
 
-**What to change**: Extract the 102-element Singer q=101 set (optimal shift d=2337) and
-save to `knowledge/seeds/sidon_102.json`. This was REC-10 (gen 3) and REC-6 (gen 2).
-
-**Concrete action**: Run `population/best.py` (or equivalent Singer generator), capture
-the element list, save to seeds directory. This is a 2-minute task.
-
-**Why**: CP-SAT warm-start hints, difference analysis, Singer+1 structure analysis — all
-require the explicit element list. Currently agents re-derive it each time from solution
-files.
+**What to change:** Add to `agents/architect.md` Recurring Helper Needs section: "Any brief that requires fetching external data (web search, paper download, database lookup) must designate exactly ONE agent for the fetch. Other agents that need the data must reference the first agent's output path in their brief, not perform the fetch themselves."
 
 ---
 
-### REC-10: Archive idea_005 (Backtracking with Pruning) or Assign It
+## Priority 3 — Process Improvements
 
-**What to change**: Either (a) test idea_005 in gen 5 (brief one explore agent on it),
-or (b) formally move it to `knowledge/ideas/disputed/` with a note that beam search
-(idea_015?) is the preferred approach and backtracking-only is computationally impractical
-at N=10000.
+### [REC-9] Add decision rule for CP-SAT UNKNOWN to prevent compute waste
 
-**Why**: This idea has been in the knowledge base since gen 0 with last_confirmed_gen=0.
-Four generations of staleness without testing or archiving creates noise in the coverage
-matrix. Beam search (a more general form of backtracking) should supersede it.
+**Evidence:** CP-SAT has returned UNKNOWN in 6+ runs across gens 4-6, totaling ~5400s of compute. The current prompt does not tell agents to stop when they see UNKNOWN from the same formulation.
+
+**What to change:** Add to full.md and exploit.md agent templates: "If CP-SAT returns UNKNOWN with the same formulation and k value as a previous session (check `knowledge/experiments/` for prior CP-SAT results), do NOT run it again with the same settings. Either (a) change the formulation, (b) change k, or (c) move to a different approach."
 
 ---
 
-## What Was Recommended Previously and Remains Unimplemented
+### [REC-10] Research brief must cite sources or label claims "training data"
 
-| Rec | Gen | Status | Note |
-|-----|-----|--------|------|
-| Force Consistency Review | gen 3 REC-1 | ❌ STILL NEEDED | Now critical for gen 5 |
-| Delete stale fact files | gen 3 REC-4 | ❌ STILL NEEDED | explore_2 misled in gen 4 |
-| Save Singer-102 as JSON | gen 3 REC-10 | ❌ STILL NEEDED | 3rd generation without action |
+**Evidence:** research_1 gen6 produced Ruzsa-Lindström, GRASP, tabu search recommendations from training data without web search. These may be correct but cannot be verified.
 
-## What Was Recommended and Implemented
+**What to change:** Add to `agents/research.md`: "Every factual claim must be labeled with its source: [OEIS A00xxxx], [paper: Author Year], [web: URL], or [training data: unverified]. Claims labeled 'training data' must be noted as such in findings.md so downstream agents can weigh them appropriately."
 
-| Rec | Gen | Status |
-|-----|-----|--------|
-| Incremental output for research agents | gen 3 REC-2 | ✅ research_1 wrote findings.md |
-| ILP with correct formulation | gen 3 REC-5 | ✅ full_1 succeeded |
-| Create idea for ILP/CP-SAT | gen 3 REC-6 | ✅ idea_019 created |
-| Architect assigns orthogonal strategies | gen 3 | ✅ four distinct approaches this gen |
+---
+
+## Tracking: Previous Recommendations Status
+
+| Recommendation | Status |
+|----------------|--------|
+| Do NOT assign CP-SAT k≤105 (gen5 REC-1) | RESOLVED — gen6 targeted k=106 only |
+| Update SoA before gen6 (gen5 REC-2) | PARTIAL — Consistency Review ran but SoA still gen5 header |
+| Fix idea_022 Bose-Chowla formula (gen5 REC-3) | UNKNOWN — not mentioned in gen6 reports |
+| Assign remove-k perturbation k=3-10 (gen5 REC-4) | RESOLVED — exploit_1 completed exhaustively |
+| Create helpers/extend.py (gen5 REC-5) | RESOLVED — experimentator_1 created |
+| Save 105-mark set in helpers/ (gen5 REC-6) | RESOLVED — rokicki_data.py created |
+| Test alternative ILP solvers HiGHS/SCIP (gen5 REC-7) | PARTIAL — HiGHS not tested, full_1 used CP-SAT only |
+| Single-agent ownership for data fetches (gen5 REC-8) | UNKNOWN — not confirmed in architect.md |
+| Require algebraic briefs to specify formulas (gen5 REC-9) | UNKNOWN |
+| Archive/test idea_005 backtracking (gen5 REC-10) | RESOLVED — explore_1 confirmed DFS = greedy |

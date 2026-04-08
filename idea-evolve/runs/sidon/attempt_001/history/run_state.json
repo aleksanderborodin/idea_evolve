@@ -24,41 +24,70 @@
       "type": "timeout",
       "message": "Timed out after 1800s",
       "ts": "2026-04-06T16:19:08.612805+00:00"
+    },
+    {
+      "gen": 5,
+      "phase": "agents",
+      "agent": "research_1",
+      "type": "timeout",
+      "message": "Timed out after 1200s",
+      "ts": "2026-04-06T17:32:26.871268+00:00"
+    },
+    {
+      "gen": 5,
+      "phase": "agents",
+      "agent": "explore_2",
+      "type": "timeout",
+      "message": "Timed out after 1200s",
+      "ts": "2026-04-06T17:32:27.066649+00:00"
+    },
+    {
+      "gen": 5,
+      "phase": "agents",
+      "agent": "explore_1",
+      "type": "timeout",
+      "message": "Timed out after 1500s",
+      "ts": "2026-04-06T17:37:26.946048+00:00"
+    },
+    {
+      "gen": 5,
+      "phase": "agents",
+      "agent": "full_1",
+      "type": "timeout",
+      "message": "Timed out after 2700s",
+      "ts": "2026-04-06T17:57:26.929836+00:00"
+    },
+    {
+      "gen": 6,
+      "phase": "agents",
+      "agent": "research_1",
+      "type": "timeout",
+      "message": "Timed out after 900s",
+      "ts": "2026-04-06T19:15:10.456464+00:00"
+    },
+    {
+      "gen": 6,
+      "phase": "agents",
+      "agent": "full_1",
+      "type": "timeout",
+      "message": "Timed out after 2700s",
+      "ts": "2026-04-06T19:45:10.219064+00:00"
     }
   ],
   "completed_gens": [
     1,
     2,
     3,
-    4
+    4,
+    5,
+    6
   ],
-  "pid": 272420,
-  "started_at": "2026-04-06T17:07:24.112371+00:00",
+  "pid": 381200,
+  "started_at": "2026-04-06T18:55:26.310795+00:00",
   "target_gen": 30,
-  "status": "running",
-  "current_gen": 5,
-  "current_phase": "agents_running",
-  "agents": {
-    "experimentator_1": {
-      "status": "running",
-      "started_at": "2026-04-06T17:12:26.326968+00:00"
-    },
-    "full_1": {
-      "status": "running",
-      "started_at": "2026-04-06T17:12:26.324195+00:00"
-    },
-    "explore_1": {
-      "status": "running",
-      "started_at": "2026-04-06T17:12:26.325746+00:00"
-    },
-    "explore_2": {
-      "status": "running",
-      "started_at": "2026-04-06T17:12:26.331385+00:00"
-    },
-    "research_1": {
-      "status": "running",
-      "started_at": "2026-04-06T17:12:26.326197+00:00"
-    }
-  },
-  "last_updated": "2026-04-06T17:12:26.337110+00:00"
+  "status": "stopped",
+  "current_gen": 6,
+  "current_phase": "idle",
+  "agents": {},
+  "last_updated": "2026-04-06T20:08:52.533240+00:00"
 }

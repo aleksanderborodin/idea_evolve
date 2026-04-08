@@ -978,7 +978,8 @@ def _validate_helper(filepath: Path) -> tuple[bool, str]:
 
 
 def move_experiment_outputs(project_root: Path, gen: int, instance: int):
-    """Move experimentator outputs to knowledge/experiments/ and reports/."""
+    """Move experimentator outputs to knowledge/experiments/ and reports/.
+    Solutions (sol*.py + .score) are also copied to population/ so rankings see them."""
     gen_str = f"gen{gen:03d}"
     ws_output = project_root / "workspace" / f"{gen_str}_experimentator_{instance}" / "output"
     if not ws_output.exists():
@@ -986,6 +987,10 @@ def move_experiment_outputs(project_root: Path, gen: int, instance: int):
 
     dest = project_root / "knowledge" / "experiments" / gen_str / f"experimentator_{instance}"
     dest.mkdir(parents=True, exist_ok=True)
+
+    # Copy solutions to population so rankings and dashboard pick them up
+    pop_dest = project_root / "population" / gen_str / f"experimentator_{instance}"
+    pop_dest.mkdir(parents=True, exist_ok=True)
 
     for f in ws_output.iterdir():
         if f.name == "report.md":
@@ -1011,6 +1016,9 @@ def move_experiment_outputs(project_root: Path, gen: int, instance: int):
             shutil.copytree(f, target)
         elif f.is_file():
             shutil.copy2(f, dest / f.name)
+            # Mirror solutions and score files to population/
+            if f.suffix in (".py", ".score") and (f.stem.startswith("sol") or f.suffix == ".score"):
+                shutil.copy2(f, pop_dest / f.name)
         elif f.is_dir():
             target = dest / f.name
             if target.exists():

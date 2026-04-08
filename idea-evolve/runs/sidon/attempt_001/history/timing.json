@@ -35,7 +35,47 @@
       "total": 3469.6
     },
     "gen005": {
-      "architect": 302.1
+      "architect": 302.1,
+      "agent_experimentator_1_work": 698.1,
+      "agent_experimentator_1": 698.1,
+      "agent_research_1_work": 1200.5,
+      "agent_explore_2_work": 1200.6,
+      "agent_explore_2_wrap_up": 127.8,
+      "agent_explore_2": 1328.5,
+      "agent_research_1_wrap_up": 230.5,
+      "agent_research_1": 1431.0,
+      "agent_explore_1_work": 1500.6,
+      "agent_explore_1_wrap_up": 190.7,
+      "agent_explore_1": 1691.3,
+      "agent_full_1_work": 2700.5,
+      "agent_full_1_wrap_up": 735.7,
+      "agent_full_1": 3436.2,
+      "evaluator": 570.4,
+      "evaluator_debrief": 28.7,
+      "system_critic": 426.5,
+      "consistency_reviewer": 1022.4,
+      "total": 5786.6
+    },
+    "gen006": {
+      "architect": 283.7,
+      "agent_experimentator_1_work": 201.6,
+      "agent_experimentator_1": 201.6,
+      "agent_research_1_work": 900.2,
+      "agent_explore_1_work": 989.6,
+      "agent_explore_1": 989.6,
+      "agent_research_1_wrap_up": 227.5,
+      "agent_research_1": 1127.8,
+      "agent_exploit_1_work": 1994.1,
+      "agent_exploit_1": 1994.1,
+      "agent_full_1_work": 2700.1,
+      "agent_full_1_wrap_up": 143.1,
+      "agent_full_1": 2843.2,
+      "evaluator": 394.3,
+      "evaluator_debrief": 22.8,
+      "system_critic": 345.1,
+      "consistency_reviewer": 490.2,
+      "consistency_reviewer_debrief": 26.8,
+      "total": 4406.2
     }
   }
 }

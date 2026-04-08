@@ -1,0 +1,8 @@
+{
+  "fitness": 105,
+  "is_valid": 1,
+  "violations": 0,
+  "raw_size": 105,
+  "eval_time_s": 1232.0,
+  "note": "CP-SAT UNKNOWN for k=104 and k=106, returned 105-mark fallback"
+}

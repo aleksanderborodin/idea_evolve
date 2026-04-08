@@ -4,18 +4,22 @@ type: fact
 name: "Violation Policy — Sentinel Scoring"
 confidence: 1.0
 first_seen: generation_0
-last_updated: generation_4
+last_confirmed_gen: 6
 verified: true
-source: "validate.py behavior, confirmed by CLAUDE.md sentinel policy, all gen 1-4 solutions"
-tags: [validation, scoring, policy]
+source: evaluate.py + validate.py source code, metrics.yaml sentinel_value
+tags: [scoring, validation, sentinel]
 ---
 
-If a solution has ANY violations (repeated pairwise sums), validate.py returns
-`is_valid: 0` and the fitness is set to the sentinel value of **0**. There is
-NO partial credit, NO subset extraction, and NO rewarding near-misses. Only
-fully valid Sidon sets receive a real fitness score.
+If a solution has ANY violations (repeated pairwise sums), the fitness score is
+set to **0** (sentinel value from metrics.yaml). There is NO partial credit, NO
+subset extraction, and NO tolerance for near-valid solutions. Only fully valid
+Sidon sets receive a real fitness score equal to the set size.
 
-**WARNING**: Previous version of this fact (in facts/ directory, generation 0) incorrectly
-stated that "the validator extracts the largest valid Sidon subset using a greedy algorithm."
-This was WRONG. The validator does NOT extract subsets — any violation results in fitness=0.
-Agents must ensure zero violations before submitting.
+**Correction history:** Original fact incorrectly stated "the validator extracts
+the largest valid Sidon subset using a greedy algorithm." This was WRONG. The
+system uses strict sentinel scoring as defined in metrics.yaml. Corrected in
+gen 2 consistency review.
+
+**NOTE**: This file replaces the STALE version in facts/fact_004.md which still
+contains the incorrect subset extraction claim. The facts/ version must be
+overwritten with this corrected content.

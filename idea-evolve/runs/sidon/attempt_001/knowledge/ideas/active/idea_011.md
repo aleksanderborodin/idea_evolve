@@ -1,29 +1,33 @@
 ---
-type: idea
 id: idea_011
+type: idea
 name: "Erdos-Turan Extension with Local Search"
 lifecycle: active
-confidence: 0.6
+confidence: 0.35
 first_seen: generation_2
-last_updated: generation_2
-last_confirmed_gen: 2
-supported_by: [gen002_explore_1_sol02, gen002_explore_1_sol03, gen002_explore_1_sol04]
-contradicted_by: []
-related_ideas: [idea_009, idea_002, idea_003]
+last_updated: generation_6
+last_confirmed_gen: 6
 cluster: cluster_002
-tags: [algebraic, erdos-turan, local-search, hybrid, non-singer]
+supported_by: [gen002_explore_1_sol03, gen002_explore_1_sol04, gen006_explore_1_sol02, gen006_explore_1_sol03, gen006_explore_1_sol04]
+contradicted_by: []
+related_ideas: [idea_009, idea_002, idea_022]
+tags: [erdos-turan, local-search, extension, non-algebraic]
 ---
 
-Combine the Erdos-Turan construction with greedy extension and 1-opt local search:
-1. Build ET(71) base: 70 elements in {143, ..., 9941}.
-2. Greedy extend over all {0, ..., 10000}: adds 4 elements to reach 74.
-3. 1-opt swap search: remove each element, re-extend greedily. Accept if net positive. Reaches 75.
+Combines Erdos-Turan construction (p=71) with greedy extension and 1-opt local search.
+Best result: 75 elements (gen 2, confirmed gen 6).
 
-**Evidence**: explore_1/sol02 reached 74 (greedy only), sol03 and sol04 both reached 75
-(1-opt). All 25 random restarts of randomized greedy + 1-opt also converge to 75, confirming
-75 is a robust local optimum for ET-seeded approaches.
+**Gen 6 results (explore_1):**
+- ET(71) + 1-opt + 2-opt + LNS: 75 (sol02)
+- ET(71) + aggressive LNS (k=2-15): 75 (sol03)
+- Randomized greedy + 1-opt restarts: 75 (sol04)
+- 30+ restarts across all three solutions, all converge to exactly 75
 
-**Significance**: Best non-Singer result. Demonstrates that ET(71) is a stronger seed than
-raw greedy (66→75 vs 66→68 with SA). However, 75 is far below Singer q=101's 102.
+The 75 ceiling is extremely robust. LNS with up to 15-element perturbations, 2-opt,
+and diverse initial constructions all converge to the same local optimum. This is now
+confirmed as a hard structural ceiling, not just a weak local minimum.
 
-**Use case**: Alternative baseline for diversity. Not competitive with Singer for score maximization.
+**Confidence reduced to 0.35** — superseded by algebraic constructions (105) with a
+30-element gap. No further investment recommended unless combined with fundamentally
+new ideas (e.g., SA from 75-element seed with longer time budget, or C implementation
+for 2-opt).
