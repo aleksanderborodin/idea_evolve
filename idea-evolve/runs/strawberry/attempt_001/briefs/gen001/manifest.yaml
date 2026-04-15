@@ -1,0 +1,28 @@
+generation: 1
+strategy_summary: "Cold start: explore two orthogonal directions (copy-paste optimization and larger model), run a solid baseline full agent, and research literature for unexplored techniques."
+agents:
+  - type: explore
+    instance: 1
+    model: sonnet
+    brief: briefs/gen001/explore_1.md
+    timeout: 900
+  - type: explore
+    instance: 2
+    model: sonnet
+    brief: briefs/gen001/explore_2.md
+    timeout: 900
+  - type: full
+    instance: 1
+    model: sonnet
+    brief: briefs/gen001/full_1.md
+    timeout: 900
+  - type: research
+    instance: 1
+    model: sonnet
+    brief: briefs/gen001/research_1.md
+    timeout: 600
+parallel_groups:
+  - ["explore_1"]
+  - ["explore_2"]
+  - ["full_1"]
+  - ["research_1"]

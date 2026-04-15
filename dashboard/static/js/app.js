@@ -1196,6 +1196,14 @@ function redrawChart() {
 // Chart redraws on data refresh, not on window resize
 
 // ----- Solutions -----
+function fmtEvalTime(s) {
+  if (s == null || !isFinite(s)) return '--';
+  if (s < 1) return (s * 1000).toFixed(0) + 'ms';
+  if (s < 60) return s.toFixed(1) + 's';
+  const m = Math.floor(s / 60), r = s - m * 60;
+  return m + 'm' + r.toFixed(0).padStart(2, '0') + 's';
+}
+
 async function loadSolutions() {
   solutionsData = await apiFetch('/api/solutions');
   // Set correct initial sort direction based on fitness direction
@@ -1262,12 +1270,14 @@ function renderSolutions() {
     const badgeClass = 'badge-' + s.agent_type;
 
     const agentLabel = s.agent_type + '_' + s.instance;
+    const evalTimeText = fmtEvalTime(s.eval_time_s);
     return `<tr>
       <td>${s.gen}</td>
       <td><span class="agent-type-badge ${badgeClass}">${agentLabel}</span></td>
       <td>${s.file}</td>
       <td class="score-cell ${scoreClass}">${scoreText}</td>
       <td><span class="valid-badge ${validClass}"></span></td>
+      <td style="color: var(--text-ghost)">${evalTimeText}</td>
       <td>${sizeStr}</td>
       <td style="color: var(--text-ghost)">${s.modified || ''}</td>
     </tr>`;

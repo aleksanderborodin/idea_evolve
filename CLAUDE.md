@@ -112,6 +112,27 @@ python3 orchestrator.py . --problem gemm --start-gen 5    # resume from gen 5
 
 Monitor a background run: `tail -f /tmp/run.log`.
 
+**For long runs (GPU problems, multi-gen): launch with `nohup` and unbuffered stdout** so
+the orchestrator survives terminal/harness disconnects. A bare `&` job is a child of the
+shell that started it — when the shell dies (terminal closed, IDE-extension session
+ended, `/compact` invoked in Claude Code, etc.) the orchestrator and its eval subprocesses
+get SIGHUP'd. `nohup` detaches from the controlling terminal; `python3 -u` flushes stdout
+per-line so `/tmp/run.log` is readable in real time instead of appearing empty for minutes.
+
+```bash
+set -a && source .env && set +a              # required if any agent uses opencode
+source venv/bin/activate
+cd idea-evolve
+nohup python3 -u orchestrator.py . --problem strawberry --new-attempt --single \
+    > /tmp/run.log 2>&1 & disown
+echo "launched pid=$!"
+tail -F /tmp/run.log                         # -F (capital) survives log rotation
+```
+
+Verify it's alive: `ps -ef | grep orchestrator.py | grep -v grep`. If you killed an
+orchestrator mid-run, also clear stale state before relaunching:
+`rm -f /tmp/idea_evolve_eval_queue.json /tmp/idea_evolve_gpu.lock`.
+
 Two orchestrators can run simultaneously on different problems — each works entirely
 inside its own `runs/{problem}/{attempt}/` directory with no shared state.
 
@@ -155,6 +176,15 @@ Header comment fallback removed — it caused stale score inconsistencies.
 Progression chart shows baseline from initial programs and target line with
 direction indicator ("↓ better" / "↑ better"). Agent column shows full identifier (e.g.,
 `explore_1` not just `explore`).
+
+**Eval time column (Solutions tab).** Per-solution wall-clock evaluation time from
+`eval_time_s` in `.score` files (and `eval_cache.json` by content hash). Populated when
+`metrics.yaml` has `track_eval_time: true` (currently strawberry). Rendered as `ms` under 1s,
+`Ns.s` under a minute, `Nm SSs` above; `--` when absent. Sortable — useful for spotting
+fast-but-weak or slow-but-marginal solutions. Wired through
+[dashboard/data/scanner.py](idea-evolve/dashboard/data/scanner.py) `get_solutions()`,
+rendered by [dashboard/static/js/app.js](idea-evolve/dashboard/static/js/app.js) `fmtEvalTime`,
+column declared in [dashboard/templates/tabs/solutions.html](idea-evolve/dashboard/templates/tabs/solutions.html).
 
 **Multi-problem navigation:** Dashboard has a problem/attempt selector flyout panel in the
 header (between logo and nav tabs). Click the breadcrumb to open the flyout, which shows
