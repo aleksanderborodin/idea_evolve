@@ -46,7 +46,10 @@
       "agent_research_1_wrap_up": 88.1,
       "agent_experimentator_1_work": 819.2,
       "agent_experimentator_1": 819.2,
-      "agent_exploit_1_work": 900.6
+      "agent_exploit_1_work": 900.6,
+      "agent_explore_2_work": 1200.6,
+      "agent_explore_1_work": 1200.6,
+      "agent_explore_1": 1200.6
     }
   }
 }
