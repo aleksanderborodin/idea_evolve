@@ -6,7 +6,19 @@ This file is the operational quick-reference and exhaustive issue tracker.
 
 **RULE: When you make any change to the system (code, config, architecture, bug fixes, new features,
 scaling improvements, design decisions), you MUST update this file to reflect that change.
-CLAUDE.md is the single source of truth for the current state of the system. Keep it accurate.**
+CLAUDE.md is the operational quick-reference and issue tracker. Keep it accurate.**
+
+**RULE: When you change a component's file I/O, schema, config keys, or data flow, also update
+the relevant file in `idea-evolve/docs/`. That folder is the technical deep-dive:**
+
+| Doc | Covers |
+|-----|--------|
+| [docs/architect.md](idea-evolve/docs/architect.md) | Architect phase inputs/outputs/flow |
+| [docs/agents.md](idea-evolve/docs/agents.md) | Agent workspace, output movement, session flow |
+| [docs/analysis_phases.md](idea-evolve/docs/analysis_phases.md) | Evaluator, Critic, Consistency Reviewer |
+| [docs/knowledge_base.md](idea-evolve/docs/knowledge_base.md) | Knowledge directory + file schemas |
+| [docs/file_layout.md](idea-evolve/docs/file_layout.md) | Complete run directory tree |
+| [docs/harness.md](idea-evolve/docs/harness.md) | ClaudeCode/OpenCode adapter layer |
 
 ## Setup
 

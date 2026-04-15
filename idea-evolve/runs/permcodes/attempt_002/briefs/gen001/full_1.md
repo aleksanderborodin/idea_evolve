@@ -1,7 +1,7 @@
 # Agent Brief — full_1 — Generation 1
 
 ## Current Population Status
-Best solution: `population/gen000/baseline/sol01.py` → fitness = 262 (greedy baseline)
+Best solution: `/home/sasha/Desktop/idea_evolve/idea-evolve/runs/permcodes/attempt_002/population/gen000/baseline/sol01.py` → fitness = 262 (greedy baseline)
 No top-ranked solutions yet beyond the greedy baseline.
 
 ## Context

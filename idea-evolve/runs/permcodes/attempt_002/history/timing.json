@@ -1,0 +1,11 @@
+{
+  "generations": {
+    "gen001": {
+      "architect": 389.3,
+      "agent_research_1_work": 221.2,
+      "agent_research_1": 221.2,
+      "agent_full_1_work": 225.4,
+      "agent_full_1": 225.4
+    }
+  }
+}
