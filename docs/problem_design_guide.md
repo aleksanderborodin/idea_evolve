@@ -157,9 +157,27 @@ If your problem inherently takes longer, you have three levers:
    cache intermediate artifacts (trained weights keyed by config hash, preprocessed
    datasets by dataset hash).
 
-Track eval time explicitly. Set `track_eval_time: true` in metrics.yaml; the orchestrator
-records `eval_time_s` in every `.score`. Sudden slowdowns indicate a regression in the
-helper code or an agent that turned off caching.
+**Eval timing is always collected.** Every `evaluate.py` unconditionally records three fields
+in every `.score` (success and error) and in the matching `eval_cache.json` entry:
+
+- `eval_time_s` — wall-clock duration of the measured region, seconds.
+- `eval_started_at` — ISO-8601 UTC timestamp captured immediately before the measured region.
+- `eval_ended_at` — ISO-8601 UTC timestamp captured immediately after the measured region.
+
+On error, all three are still written (reflecting how long the attempt ran before crashing).
+If an exception occurs before measurement begins (e.g. import failure), the fields are omitted.
+
+Control LLM visibility with `show_eval_time_in_prompts: true` (default: true, recommended).
+When true, orchestrator-generated summaries include timing data so agents can spot regressions
+or GPU queue waits. Set to `false` only if eval time is meaningless noise for your problem
+(e.g. sub-millisecond trivial computation). The dashboard always shows all three columns
+regardless of this flag — it reads `.score` files directly.
+
+The dashboard Solutions tab renders all three (Eval time, Started, Ended) so you can see
+per-eval cost alongside the actual timeline — useful for spotting GPU queue waits, wall-clock
+drift, and evals that straddle midnight. Sudden slowdowns in `eval_time_s` signal a
+regression in helper code or an agent that turned off caching. Started/ended timestamps
+anchor `.score` files to log events (proc_logs, run_state) when debugging.
 
 ---
 
@@ -178,7 +196,7 @@ agents couldn't target the rare class until per-class metrics appeared.
 
 ```yaml
 # problems/<id>/metrics.yaml
-track_eval_time: true
+show_eval_time_in_prompts: true   # optional; true by default — controls LLM prompt inclusion
 target_score: 0.92
 
 specs:

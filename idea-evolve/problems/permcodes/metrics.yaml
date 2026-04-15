@@ -3,7 +3,7 @@
 # =============================================================================
 # Maximize the size of a permutation code with length 8 and min distance 5.
 
-track_eval_time: true
+show_eval_time_in_prompts: true
 
 # Target: beat the best known lower bound of 616 (Smith & Montemanni 2012)
 target_score: 624

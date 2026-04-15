@@ -1204,6 +1204,17 @@ function fmtEvalTime(s) {
   return m + 'm' + r.toFixed(0).padStart(2, '0') + 's';
 }
 
+// Format an ISO UTC timestamp as local HH:MM:SS; full ISO in the title attr.
+function fmtEvalStamp(iso) {
+  if (!iso) return '<span style="color: var(--text-ghost)">--</span>';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return `<span title="${iso}">${iso}</span>`;
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  return `<span title="${iso}">${hh}:${mm}:${ss}</span>`;
+}
+
 async function loadSolutions() {
   solutionsData = await apiFetch('/api/solutions');
   // Set correct initial sort direction based on fitness direction
@@ -1271,6 +1282,8 @@ function renderSolutions() {
 
     const agentLabel = s.agent_type + '_' + s.instance;
     const evalTimeText = fmtEvalTime(s.eval_time_s);
+    const startedCell = fmtEvalStamp(s.eval_started_at);
+    const endedCell = fmtEvalStamp(s.eval_ended_at);
     return `<tr>
       <td>${s.gen}</td>
       <td><span class="agent-type-badge ${badgeClass}">${agentLabel}</span></td>
@@ -1278,6 +1291,8 @@ function renderSolutions() {
       <td class="score-cell ${scoreClass}">${scoreText}</td>
       <td><span class="valid-badge ${validClass}"></span></td>
       <td style="color: var(--text-ghost)">${evalTimeText}</td>
+      <td style="color: var(--text-ghost)">${startedCell}</td>
+      <td style="color: var(--text-ghost)">${endedCell}</td>
       <td>${sizeStr}</td>
       <td style="color: var(--text-ghost)">${s.modified || ''}</td>
     </tr>`;

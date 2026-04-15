@@ -305,6 +305,8 @@ def get_solutions() -> list[dict]:
                 score = result.get("fitness") if result else None
                 is_valid = result.get("is_valid", 0) if result else 0
                 eval_time_s = result.get("eval_time_s") if result else None
+                eval_started_at = result.get("eval_started_at") if result else None
+                eval_ended_at = result.get("eval_ended_at") if result else None
                 solutions.append({
                     "gen": gen_num,
                     "agent_type": agent_type,
@@ -315,6 +317,8 @@ def get_solutions() -> list[dict]:
                     "is_valid": is_valid,
                     "is_sentinel": _is_sentinel(score),
                     "eval_time_s": eval_time_s,
+                    "eval_started_at": eval_started_at,
+                    "eval_ended_at": eval_ended_at,
                     "size": sol.stat().st_size,
                     "modified": datetime.fromtimestamp(
                         sol.stat().st_mtime
@@ -352,6 +356,8 @@ def get_solutions() -> list[dict]:
                 score = result.get("fitness") if result else None
                 is_valid = result.get("is_valid", 0) if result else 0
                 eval_time_s = result.get("eval_time_s") if result else None
+                eval_started_at = result.get("eval_started_at") if result else None
+                eval_ended_at = result.get("eval_ended_at") if result else None
                 solutions.append({
                     "gen": gen_num,
                     "agent_type": agent_type,
@@ -362,6 +368,8 @@ def get_solutions() -> list[dict]:
                     "is_valid": is_valid,
                     "is_sentinel": _is_sentinel(score),
                     "eval_time_s": eval_time_s,
+                    "eval_started_at": eval_started_at,
+                    "eval_ended_at": eval_ended_at,
                     "size": sol.stat().st_size,
                     "modified": datetime.fromtimestamp(
                         sol.stat().st_mtime

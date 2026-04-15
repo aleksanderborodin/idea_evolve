@@ -1,0 +1,10 @@
+{
+  "fitness": 0,
+  "is_valid": 0,
+  "mAP50": 0,
+  "mAP50_95": 0,
+  "F1": 0,
+  "error": "Training failed: AssertionError: cls_pw must be in the range [0, 1]. Logs preserved at /tmp/idea_evolve_strawberry/last_train_logs \u2014 agents can read them.",
+  "traceback": "Traceback (most recent call last):\n  File \"/home/sasha/Desktop/idea_evolve/idea-evolve/problems/strawberry/evaluate.py\", line 407, in main\n    raw_result = module.entrypoint()\n                 ^^^^^^^^^^^^^^^^^^^\n  File \"/home/sasha/Desktop/idea_evolve/idea-evolve/runs/strawberry/attempt_001/workspace/gen001_explore_1/output/sol01.py\", line 5, in entrypoint\n    return train_and_eval(\n           ^^^^^^^^^^^^^^^\n  File \"/home/sasha/Desktop/idea_evolve/idea-evolve/problems/strawberry/helpers/core.py\", line 277, in train_and_eval\n    raise RuntimeError(\nRuntimeError: Training failed: AssertionError: cls_pw must be in the range [0, 1]. Logs preserved at /tmp/idea_evolve_strawberry/last_train_logs \u2014 agents can read them.\n",
+  "log_path": "/home/sasha/Desktop/idea_evolve/idea-evolve/runs/strawberry/attempt_001/proc_logs/2026-04-15T21-14-57_explore_1_eval_fail_160329.md"
+}

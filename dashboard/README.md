@@ -23,7 +23,7 @@ Options:
 | **Overview** | Score gauge, metrics, phase indicator, **interactive score progression chart** with toggleable annotated frontier, generation timeline. Knowledge staleness and lifecycle counts. Auto-refreshes every 10s when running, 60s when idle. |
 | **Pipeline** | Visual 6-phase generation loop. **Live agent panels** with real-time status from durable `gen_progress.json`. Agent type cards with config. Data flow diagram. |
 | **Architecture** | Collapsible file tree browser. Knowledge hierarchy diagram (L0/L1/L2). Idea lifecycle flow. |
-| **Solutions** | Sortable, filterable table of all solutions. Sorted best-first respecting fitness direction. Filter by generation or agent type. Shows **Eval time** per solution when `metrics.yaml` sets `track_eval_time: true` (sourced from `eval_time_s` in each `.score` file); rendered as `ms` / `s` / `m:ss` and `--` when unavailable. |
+| **Solutions** | Sortable, filterable table of all solutions. Sorted best-first respecting fitness direction. Filter by generation or agent type. Shows **Eval time**, **Started**, and **Ended** per solution when `metrics.yaml` sets `track_eval_time: true` (sourced from `eval_time_s` / `eval_started_at` / `eval_ended_at` in each `.score` file). Eval time renders as `ms` / `s` / `m:ss`; Started/Ended render as local `HH:MM:SS` with full ISO-8601 UTC in the hover tooltip. `--` when unavailable. |
 | **Knowledge** | State of Affairs (with staleness indicator), ideas grid with lifecycle filters, facts, patterns, clusters. Clickable items open detail modal. |
 | **Reports** | Expandable agent debrief reports grouped by generation. |
 

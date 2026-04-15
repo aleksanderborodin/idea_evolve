@@ -1,4 +1,4 @@
-track_eval_time: true
+show_eval_time_in_prompts: true
 target_score: 108
 
 specs:

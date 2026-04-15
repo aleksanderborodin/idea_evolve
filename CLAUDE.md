@@ -40,15 +40,15 @@ the relevant file in `docs/`. That folder is the technical deep-dive:**
 
 | Doc | Covers | Status |
 |-----|--------|--------|
-| [docs/problem_design_guide.md](idea-evolve/docs/problem_design_guide.md) | How to design new problems — required files, multi-metric support, eval-time budgets, GPU/zombie pitfalls, scheduling/kill contract, glossary, cross-ref table | EXISTS |
-| [docs/architect.md](idea-evolve/docs/architect.md) | Architect phase inputs/outputs/flow | **MISSING** (see AUDIT-1) |
-| [docs/agents.md](idea-evolve/docs/agents.md) | Agent workspace, output movement, session flow | **MISSING** (see AUDIT-1) |
-| [docs/analysis_phases.md](idea-evolve/docs/analysis_phases.md) | Evaluator, Critic, Consistency Reviewer | **MISSING** (see AUDIT-1) |
-| [docs/knowledge_base.md](idea-evolve/docs/knowledge_base.md) | Knowledge directory + file schemas | **MISSING** (see AUDIT-1) |
-| [docs/file_layout.md](idea-evolve/docs/file_layout.md) | Complete run directory tree | **MISSING** (see AUDIT-1) |
-| [docs/harness.md](idea-evolve/docs/harness.md) | ClaudeCode/OpenCode adapter layer | **MISSING** (see AUDIT-1) |
-| [docs/dashboard.md](idea-evolve/docs/dashboard.md) | Dashboard tabs, API endpoints, scanner functions | **MISSING** (see AUDIT-1) |
-| [docs/communication.md](idea-evolve/docs/communication.md) | Engine ↔ Dashboard file interface | **MISSING** (see AUDIT-1) |
+| [docs/problem_design_guide.md](docs/problem_design_guide.md) | How to design new problems — required files, multi-metric support, eval-time budgets, GPU/zombie pitfalls, scheduling/kill contract, glossary, cross-ref table | EXISTS |
+| [docs/architect.md](docs/architect.md) | Architect phase inputs/outputs/flow | EXISTS |
+| [docs/agents.md](docs/agents.md) | Agent workspace, output movement, session flow | EXISTS |
+| [docs/analysis_phases.md](docs/analysis_phases.md) | Evaluator, Critic, Consistency Reviewer | EXISTS |
+| [docs/knowledge_base.md](docs/knowledge_base.md) | Knowledge directory + file schemas | EXISTS |
+| [docs/file_layout.md](docs/file_layout.md) | Complete run directory tree | EXISTS |
+| [docs/harness.md](docs/harness.md) | ClaudeCode/OpenCode adapter layer | EXISTS |
+| [docs/dashboard.md](docs/dashboard.md) | Dashboard tabs, API endpoints, scanner functions | EXISTS |
+| [docs/communication.md](docs/communication.md) | Engine ↔ Dashboard file interface | EXISTS |
 
 ## Setup
 
@@ -177,14 +177,18 @@ Progression chart shows baseline from initial programs and target line with
 direction indicator ("↓ better" / "↑ better"). Agent column shows full identifier (e.g.,
 `explore_1` not just `explore`).
 
-**Eval time column (Solutions tab).** Per-solution wall-clock evaluation time from
-`eval_time_s` in `.score` files (and `eval_cache.json` by content hash). Populated when
-`metrics.yaml` has `track_eval_time: true` (currently strawberry). Rendered as `ms` under 1s,
-`Ns.s` under a minute, `Nm SSs` above; `--` when absent. Sortable — useful for spotting
-fast-but-weak or slow-but-marginal solutions. Wired through
+**Eval time + Started/Ended columns (Solutions tab).** Per-solution wall-clock evaluation
+time plus the evaluation's start/end timestamps, sourced from `eval_time_s`,
+`eval_started_at`, and `eval_ended_at` in `.score` files (and `eval_cache.json` by content
+hash). All three populated when `metrics.yaml` has `track_eval_time: true` (sidon, gemm,
+permcodes, strawberry all set it). Eval time renders as `ms` under 1s, `Ns.s` under a minute,
+`Nm SSs` above. Started/Ended render as local `HH:MM:SS` with the full ISO-8601 UTC value in
+the `title` tooltip; `--` when absent. All three are sortable — useful for spotting
+fast-but-weak solutions, GPU queue waits, and evals that straddle long gaps. Wired through
 [dashboard/data/scanner.py](idea-evolve/dashboard/data/scanner.py) `get_solutions()`,
-rendered by [dashboard/static/js/app.js](idea-evolve/dashboard/static/js/app.js) `fmtEvalTime`,
-column declared in [dashboard/templates/tabs/solutions.html](idea-evolve/dashboard/templates/tabs/solutions.html).
+rendered by [dashboard/static/js/app.js](idea-evolve/dashboard/static/js/app.js) `fmtEvalTime`
++ `fmtEvalStamp`, columns declared in
+[dashboard/templates/tabs/solutions.html](idea-evolve/dashboard/templates/tabs/solutions.html).
 
 **Multi-problem navigation:** Dashboard has a problem/attempt selector flyout panel in the
 header (between logo and nav tabs). Click the breadcrumb to open the flyout, which shows
@@ -418,10 +422,17 @@ skip logic and dashboard pipeline tab.
   `problem/helper.py` is a backward-compat shim that re-exports `compute_c` from `helpers/core.py`
   — old solutions still work, but new solutions should use `from helpers.core import compute_c`.
   See `problem/helpers/README.md` for the full index.
-- **Evaluation time tracking.** `metrics.yaml` flag `track_eval_time: true` causes `evaluate.py`
-  to measure wall-clock time of `load_solution()` + `validate()` and include `eval_time_s` in
-  the JSON result. Stored in `.score` files and eval cache. Cached results return the original
-  measured time, not re-measure.
+- **Evaluation time tracking — always on.** Every `evaluate.py` unconditionally records
+  `eval_time_s` (wall-clock seconds), `eval_started_at`, and `eval_ended_at` (ISO-8601 UTC)
+  in every `.score` sidecar and eval cache entry — including error results. If an exception
+  occurs before measurement starts (e.g. import failure) the three fields are omitted from
+  that result. Cached results return the original measured values — not re-measured — so
+  timestamps reflect the real run, not cache hits.
+  LLM prompt inclusion is controlled by `show_eval_time_in_prompts: true` in `metrics.yaml`
+  (default true, recommended for all problems). The dashboard always shows Eval Time /
+  Started / Ended columns regardless of this flag — it reads `.score` files directly.
+  Old flag `track_eval_time` is removed; if a problem yaml still has it, it is silently
+  ignored (timing collection is no longer conditional).
 - **Zombie-process prevention (4-layer defense).** Validated on strawberry after an orphaned
   YOLO training held the GPU post-SIGKILL.
   1. **`os.execve` re-exec for venvs.** GPU problems re-exec into the first_project venv via
@@ -467,7 +478,7 @@ skip logic and dashboard pipeline tab.
   `_normalize_parallel_groups()` and only falls back to `[[all]]` on malformed YAML.
   Single-element groups serialize, multi-element groups parallelize. Strawberry uses
   `concurrency: serial` (one solution agent per group) so GPU evals never collide.
-  See [docs/problem_design_guide.md](idea-evolve/docs/problem_design_guide.md) §9.1.
+  See [docs/problem_design_guide.md](docs/problem_design_guide.md) §9.1.
 - **Universal eval queue + same-agent kill contract.** Every `evaluate.py` enqueues itself
   in `/tmp/idea_evolve_eval_queue.json` (under `fcntl.flock`) and on entry calls
   `eval_queue.kill_stale_same_agent(agent_name, kill_hook=...)`. The kill check enforces
@@ -517,16 +528,10 @@ These are issues I (Claude) found while implementing the GPU-contention preventi
 and auditing the system for doc/code consistency. They were NOT user-reported — they
 surfaced during my own review pass and are recorded here so they don't get lost.
 
-### [AUDIT-1] CLAUDE.md doc table referenced 8 nonexistent files
-The documentation table near the top of CLAUDE.md listed 9 docs in `idea-evolve/docs/` —
-only `problem_design_guide.md` actually exists. The other 8 (`architect.md`, `agents.md`,
-`analysis_phases.md`, `knowledge_base.md`, `file_layout.md`, `harness.md`, `dashboard.md`,
-`communication.md`) were referenced as if they were source-of-truth docs, but no file was
-ever created. Found by `ls idea-evolve/docs/` returning a single file. Marked as
-**MISSING** in the table. No agent prompt or script links to these files, so nothing
-broke functionally — but the rule "doc-sync on cross-cutting changes" is unenforceable
-when half the docs don't exist. **Action needed:** either create the stub docs as the
-deep-dive references CLAUDE.md claims they are, or delete the rows.
+### [AUDIT-1] ~~CLAUDE.md doc table referenced 8 nonexistent files~~ — FIXED
+All 9 docs now exist in `docs/` (repo root). `problem_design_guide.md` was moved from
+`idea-evolve/docs/` to `docs/`; the other 8 (`architect.md`, `agents.md`, etc.) were
+created at `docs/`. All table entries updated to `docs/` paths and marked EXISTS.
 
 ### [AUDIT-2] Architect prompt was missing the per-problem `concurrency:` mode
 The orchestrator had a `concurrency_mode(project_root)` helper but never injected the
@@ -1056,6 +1061,67 @@ idea how many evaluations are in flight, which solution is running, or how long 
 **Scope note**: DESIGN-14 describes the GPU-specific lock queue. DESIGN-15 is the
 unified layer that covers all problems. Implement DESIGN-15 first; DESIGN-14's GPU panel
 becomes a filtered view of the same data.
+
+### [DESIGN-16] Problem-specific visualizations in dashboard
+The Solutions tab shows scores and metadata but no visual output from evaluations. For problems
+that produce visual artifacts (segmented images, plots, diagrams), there is no way to browse
+results visually from the dashboard.
+
+**Idea:** Each problem optionally declares visualization hooks in its problem definition.
+The dashboard Solutions tab renders problem-specific visuals per solution (e.g. for strawberry:
+sample segmented images produced by that solution's model; for other problems: custom charts,
+heatmaps, or nothing if disabled). The problem construction spec (`description.md` / `metrics.yaml`)
+would gain an optional `visualizations:` block describing what artifacts exist and how to render them.
+
+**Concrete strawberry example:** evaluation saves a few sample output images (model overlay on
+strawberry photo) to a stable path keyed by content hash. The dashboard Solutions tab shows
+a thumbnail gallery for each solution — click to enlarge.
+
+**Design notes:**
+- Visualization is opt-in per problem; `visualizations: []` or omitting the key disables the panel.
+- Artifacts saved by `evaluate.py` to a per-hash directory under `/tmp/idea_evolve_<problem>/viz/<hash>/`
+  or `runs/<problem>/<attempt>/viz/<hash>/`.
+- Dashboard API: `GET /api/solution_viz?problem=X&attempt=Y&hash=Z` returns artifact paths.
+- Problems that produce no visual output (sidon, gemm, permcodes) simply omit the block.
+- Not yet implemented.
+
+### [DESIGN-17] Numeric concurrency limit + research-always-parallel rule
+
+**Current state:** `concurrency:` in `metrics.yaml` is binary — `serial` (1 eval at a time)
+or `parallel` (unlimited). The architect is told which mode applies and sizes `parallel_groups`
+accordingly. Research and experimentator agents (which never call `evaluate.py`) have no
+special treatment — the architect example showed them serialized even on serial-eval problems,
+wasting wall-clock time.
+
+**Two gaps to fix:**
+
+1. **Numeric concurrency.** Some problems have N ≥ 2 parallel eval slots (e.g. 2 GPUs, a
+   service with rate limiting, a batched evaluator). `concurrency: 2` should mean "up to 2
+   solution agents per group." Today only `serial` and `parallel` are recognized; `2` or `3`
+   would be ignored.
+
+2. **Research/experimentator are always free.** These agent types never acquire the GPU lock
+   or call `evaluate.py`. They consume zero eval slots regardless of the problem's concurrency
+   mode. The architect should always colocate them with a running solution agent — never place
+   them in a solo sequential group, as that forces all prior solution agents to finish before
+   research starts. The current `architect.md` example incorrectly shows `research_1` in its
+   own solo group for serial-eval problems; the text contradicts this but agents follow the
+   example.
+
+**What needs to change:**
+
+| Layer | Change |
+|---|---|
+| `metrics.yaml` schema | Accept `concurrency: serial\|parallel\|N` (integer = max simultaneous evals) |
+| `orchestrator.py` | Parse numeric value; pass to architect context as "max N evals in parallel" |
+| `agents/architect.md` | Fix the serial-mode example to colocate `research_1` with a solution agent; add the "research/experimentator = 0 eval slots" rule explicitly; show a 3-case example (serial / parallel / N=2) |
+| `docs/problem_design_guide.md` §9 | Rewrite concurrency section: binary → numeric; add research-free-slot rule |
+| `scripts/check_docs_consistency.py` | Accept numeric `concurrency` value when validating |
+
+**The research-always-parallel rule is universal** (applies regardless of concurrency mode)
+and should be stated as a hard rule in `architect.md`, not a soft "MAY share a group."
+
+**Not yet implemented.**
 
 ## SPEC DEVIATIONS — intentional differences from the design doc
 

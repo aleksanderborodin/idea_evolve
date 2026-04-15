@@ -1,0 +1,2 @@
+Training crashed: AssertionError: cls_pw must be in the range [0, 1]
+Run directory (may still exist): /tmp/idea_evolve_strawberry/run

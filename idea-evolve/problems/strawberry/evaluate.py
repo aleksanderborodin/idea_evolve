@@ -25,6 +25,7 @@ import os
 import sys
 import time
 import traceback
+from datetime import datetime, timezone
 from pathlib import Path
 
 PROBLEM_ROOT = Path(__file__).parent
@@ -400,16 +401,20 @@ def main():
 
             # 7. Acquire GPU lock → mark running → call entrypoint() → release GPU lock
             t0 = time.perf_counter()
+            started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
             with _gpu_lock():
                 eval_queue.mark_running(queue_id)
                 if log_writer is not None:
                     log_writer.event("GPU lock acquired, training starting")
                 raw_result = module.entrypoint()
             elapsed = time.perf_counter() - t0
+            ended_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
             # 8. Validate and package the result
             result = _process_entrypoint_result(raw_result)
             result["eval_time_s"] = round(elapsed, 1)
+            result["eval_started_at"] = started_at
+            result["eval_ended_at"] = ended_at
             if log_writer is not None:
                 result["log_path"] = log_writer.log_path
 
@@ -447,7 +452,14 @@ def main():
 
     except Exception as e:
         tb = traceback.format_exc()
+        ended_at_err = datetime.now(timezone.utc).isoformat(timespec="seconds")
         error_result = _error_result(str(e), tb=tb)
+        try:
+            error_result["eval_time_s"] = round(time.perf_counter() - t0, 1)
+            error_result["eval_started_at"] = started_at
+            error_result["eval_ended_at"] = ended_at_err
+        except NameError:
+            pass  # error before GPU lock / measurement began
         _snapshot_crash_artifacts(solution_path)
         # Failure log — diagnose with strawberry-specific hints, mark sticky.
         try:

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "agents": {
+    "explore_1": {
+      "status": "complete",
+      "outputs_moved": true,
+      "completed_at": "2026-04-15T21:33:02.865484+00:00",
+      "solutions": 5
+    },
+    "explore_2": {
+      "status": "pending",
+      "started_at": "2026-04-15T21:33:02.866190+00:00"
+    }
+  },
+  "last_updated": "2026-04-15T21:33:02.866295+00:00"
+}
