@@ -93,6 +93,96 @@ def _kill_group(proc: subprocess.Popen) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Zombie prevention: pdeathsig + subreaper + safe_run
+# ---------------------------------------------------------------------------
+#
+# Three layers of defense against orphaned descendants:
+#   1. pdeathsig (child receives SIGKILL if parent dies)
+#   2. subreaper (orchestrator inherits orphaned descendants so we can reap)
+#   3. safe_run() wrapper: every subprocess gets its own process group, so
+#      timeout-kill via killpg tears down the whole tree.
+
+_PR_SET_PDEATHSIG = 1
+_PR_SET_CHILD_SUBREAPER = 36
+
+
+def _set_pdeathsig():
+    """preexec_fn for subprocess.Popen — child receives SIGKILL when parent exits.
+
+    Linux-only. Best-effort: failure to set is logged to stderr but not fatal.
+    """
+    try:
+        import ctypes
+        libc = ctypes.CDLL("libc.so.6", use_errno=True)
+        libc.prctl(_PR_SET_PDEATHSIG, signal.SIGKILL, 0, 0, 0)
+    except Exception:
+        pass
+
+
+def set_subreaper() -> bool:
+    """Mark the current process as a subreaper.
+
+    Orphaned descendants (children whose immediate parent died) get reparented
+    to the nearest ancestor marked PR_SET_CHILD_SUBREAPER, rather than PID 1.
+    Lets the orchestrator wait()/kill stragglers even across process-tree gaps.
+
+    Returns True on success, False on unsupported platform / kernel.
+    """
+    try:
+        import ctypes
+        libc = ctypes.CDLL("libc.so.6", use_errno=True)
+        rc = libc.prctl(_PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0)
+        return rc == 0
+    except Exception:
+        return False
+
+
+def safe_run(
+    cmd,
+    *,
+    timeout: float | None = None,
+    capture_output: bool = False,
+    text: bool = False,
+    input: str | bytes | None = None,
+    cwd: str | Path | None = None,
+    env: dict | None = None,
+) -> subprocess.CompletedProcess:
+    """subprocess.run with process-group isolation + pdeathsig + clean kill on timeout.
+
+    Drop-in replacement for common subprocess.run usage. On TimeoutExpired,
+    kills the entire process group (SIGTERM then SIGKILL) before re-raising,
+    so child trees (e.g. YOLO DataLoader workers, CUDA kernels) don't survive.
+    """
+    stdout_arg = subprocess.PIPE if capture_output else None
+    stderr_arg = subprocess.PIPE if capture_output else None
+    stdin_arg = subprocess.PIPE if input is not None else None
+
+    proc = subprocess.Popen(
+        cmd,
+        stdin=stdin_arg,
+        stdout=stdout_arg,
+        stderr=stderr_arg,
+        text=text,
+        cwd=str(cwd) if cwd is not None else None,
+        env=env,
+        start_new_session=True,
+        preexec_fn=_set_pdeathsig,
+    )
+    try:
+        out, err = proc.communicate(input=input, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _kill_group(proc)
+        try:
+            out, err = proc.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            out, err = (b"" if not text else "", b"" if not text else "")
+        raise subprocess.TimeoutExpired(
+            cmd, timeout, output=out, stderr=err,
+        )
+    return subprocess.CompletedProcess(cmd, proc.returncode, stdout=out, stderr=err)
+
+
+# ---------------------------------------------------------------------------
 # ClaudeCodeAdapter
 # ---------------------------------------------------------------------------
 
@@ -114,6 +204,7 @@ class ClaudeCodeAdapter:
                 cwd=str(project_root),
                 env=env,
                 start_new_session=True,
+                preexec_fn=_set_pdeathsig,
             )
         except FileNotFoundError:
             print("  ERROR: Claude Code CLI not found. Install with: npm install -g @anthropic-ai/claude-code")
@@ -248,6 +339,7 @@ class OpenCodeAdapter:
                 env=env,
                 start_new_session=True,
                 bufsize=1,
+                preexec_fn=_set_pdeathsig,
             )
         except FileNotFoundError:
             print(f"  ERROR: opencode binary not found at '{OPENCODE_BIN}'. Install: https://opencode.ai")

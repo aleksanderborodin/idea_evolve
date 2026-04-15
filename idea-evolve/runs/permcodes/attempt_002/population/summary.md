@@ -1,9 +1,9 @@
 # Population Summary
 
-Total solutions: 1
-Valid solutions: 1
-Best fitness: 262 (higher is better)
-Average fitness: 262
+Total solutions: 8
+Valid solutions: 8
+Best fitness: 616 (higher is better)
+Average fitness: 405
 
 ## By Agent Type
 
@@ -12,3 +12,11 @@ Average fitness: 262
 - Best: 262
 - Avg: 262
   - gen000/baseline/sol01.py: fitness 262
+
+### explore
+- Count: 7
+- Best: 616
+- Avg: 425
+  - gen001/explore_1/sol01.py: fitness 616
+  - gen001/explore_1/sol02.py: fitness 616
+  - gen001/explore_1/sol03.py: fitness 616

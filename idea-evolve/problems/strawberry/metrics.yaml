@@ -1,0 +1,29 @@
+track_eval_time: true
+target_score: 0.92
+
+specs:
+  fitness:
+    description: "Mask mAP50 on the open test split (743 images) after PROXY_EPOCHS=50 training. Proxy for 100-epoch performance. Baseline ~0.84, best known ~0.87."
+    decimals: 4
+    is_primary: true
+    higher_is_better: true
+    lower_bound: 0.0
+    upper_bound: 1.0
+    include_in_prompts: true
+    significant_change: 0.002
+    sentinel_value: 0
+  is_valid:
+    description: "1 if config was valid and training succeeded, 0 otherwise"
+    higher_is_better: true
+    sentinel_value: 0
+  mAP50_95:
+    description: "Mask mAP50-95 on the open test split (stricter IoU average)"
+    decimals: 4
+    higher_is_better: true
+    include_in_prompts: true
+    sentinel_value: 0
+  F1:
+    description: "Mask F1 score on the open test split"
+    decimals: 4
+    higher_is_better: true
+    sentinel_value: 0

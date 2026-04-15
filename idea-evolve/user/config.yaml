@@ -91,8 +91,7 @@ max_parallel_sessions: 10          # Max concurrent Claude Code sessions
 # Unknown harness names fall back to claude-code with a warning.
 harnesses:
   default: opencode
-  per_agent:
-    architect: claude-code         # keep architect on Claude (Claude-tuned prompt)
+  per_agent: {}                    # all agents use opencode (minimax-m2.7)
 
 # Per-harness model aliases. Keys `opus|sonnet|haiku` map to provider/model strings.
 # Opencode reads from `~/.config/opencode/opencode.json` providers; ModelGate preferred.

@@ -1,0 +1,30 @@
+generation: 3
+strategy_summary: "Gen 2 was a strategic redirection with zero improvement (best=0.8328, same as gen 1). Three major directions closed (TTA non-functional, imgsz=832 fine-tune catastrophic, yolo11s+exp5 architecture mismatch). Gen 3 pursues: (1) yolo11s from COCO at 40 epochs to validate the best baseline is real, (2) progressive resizing as the only remaining resolution hypothesis, (3) copy_paste stability ceiling mapping (0.55/0.6), (4) mandatory experimentator to implement per-class mAP (REC-3 P0), (5) research for TTA fresh-training validation + per-class bottleneck identification. Two-track mandate enforced: Track B (explore_1, research_1) must NOT use the current best solution as a starting point."
+agents:
+  - type: explore
+    instance: 1
+    model: sonnet
+    brief: briefs/gen003/explore_1.md
+    timeout: 1200
+  - type: explore
+    instance: 2
+    model: sonnet
+    brief: briefs/gen003/explore_2.md
+    timeout: 1200
+  - type: exploit
+    instance: 1
+    model: sonnet
+    brief: briefs/gen003/exploit_1.md
+    timeout: 900
+  - type: research
+    instance: 1
+    model: sonnet
+    brief: briefs/gen003/research_1.md
+    timeout: 600
+  - type: experimentator
+    instance: 1
+    model: opus
+    brief: briefs/gen003/experimentator_1.md
+    timeout: 1200
+parallel_groups:
+  - ["explore_1", "explore_2", "exploit_1", "research_1", "experimentator_1"]

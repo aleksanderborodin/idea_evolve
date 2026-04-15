@@ -191,9 +191,6 @@ The dashboard reads directly from the filesystem — no database. It auto-detect
 | **Knowledge** | Three-layer hierarchy: State of Affairs -> Clusters -> Ideas/Patterns/Facts |
 | **Reports** | Agent debrief reports and system feedback by generation |
 
-<details>
-<summary>Dashboard screenshots</summary>
-
 ### Pipeline
 ![Pipeline](images/pipeline.png)
 
@@ -208,8 +205,6 @@ The dashboard reads directly from the filesystem — no database. It auto-detect
 
 ### Reports
 ![Reports](images/reports.png)
-
-</details>
 
 ## Project Structure
 

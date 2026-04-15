@@ -9,16 +9,19 @@ scaling improvements, design decisions), you MUST update this file to reflect th
 CLAUDE.md is the operational quick-reference and issue tracker. Keep it accurate.**
 
 **RULE: When you change a component's file I/O, schema, config keys, or data flow, also update
-the relevant file in `idea-evolve/docs/`. That folder is the technical deep-dive:**
+the relevant file in `docs/`. That folder is the technical deep-dive:**
 
 | Doc | Covers |
 |-----|--------|
-| [docs/architect.md](idea-evolve/docs/architect.md) | Architect phase inputs/outputs/flow |
-| [docs/agents.md](idea-evolve/docs/agents.md) | Agent workspace, output movement, session flow |
-| [docs/analysis_phases.md](idea-evolve/docs/analysis_phases.md) | Evaluator, Critic, Consistency Reviewer |
-| [docs/knowledge_base.md](idea-evolve/docs/knowledge_base.md) | Knowledge directory + file schemas |
-| [docs/file_layout.md](idea-evolve/docs/file_layout.md) | Complete run directory tree |
-| [docs/harness.md](idea-evolve/docs/harness.md) | ClaudeCode/OpenCode adapter layer |
+| [docs/architect.md](docs/architect.md) | Architect phase inputs/outputs/flow |
+| [docs/agents.md](docs/agents.md) | Agent workspace, output movement, session flow |
+| [docs/analysis_phases.md](docs/analysis_phases.md) | Evaluator, Critic, Consistency Reviewer |
+| [docs/knowledge_base.md](docs/knowledge_base.md) | Knowledge directory + file schemas |
+| [docs/file_layout.md](docs/file_layout.md) | Complete run directory tree |
+| [docs/harness.md](docs/harness.md) | ClaudeCode/OpenCode adapter layer |
+| [docs/dashboard.md](docs/dashboard.md) | Dashboard tabs, API endpoints, scanner functions |
+| [docs/communication.md](docs/communication.md) | Engine ↔ Dashboard file interface (what is written, what is read) |
+| [docs/problem_design_guide.md](docs/problem_design_guide.md) | How to design new problems — required files, multi-metric support, eval-time budgets, GPU/zombie pitfalls |
 
 ## Setup
 
@@ -92,6 +95,15 @@ Invalid solutions get sentinel score (0) per the general rule below.
 Problem files at `idea-evolve/problems/sidon/`. Fitness direction read from `metrics.yaml`.
 Helpers: `is_sidon`, `count_violations`, `differences`, `can_add`, `is_prime` in `helpers/core.py`.
 Previous problems: Binary-Ternary GEMM (`problems/gemm/`), Permutation Codes M(8,5) (`problems/permcodes/`).
+
+**Also available: Strawberry Disease Segmentation** (`problems/strawberry/`) — fine-tune YOLO11
+for instance segmentation of 7 strawberry diseases, maximize mask mAP50 on the open test split
+(743 images). Solutions are **full Python training scripts** (not config dicts) — agents can do
+staged training, class weighting, custom augmentation, ensembles, etc.
+Evaluation starts from exp5 best.pt (val mAP50=0.945) + 20 fine-tuning epochs (~3.6 min/eval).
+GPU serialized via file lock in evaluate.py — safe even with parallel agents.
+Target: beat proxy mAP50 ≈ 0.94 (current exp5 proxy baseline ~0.92-0.94).
+Start: `python3 orchestrator.py . --problem strawberry --new-attempt`
 
 ## Dashboard
 
@@ -353,6 +365,51 @@ skip logic and dashboard pipeline tab.
   to measure wall-clock time of `load_solution()` + `validate()` and include `eval_time_s` in
   the JSON result. Stored in `.score` files and eval cache. Cached results return the original
   measured time, not re-measure.
+- **Zombie-process prevention (4-layer defense).** Validated on strawberry after an orphaned
+  YOLO training held the GPU post-SIGKILL.
+  1. **`os.execve` re-exec for venvs.** GPU problems re-exec into the first_project venv via
+     `os.execve(VENV_PYTHON, [VENV_PYTHON] + sys.argv, env)` — REPLACES the current process.
+     Never `subprocess.run([VENV_PYTHON, ...])` — that forks a grandchild which survives
+     `killpg` and keeps the GPU busy. See `problems/strawberry/evaluate.py`.
+  2. **Process-group isolation + `killpg`.** `safe_run()` and all adapter `Popen` calls use
+     `start_new_session=True`. On timeout/kill, the orchestrator calls `os.killpg(pid, SIGTERM)`
+     then `SIGKILL` — the entire tree goes. Lives in `orchestrator_harness.py`.
+  3. **`pdeathsig` backstop.** `_set_pdeathsig()` is a `preexec_fn` that calls
+     `prctl(PR_SET_PDEATHSIG, SIGKILL)` — if the parent dies for any reason (even an unclean
+     crash that bypasses `killpg`), the child receives SIGKILL from the kernel. Attached to
+     both ClaudeCode and OpenCode adapter Popen calls, and to `safe_run()`.
+  4. **Subreaper on orchestrator.** `set_subreaper()` called once in `main()` marks the
+     orchestrator with `PR_SET_CHILD_SUBREAPER=1`. Orphaned descendants reparent to the
+     orchestrator (not PID 1), so `wait()`/`killpg` can still reach them across process-tree
+     gaps.
+
+  Use `safe_run()` (exported from `orchestrator_harness`) as a drop-in replacement for
+  `subprocess.run()` anywhere the orchestrator spawns a subprocess that might hold resources
+  (GPU, file locks, sockets). Bootstrap baseline evaluations use `safe_run(timeout=600)` —
+  60s was too short for 3.6-min YOLO trainings and caused broken-pipe failures.
+- **Multi-metric support.** Problems declare a primary metric (`is_primary: true`) plus any
+  number of auxiliary metrics in `metrics.yaml`. Auxiliary metrics pass through `entrypoint()`
+  → evaluate.py → `.score` sidecar + `eval_cache.json` automatically — no registration step.
+  Strawberry uses this for `mAP50_95`, `F1`, `precision`, `recall`, `per_class` (structured),
+  `tta` (flag), `train_time_s`. Set `include_in_prompts: true` to surface a metric in agent
+  prompts/summaries; omit to store silently for developer diagnostics. See
+  [docs/problem_design_guide.md](docs/problem_design_guide.md) §4 for the full pattern.
+- **Mid-run metric addition.** Adding a metric after a run is live does NOT require
+  re-evaluating the population:
+  1. Add the metric spec to `problems/<id>/metrics.yaml`.
+  2. Update `entrypoint()` / `evaluate.py` to compute and return it.
+  3. The orchestrator treats missing auxiliary metrics on old `.score` files as sentinel
+     (renders as `—` in summaries). Primary fitness is never retroactively perturbed.
+  4. To fill in the new metric for specific solutions, delete their `.score` sidecar AND
+     their `eval_cache.json` entry (by content hash); the next `evaluate.py` recomputes.
+  Do NOT bulk-rerun — wastes compute, perturbs rankings.
+- **Agent-readable disk artifacts.** Large or noisy evaluation outputs (training logs,
+  per-class breakdowns, crash traces) go to stable `/tmp/idea_evolve_<problem>/...` paths,
+  not into agent prompts. Agents read them via Bash/Read only when they have a specific
+  question. Strawberry writes `last_train_logs/results.csv`, `last_train_logs/args.yaml`,
+  `last_train_logs/crash_tail.log`, `last_per_class.json`. The paths are documented in
+  `description.md` so agents know where to look. Keeps prompts lean (mitigates SCALE-7)
+  while preserving investigability.
 
 ---
 
@@ -646,6 +703,24 @@ enforces it. A misbehaving agent could corrupt `knowledge/`, `population/`, or a
 **Risk:** Medium. Claude Code agents generally follow instructions. But a confused agent
 could overwrite `state_of_affairs.md` directly instead of writing to its output dir.
 
+**Future work**: enforce write isolation technically so agents physically cannot write outside
+their workspace, regardless of what the LLM decides to do. Possible approaches:
+
+- **Linux namespaces / bind mounts** — mount the agent's `workspace/genNNN_agentname/` as
+  a writable overlay; mount everything else read-only. No code changes inside agents needed.
+  Cleanest option. Requires `unshare` or a small wrapper script launched before `npx`.
+- **`inotifywait` watcher** — background process watches the run dir tree and immediately
+  reverts (deletes) any write outside the agent's `output/` dir. Simpler to implement but
+  reactive, not preventive — a fast agent could do damage before the revert lands.
+- **Restricted shell wrapper** — intercept shell commands via `LD_PRELOAD` or a custom
+  `bash` wrapper that filters `open()` calls with `O_WRONLY`/`O_RDWR` outside the allowed
+  path. Complex and fragile across Python versions.
+
+Recommended path: Linux bind mounts via `unshare --mount`. Launch each agent inside a
+namespace where only `workspace/genNNN_agentname/` is writable. The orchestrator already
+uses `start_new_session=True` when spawning agents, so adding `unshare` to the command
+prefix is straightforward. Not done yet — do as a dedicated hardening pass.
+
 ### [DESIGN-2] No solution lineage tracking
 When Exploit refines `gen005_explore_1/sol01.py`, it produces a new `sol01.py` with no
 record of what it descended from. The solution-idea map tracks which ideas a solution uses,
@@ -727,6 +802,95 @@ Turn limits raised to 150 for solution agents. Agent prompts now enforce evaluat
 workflow (write one → evaluate → update header → move on). With 150 turns and ~3 turns per
 write-evaluate cycle plus ~15 turns reading overhead, agents can do **40+ iterations**.
 Previously agents batch-wrote solutions without evaluating, wasting all their turns.
+
+### [DESIGN-13] evaluate.py boilerplate is duplicated per-problem
+Every problem has its own `evaluate.py` that re-implements the same infrastructure: content-hash
+caching, `.score` sidecar writing, file locking, `eval_cache.json` path resolution. The strawberry
+problem additionally has a GPU file lock and a venv re-exec helper that no other problem has.
+
+**Future work**: extract into `problems/_shared/eval_utils.py`:
+- `class EvalRunner` — handles cache, sidecar, timing, error wrapping for any problem
+- `gpu_lock()` context manager — system-wide exclusive lock on `/tmp/idea_evolve_gpu.lock`
+- `reexec_in_venv(venv_python)` — transparent re-exec into a different Python interpreter
+
+Any GPU-training problem (like strawberry) would do:
+```python
+# evaluate.py (all problems)
+from problems._shared.eval_utils import EvalRunner, gpu_lock, reexec_in_venv
+
+reexec_in_venv("/path/to/venv/python")  # no-op if already in venv
+
+def run(solution_path, content_hash):
+    with gpu_lock():           # no-op for CPU problems (pass gpu=False)
+        output = load_and_call(solution_path)
+    return validate(output)
+
+EvalRunner(PROBLEM_ROOT).main(run)
+```
+CPU-only problems (sidon, gemm, permcodes) pass `gpu=False` so no lock is acquired and
+parallel evaluation is unaffected. GPU problems (strawberry and future ML tasks) pass
+`gpu=True` and automatically serialize.
+
+**Not done yet** — the existing evaluate.py files all work and touching them risks regressions.
+Do this as a dedicated refactor pass, not alongside a problem run.
+
+### [DESIGN-14] GPU evaluation queue is invisible
+GPU-bound problems (currently strawberry, future ML tasks) serialize evaluations through
+the system-wide `/tmp/idea_evolve_gpu.lock` file lock. When multiple agents call `evaluate.py`
+in parallel, they silently queue at the lock — there's no visibility into who is currently
+running, who is waiting, how long the current job has been running, or how many are in line.
+
+The only signal today is the `[evaluate.py] Waiting for GPU lock...` line in stderr, which
+goes to the agent's bash output and is invisible from the dashboard or orchestrator logs.
+
+**Future work**: build a proper job-queue layer with dashboard visibility.
+
+- **Queue file**: `/tmp/idea_evolve_gpu_queue.json` written under the same lock guard, listing
+  `{pid, agent_name, solution_path, problem, started_at, status: running|waiting}` entries.
+  Each `evaluate.py` invocation appends itself on entry, marks itself `running` once the lock
+  is acquired, and removes itself on exit (including via `atexit` for clean removal even on
+  crash).
+- **Dashboard tab**: a "GPU Queue" panel on the Pipeline tab showing the currently running
+  job (problem, agent, solution path, elapsed time, ETA based on epoch count if extractable)
+  and the waiting list ordered by enqueue time.
+- **Orchestrator awareness**: emit queue events to `history/run_state.json` so the existing
+  beacon system surfaces "GPU saturated, N jobs queued" when relevant.
+- **Stale entry GC**: dashboard scanner removes entries whose PID is no longer alive (handles
+  the case where `atexit` didn't run after SIGKILL).
+
+This becomes important once 2+ GPU-bound problems run in parallel, or when one problem has
+many parallel agents all serializing at the lock — without visibility, debugging "why is
+this so slow" requires `lsof /tmp/idea_evolve_gpu.lock` and `ps`.
+
+### [DESIGN-15] General evaluation queue with dashboard visibility — TODO
+All problems (not just GPU) need a visible evaluation queue so the dashboard shows what is
+currently being evaluated and what is waiting. Right now `evaluate.py` runs inline inside
+each agent's bash session with no central tracking — the orchestrator and dashboard have no
+idea how many evaluations are in flight, which solution is running, or how long it has been.
+
+**Planned implementation:**
+
+- **Queue file**: `/tmp/idea_evolve_eval_queue.json` — written under `fcntl` lock, per-entry:
+  `{pid, agent_name, solution_path, problem, attempt, started_at, status: running|waiting}`.
+  Each `evaluate.py` invocation appends on entry, updates `status: running` once it starts
+  computing, removes itself on exit via `atexit` (safe even on SIGKILL from the orchestrator).
+- **Dashboard panel**: "Eval Queue" section on the Pipeline tab showing:
+  - Currently running evaluation: problem, agent, solution filename, elapsed time
+  - Waiting list ordered by enqueue time
+  - Empty state: "No evaluations in progress"
+- **API endpoint**: `GET /api/eval_queue` reads and returns the queue JSON; dashboard polls
+  it at the same cadence as run_state (10s when orchestrator running, 60s when idle).
+- **Orchestrator awareness**: surface queue depth in `history/run_state.json` as
+  `eval_queue_depth: N` so the header beacon can show "N evaluations queued".
+- **Stale entry GC**: dashboard scanner (or the API handler) removes entries whose PID
+  is no longer alive — handles crashes where `atexit` didn't fire.
+- **GPU vs CPU**: GPU problems (strawberry) already have a separate lock; their entries
+  should appear in this same queue with a `gpu: true` flag so the dashboard can distinguish
+  serialized GPU jobs from parallel CPU jobs.
+
+**Scope note**: DESIGN-14 describes the GPU-specific lock queue. DESIGN-15 is the
+unified layer that covers all problems. Implement DESIGN-15 first; DESIGN-14's GPU panel
+becomes a filtered view of the same data.
 
 ## SPEC DEVIATIONS — intentional differences from the design doc
 

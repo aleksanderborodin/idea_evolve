@@ -673,6 +673,8 @@ from orchestrator_harness import (
     SessionError,
     CLAUDE_CODE_MODEL_MAP as MODEL_MAP,
     get_adapter,
+    safe_run,
+    set_subreaper,
 )
 
 
@@ -1580,9 +1582,9 @@ def _bootstrap_gen0(project_root: Path):
 
         # Run evaluate.py
         try:
-            result = subprocess.run(
+            result = safe_run(
                 [sys.executable, str(evaluate_py), str(dest)],
-                capture_output=True, text=True, timeout=60,
+                capture_output=True, text=True, timeout=600,
                 cwd=str(problem_dir), env=env,
             )
             if result.returncode == 0:
@@ -3290,6 +3292,12 @@ def run_generation(project_root: Path, gen: int, config: dict) -> float:
 
 
 def main():
+    # Mark this process as a subreaper so orphaned descendants (e.g. a YOLO
+    # DataLoader worker whose parent died) get reparented to us, not PID 1.
+    # Combined with preexec_fn=_set_pdeathsig on children, this ensures a
+    # kill -9 on the orchestrator tears down the whole tree.
+    set_subreaper()
+
     parser = argparse.ArgumentParser(description="Idea Evolve Orchestrator")
     parser.add_argument(
         "project_root", nargs="?", default=".",

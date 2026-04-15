@@ -485,3 +485,26 @@ Files modified since gen 6:
 - user/config.yaml
 - user/initial_facts.md
 - user/directives/README.md
+
+## Generation 2
+Files modified since gen 1:
+- knowledge/state_of_affairs.md
+- knowledge/clusters/cluster_003.md
+- knowledge/clusters/cluster_001.md
+- knowledge/clusters/cluster_002.md
+- knowledge/patterns/confirmed/pattern_006.md
+- knowledge/patterns/confirmed/pattern_004.md
+- knowledge/patterns/confirmed/pattern_005.md
+- knowledge/research/gen002/research_1/exp2b_score.json
+- knowledge/research/gen002/research_1/exp1_score.json
+- knowledge/research/gen002/research_1/exp2_score.json
+- knowledge/research/gen002/research_1/findings.md
+- knowledge/ideas/disputed/idea_002.md
+- knowledge/ideas/debunked/idea_003.md
+- knowledge/ideas/debunked/idea_009.md
+- knowledge/ideas/debunked/idea_010.md
+- knowledge/ideas/debunked/idea_011.md
+- knowledge/ideas/established/idea_007.md
+- knowledge/ideas/established/idea_012.md
+- knowledge/ideas/established/idea_001.md
+- knowledge/ideas/active/idea_006.md
