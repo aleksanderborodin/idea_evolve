@@ -1,0 +1,62 @@
+{
+  "fitness": 0.8209,
+  "is_valid": 1,
+  "mAP50": 0.8209,
+  "mAP50_95": 0.6041,
+  "F1": 0.79,
+  "precision": 0.7988,
+  "recall": 0.7814,
+  "per_class": {
+    "names": [
+      "Angular Leafspot",
+      "Anthracnose Fruit Rot",
+      "Blossom Blight",
+      "Gray Mold",
+      "Leaf Spot",
+      "Powdery Mildew Fruit",
+      "Powdery Mildew Leaf"
+    ],
+    "mAP50": [
+      0.6622,
+      0.8153,
+      0.8355,
+      0.9327,
+      0.7686,
+      0.8019,
+      0.9298
+    ],
+    "mAP50_95": [
+      0.4206,
+      0.4389,
+      0.6802,
+      0.6395,
+      0.6591,
+      0.5533,
+      0.8371
+    ],
+    "precision": [
+      0.7525,
+      0.7483,
+      0.7299,
+      0.7995,
+      0.8645,
+      0.8735,
+      0.8234
+    ],
+    "recall": [
+      0.6736,
+      0.7586,
+      1.0,
+      0.9114,
+      0.5874,
+      0.6551,
+      0.8838
+    ]
+  },
+  "tta": true,
+  "train_time_s": 461.6,
+  "eval_time_s": 463.0,
+  "eval_started_at": "2026-04-15T22:08:42+00:00",
+  "eval_ended_at": "2026-04-15T22:16:25+00:00",
+  "log_path": "/home/sasha/Desktop/idea_evolve/idea-evolve/runs/strawberry/attempt_001/proc_logs/2026-04-15T22-08-42_full_1_eval_176054.md"
+}

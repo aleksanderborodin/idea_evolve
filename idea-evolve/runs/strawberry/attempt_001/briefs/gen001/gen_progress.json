@@ -8,9 +8,35 @@
       "solutions": 5
     },
     "explore_2": {
-      "status": "pending",
-      "started_at": "2026-04-15T21:33:02.866190+00:00"
+      "status": "complete",
+      "outputs_moved": true,
+      "completed_at": "2026-04-15T22:02:06.693133+00:00",
+      "solutions": 1
+    },
+    "full_1": {
+      "status": "complete",
+      "outputs_moved": true,
+      "completed_at": "2026-04-15T22:17:50.374371+00:00",
+      "solutions": 2
+    },
+    "research_1": {
+      "status": "complete",
+      "outputs_moved": true,
+      "completed_at": "2026-04-15T22:19:18.672558+00:00",
+      "solutions": 0
     }
   },
-  "last_updated": "2026-04-15T21:33:02.866295+00:00"
+  "last_updated": "2026-04-15T22:30:10.781655+00:00",
+  "evaluator": {
+    "status": "complete"
+  },
+  "system_critic": {
+    "status": "complete"
+  },
+  "consistency_review": {
+    "status": "complete"
+  },
+  "finalize": {
+    "status": "complete"
+  }
 }

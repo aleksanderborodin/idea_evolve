@@ -5,7 +5,20 @@
       "agent_explore_1_work": 900.5,
       "agent_explore_1_wrap_up": 291.6,
       "agent_explore_1": 1192.1,
-      "agent_explore_2_work": 900.5
+      "agent_explore_2_work": 900.5,
+      "agent_explore_2_wrap_up": 843.2,
+      "agent_explore_2": 1743.8,
+      "agent_full_1_work": 900.5,
+      "agent_full_1_wrap_up": 43.1,
+      "agent_full_1": 943.7,
+      "agent_research_1_work": 88.3,
+      "agent_research_1": 88.3,
+      "evaluator": 320.4,
+      "evaluator_debrief": 16.2,
+      "system_critic": 98.0,
+      "consistency_reviewer": 203.1,
+      "consistency_reviewer_debrief": 14.5,
+      "total": 4769.0
     }
   }
 }

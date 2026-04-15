@@ -16,31 +16,25 @@
       "type": "timeout",
       "message": "Timed out after 900s",
       "ts": "2026-04-15T21:48:03.416428+00:00"
+    },
+    {
+      "gen": 1,
+      "phase": "agents",
+      "agent": "full_1",
+      "type": "timeout",
+      "message": "Timed out after 900s",
+      "ts": "2026-04-15T22:17:07.244474+00:00"
     }
   ],
-  "completed_gens": [],
+  "completed_gens": [
+    1
+  ],
   "pid": 156143,
   "started_at": "2026-04-15T21:10:41.816503+00:00",
   "target_gen": 30,
-  "status": "running",
+  "status": "stopped",
   "current_gen": 1,
-  "current_phase": "agents_running",
-  "agents": {
-    "explore_1": {
-      "status": "done",
-      "finished_at": "2026-04-15T21:33:02.865239+00:00",
-      "solutions": 5,
-      "elapsed": 1192.1
-    },
-    "explore_2": {
-      "status": "wrapping_up"
-    },
-    "full_1": {
-      "status": "waiting"
-    },
-    "research_1": {
-      "status": "waiting"
-    }
-  },
-  "last_updated": "2026-04-15T21:48:03.417299+00:00"
+  "current_phase": "idle",
+  "agents": {},
+  "last_updated": "2026-04-15T22:30:10.783418+00:00"
 }

@@ -1,0 +1,10 @@
+{
+  "fitness": 0,
+  "is_valid": 0,
+  "mAP50": 0,
+  "mAP50_95": 0,
+  "F1": 0,
+  "error": "[Errno 32] Broken pipe",
+  "traceback": "Traceback (most recent call last):\n  File \"/home/sasha/Desktop/idea_evolve/idea-evolve/problems/strawberry/evaluate.py\", line 139, in _gpu_lock\n    yield\n  File \"/home/sasha/Desktop/idea_evolve/idea-evolve/problems/strawberry/evaluate.py\", line 409, in main\n    raw_result = module.entrypoint()\n                 ^^^^^^^^^^^^^^^^^^^\n  File \"/home/sasha/Desktop/idea_evolve/idea-evolve/runs/strawberry/attempt_001/workspace/gen001_explore_2/output/sol01.py\", line 5, in entrypoint\n    return train_and_eval(\n           ^^^^^^^^^^^^^^^\n  File \"/home/sasha/Desktop/idea_evolve/idea-evolve/problems/strawberry/helpers/core.py\", line 277, in train_and_eval\n    raise RuntimeError(\nRuntimeError: Training failed: BrokenPipeError: [Errno 32] Broken pipe. Logs preserved at /tmp/idea_evolve_strawberry/last_train_logs \u2014 agents can read them.\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/home/sasha/Desktop/idea_evolve/idea-evolve/problems/strawberry/evaluate.py\", line 405, in main\n    with _gpu_lock():\n  File \"/usr/lib/python3.12/contextlib.py\", line 158, in __exit__\n    self.gen.throw(value)\n  File \"/home/sasha/Desktop/idea_evolve/idea-evolve/problems/strawberry/evaluate.py\", line 143, in _gpu_lock\n    print(\"[evaluate.py] GPU lock released.\", file=sys.stderr, flush=True)\nBrokenPipeError: [Errno 32] Broken pipe\n",
+  "log_path": "/home/sasha/Desktop/idea_evolve/idea-evolve/runs/strawberry/attempt_001/proc_logs/2026-04-15T21-58-25_explore_2_eval_fail_169766.md"
+}
