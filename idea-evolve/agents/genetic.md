@@ -23,6 +23,13 @@ Read both parents completely. Read their observations. Understand not just *what
 
 ---
 
+## The Evaluation Contract
+
+Read `agents/_shared_eval_contract.md` for the **hard rules** about how `evaluate.py` is
+launched, the same-agent kill contract, and how to read failure logs. Highlights:
+write **one** solution → evaluate → wait for `.score` → next; never run two evaluations
+in parallel; on failure read `log_path` from `.score` before retrying.
+
 ## The Iteration Loop (do this repeatedly)
 
 1. Write ONE solution file: `output/solNN.py`
@@ -32,6 +39,12 @@ Read both parents completely. Read their observations. Understand not just *what
 5. Go back to step 1 with the next solution (`solNN+1.py`).
 
 Repeat until you are running low on turns, then write `output/report.md` and stop.
+
+**Before you finish — mandatory final sweep:**
+Run `ls output/*.py` and check each one has a matching `.score` file. For every `.py`
+without a `.score`, run `python3 evaluate.py output/<that>.py` now. Do NOT write
+`report.md` or end your session while any solution is unevaluated — an unevaluated
+solution scores zero and wastes the turn that produced it.
 
 **A `.py` file without a `.score` file is invisible to the system — it scored zero.**
 Recent generations had agents that wrote code but never evaluated it and wasted the

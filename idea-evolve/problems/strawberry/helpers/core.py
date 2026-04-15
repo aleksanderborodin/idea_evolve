@@ -300,8 +300,10 @@ def _preserve_training_logs(run_path, crashed: bool, crash_msg: str):
         TRAIN_LOG_DIR/args.yaml        — the exact train() config that ran
         TRAIN_LOG_DIR/train.log        — full stdout/stderr if YOLO wrote one
         TRAIN_LOG_DIR/crash_tail.log   — only on crash: last exception + context
+        TRAIN_LOG_DIR/best.pt          — best checkpoint (so evaluate.py can
+                                          archive it for later reproduction)
     """
-    import shutil, os
+    import os, shutil
     try:
         TRAIN_LOG_DIR.mkdir(parents=True, exist_ok=True)
         # Clear old artifacts to avoid confusing stale + fresh output
@@ -309,18 +311,109 @@ def _preserve_training_logs(run_path, crashed: bool, crash_msg: str):
             if p.is_file():
                 try: p.unlink()
                 except Exception: pass
-        # Copy whatever YOLO produced
+        # Copy whatever YOLO produced. fsync each copied file so a SIGKILL
+        # before evaluate.py reads it does not lose the artifact.
         for fname in ("results.csv", "args.yaml", "train.log", "events.out.tfevents"):
             for src in Path(run_path).rglob(fname):
                 try:
-                    shutil.copy2(src, TRAIN_LOG_DIR / src.name)
+                    dst = TRAIN_LOG_DIR / src.name
+                    shutil.copy2(src, dst)
+                    _fsync_path(dst)
+                    break
+                except Exception:
+                    pass
+        # Preserve best.pt for archive_checkpoint() (called from evaluate.py).
+        for pt_name in ("best.pt", "last.pt"):
+            for src in Path(run_path).rglob(pt_name):
+                try:
+                    dst = TRAIN_LOG_DIR / pt_name
+                    shutil.copy2(src, dst)
+                    _fsync_path(dst)
                     break
                 except Exception:
                     pass
         if crashed:
-            (TRAIN_LOG_DIR / "crash_tail.log").write_text(
+            crash_path = TRAIN_LOG_DIR / "crash_tail.log"
+            crash_path.write_text(
                 f"Training crashed: {crash_msg}\n"
                 f"Run directory (may still exist): {run_path}\n"
             )
+            _fsync_path(crash_path)
     except Exception:
         pass
+
+
+def _fsync_path(p) -> None:
+    """fsync a single file so its contents survive a hard crash."""
+    import os
+    try:
+        fd = os.open(str(p), os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    except OSError:
+        pass
+
+
+# ── Checkpoint archive (for `evaluate.py --reproduce <hash>`) ────────────────────
+
+def archive_checkpoint(content_hash: str, run_root: "Path | str",
+                       src_pt: "Path | str | None" = None,
+                       retention: int = 50) -> "Path | None":
+    """Persist `src_pt` (defaults to the just-trained best.pt) under
+    `<run_root>/checkpoints/<content_hash>.pt` so the same scored solution can
+    be reproduced later via `evaluate.py --reproduce <hash>` without retraining.
+
+    LRU-prunes the checkpoint dir to `retention` entries (oldest evicted first).
+
+    Returns the destination path, or None if nothing was archived.
+    """
+    import shutil
+    from pathlib import Path as _Path
+    src = _Path(src_pt) if src_pt else (TRAIN_LOG_DIR / "best.pt")
+    if not src.exists():
+        return None
+    dst_dir = _Path(run_root) / "checkpoints"
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    dst = dst_dir / f"{content_hash}.pt"
+    try:
+        shutil.copy2(src, dst)
+        _fsync_path(dst)
+    except OSError:
+        return None
+    _prune_checkpoints(dst_dir, retention)
+    return dst
+
+
+def _prune_checkpoints(dst_dir, retention: int) -> int:
+    """LRU-prune .pt files in dst_dir to `retention`. Returns count removed."""
+    from pathlib import Path as _Path
+    pts = sorted(_Path(dst_dir).glob("*.pt"), key=lambda p: p.stat().st_mtime)
+    excess = len(pts) - retention
+    if excess <= 0:
+        return 0
+    removed = 0
+    for p in pts[:excess]:
+        try:
+            p.unlink()
+            removed += 1
+        except OSError:
+            pass
+    return removed
+
+
+def evaluate_from_checkpoint(content_hash: str, run_root: "Path | str",
+                             tta: bool = False) -> dict:
+    """Re-run the test-eval against an archived checkpoint. Skips training.
+
+    Raises FileNotFoundError if the checkpoint has been LRU-evicted.
+    """
+    from pathlib import Path as _Path
+    pt = _Path(run_root) / "checkpoints" / f"{content_hash}.pt"
+    if not pt.exists():
+        raise FileNotFoundError(
+            f"No archived checkpoint for hash {content_hash} at {pt}. "
+            "It may have been LRU-evicted (checkpoint_retention exceeded)."
+        )
+    return evaluate_on_test(str(pt), tta=tta)

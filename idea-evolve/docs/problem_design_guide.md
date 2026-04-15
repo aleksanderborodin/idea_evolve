@@ -292,6 +292,72 @@ when a specific question arises. Agents use `cat`, `head`, `tail`, or `Read` as 
 
 ---
 
+## 5.5. Error preservation (so agents can learn from failures)
+
+When `entrypoint()` raises, an agent has three questions:
+1. What was the error?
+2. Where did it happen?
+3. Did my ancestors hit this same error?
+
+If the answer to (3) is "I can't tell", agents repeat their predecessors' failures
+generation after generation. This happened on strawberry: multiple solutions died with
+`"error": "[Errno 32] Broken pipe"` — 22 characters with no traceback — and the
+`/tmp/.../last_train_logs/` artifacts that would have explained why were overwritten
+by the next training run.
+
+### The rule
+
+On error, `evaluate.py` MUST preserve enough context next to the failing solution that
+a future agent reading `population/genNNN/<agent>/sol01.score` can diagnose the failure
+without re-running anything.
+
+**Minimum preserved fields in `.score`:**
+```json
+{
+  "is_valid": 0,
+  "fitness": 0,
+  "error": "<first 500 chars of exception message>",
+  "traceback": "<first 4000 chars of traceback.format_exc()>"
+}
+```
+
+**If your problem writes ephemeral diagnostic files (training logs, intermediate
+artifacts, profiling output)**, snapshot them next to the solution on error:
+
+```python
+# evaluate.py — in the top-level except clause
+import shutil, traceback
+tb = traceback.format_exc()
+error_result = _error_result(str(e), tb=tb)
+# Snapshot /tmp/<problem>/last_run/ into <solution>_crash_logs/
+sol = Path(solution_path)
+dest = sol.parent / f"{sol.stem}_crash_logs"
+if TRAIN_LOG_DIR.exists():
+    dest.mkdir(parents=True, exist_ok=True)
+    for src in TRAIN_LOG_DIR.iterdir():
+        if src.is_file():
+            shutil.copy2(src, dest / src.name)
+_write_score_sidecar(solution_path, error_result)
+```
+
+This costs ~10 lines of code and nothing at runtime (the copy only happens on failure).
+See `problems/strawberry/evaluate.py` for the reference implementation.
+
+### Why "next to the solution" specifically
+
+The solution file lives in `population/genNNN/<agent>/sol01.py` permanently — that
+directory survives the orchestrator's cleanup step. Anything copied next to it persists
+across generations. `/tmp/` paths get overwritten by the next evaluation and are
+single-use.
+
+### Document the path in description.md
+
+Agents won't read `<solution>_crash_logs/` unless you tell them to. Add it to the
+"Agent-readable artifacts" table in `description.md` with a one-line description and
+an example `cat` command. Without documentation, the feature is invisible.
+
+---
+
 ## 6. Helpers: the contract between problem author and agents
 
 Helpers are a force multiplier. A good helper compresses 30 lines of boilerplate into
@@ -385,3 +451,161 @@ When you add a new problem, work through this list:
 - **Solutions read their path at runtime.** If your `entrypoint()` needs the solution
   file's directory (e.g. to write outputs next to itself), use `Path(__file__).parent`
   — NOT `os.getcwd()`. The evaluator runs them from the agent workspace.
+
+---
+
+## 9. Resource-contended problems (GPU-serial, file-locked, shared external service)
+
+Some problems cannot have more than one `evaluate.py` running at once: GPU training,
+problems that bind the same TCP port, problems that hold an exclusive file lock on a
+dataset, etc. Idea-evolve calls these **eval-serial** problems. The mechanism for
+serializing them is **architect-driven scheduling**, not a race on a system-wide lock —
+the lock exists only as a backstop.
+
+### 9.1 Declare it in metrics.yaml
+
+```yaml
+# problems/<id>/metrics.yaml
+concurrency: serial            # default: parallel
+archive_checkpoints: true      # default: false; only meaningful for problems that train
+checkpoint_retention: 50       # default 50; LRU pruning keyed by content hash
+```
+
+The orchestrator passes `concurrency` to the architect prompt context. The architect
+uses it to decide `parallel_groups` — single-element groups for `serial`, one giant
+group for `parallel`. **The orchestrator no longer overrides `parallel_groups`** —
+whatever the architect writes is honored (with a fallback to `[[all]]` only on
+malformed YAML).
+
+### 9.2 Same-agent kill contract
+
+When an agent launches a new `evaluate.py` while a previous one of theirs is still
+running, the new invocation **terminates the old one** before acquiring resources.
+Implementation:
+
+- Every `evaluate.py` calls `eval_queue.enqueue(agent_name, problem, attempt, solution_path)`
+  on entry. The queue lives at `/tmp/idea_evolve_eval_queue.json` under `fcntl.flock`.
+- Every `evaluate.py` calls `eval_queue.kill_stale_same_agent(agent_name, kill_hook=...)`
+  *before* acquiring the problem-level lock (e.g. GPU lock).
+- The kill check enforces 8 invariants (queue presence, agent name match, pid alive,
+  pgid match, `/proc/<pid>/cmdline` contains `evaluate.py`, env shows the same
+  `IDEA_EVOLVE_AGENT_NAME`, per-agent fcntl mutex held). On any mismatch it **fails
+  open** — the new eval simply queues, never kills the wrong process.
+- Per-problem `eval_hooks.py` defines `kill_eval(pid, pgid, solution_path)`. CPU
+  problems can omit this (default hook = `killpg(pgid, SIGTERM)` → grace → SIGKILL).
+  Strawberry's hook also waits for the GPU lock to be released and logs every step
+  to `/tmp/idea_evolve_strawberry/kill_log.json`.
+
+The killed solution will have **no `.score` sidecar**. Agent prompts (via
+`agents/_shared_eval_contract.md`) instruct agents to treat it as permanently
+abandoned, not retry.
+
+### 9.3 Agent-readable narrative logs (proc_logs)
+
+Every non-trivial process outcome — crash, kill, slow success — writes a markdown
+narrative log under `runs/<problem>/<attempt>/proc_logs/<ts>_<agent>_<kind>_<pid>.md`
+via `problems/_shared/proc_log.Writer`. Format:
+
+```markdown
+# Process Log — explore_1 / evaluate.py / pid 12345
+
+## Summary
+- **Outcome:** CRASHED
+- **Error class:** BrokenPipeError
+- **Duration:** 67s
+- **Solution:** output/sol01.py (hash a1b2c3...)
+
+## Timeline
+- 18:03:12 — enqueue
+- 18:03:14 — mark_running (lock acquired)
+- 18:04:01 — exception raised
+
+## Traceback
+```python
+...
+```
+
+## What to try next
+(produced by problems/<id>/eval_hooks.py:diagnose_failure)
+- If broken pipe: check that metrics.yaml says `concurrency: serial` ...
+```
+
+The `.score` sidecar gains a `log_path` field on failure. Agents are taught to read it
+before retrying (see `_shared_eval_contract.md` § "Reading failure logs"). Logs are
+append-only line-buffered with `os.fsync` so they survive SIGKILL up to the last line.
+Retention: last 200 per attempt, with `sticky: true` logs (failures, kills) excluded
+from pruning.
+
+### 9.4 Reproducing a scored solution
+
+Required `description.md` section for any problem that trains models or has run-to-run
+variance. Four steps:
+
+1. **Bust the cache** — `evaluate.py` caches by file content hash; without busting, the
+   re-run returns the cached score instantly.
+2. **Re-evaluate from the archive** — `python3 problems/<id>/evaluate.py --reproduce <hash>`
+   loads the archived `best.pt` and runs only the test/eval phase (no retraining).
+3. **Expected variance** — state the numeric range and source of nondeterminism.
+4. **Required artifacts** — list files that must still exist (e.g. archived
+   `<hash>.pt`).
+
+If the problem does not train models (sidon, gemm, permcodes), the reproduction story
+is "the cache hit IS the reproduction; identical content hash → identical result".
+
+---
+
+## 10. Glossary (consistent terminology across docs and prompts)
+
+| Term | Definition |
+|---|---|
+| **Evaluation** | One call to `evaluate.py <solution>` that produces a `.score` sidecar (or fails into a proc_log). |
+| **Eval-serial problem** | `metrics.yaml: concurrency: serial`. Architect must use single-element `parallel_groups`. |
+| **Eval-parallel problem** | `metrics.yaml: concurrency: parallel` (default). Architect groups all solution agents together. |
+| **Same-agent kill contract** | Rule that a new `evaluate.py` from agent X kills any still-running `evaluate.py` from the same agent X before acquiring resources. |
+| **Kill hook** | `problems/<id>/eval_hooks.py:kill_eval(pid, pgid, solution_path)` — problem-specific termination logic. |
+| **Diagnosis hook** | `problems/<id>/eval_hooks.py:diagnose_failure(error_class, message, context)` — returns markdown hint surfaced in the failure proc_log. |
+| **Eval queue** | `/tmp/idea_evolve_eval_queue.json` — single source of truth for live evaluations. |
+| **Proc log** | Markdown narrative at `runs/<problem>/<attempt>/proc_logs/...md` describing what one process did and why it ended. |
+| **Archive checkpoint** | `runs/<problem>/<attempt>/checkpoints/<content_hash>.pt` — kept iff `metrics.yaml: archive_checkpoints: true`. LRU-pruned to `checkpoint_retention`. |
+| **Stale evaluation** | A queue entry whose pid is alive but belongs to a previous `evaluate.py` of the same agent that is launching a new one. Targeted by the kill contract. |
+| **Sticky proc_log** | A proc_log marked `sticky: true` (typically failures, kills) and excluded from the 200-log retention prune. |
+
+All other docs (`CLAUDE.md`, `description.md`, `helpers/README.md`, agent prompts) MUST
+use these exact terms.
+
+---
+
+## 11. Cross-reference table — code ↔ doc ↔ prompt
+
+When you change a row, update every cell in that row. The `scripts/check_docs_consistency.py`
+script verifies the references resolve.
+
+| Behavior | Code | Doc | Agent prompt |
+|---|---|---|---|
+| `concurrency` flag parsing | `orchestrator.py:concurrency_mode()`, `problems/_shared/constants.py:DEFAULT_CONCURRENCY` | this guide §9.1 | `architect.md` § "Parallel groups" |
+| `parallel_groups` honoring | `orchestrator.py:_normalize_parallel_groups()` | this guide §9.1 | `architect.md` § "What You Produce" |
+| Eval queue | `problems/_shared/eval_queue.py`, `problems/_shared/constants.py:EVAL_QUEUE_PATH` | this guide §9.2 | `_shared_eval_contract.md` § "Per-evaluation artifacts" |
+| Same-agent kill | `eval_queue.kill_stale_same_agent()`, per-problem `eval_hooks.py:kill_eval` | this guide §9.2 | `_shared_eval_contract.md` § "Same-agent kill contract" |
+| Proc logs | `problems/_shared/proc_log.py:Writer` | this guide §9.3 | `_shared_eval_contract.md` § "Reading failure logs" |
+| Archive checkpoint | `metrics.yaml: archive_checkpoints`, helpers/core.py `archive_checkpoint`/`evaluate_from_checkpoint` | this guide §9.4 | per-problem `description.md` "Reproducing a scored solution" |
+| Identity env vars | `problems/_shared/constants.py:ENV_AGENT_NAME` etc., `orchestrator_harness._build_env` | this guide §9.2 | (transparent to agents) |
+
+---
+
+## 12. Single source of truth for constants
+
+All cross-cutting paths, env-var names, and timeouts live in
+`problems/_shared/constants.py`. Imports look like:
+
+```python
+from problems._shared.constants import (
+    EVAL_QUEUE_PATH, GPU_LOCK_PATH,
+    KILL_GRACE_SECONDS, KILL_DEADLINE_SECONDS,
+    DEFAULT_CHECKPOINT_RETENTION, DEFAULT_CONCURRENCY,
+    ENV_AGENT_NAME, ENV_PROBLEM, ENV_ATTEMPT,
+)
+```
+
+**Never duplicate these as string literals in evaluate.py, helpers, or docs.** The
+consistency checker walks code + docs and fails if a constant name appears in a doc
+without resolving from `constants.py`.

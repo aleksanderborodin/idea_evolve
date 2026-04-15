@@ -477,6 +477,30 @@ def fitness_is_higher_better(project_root: Path) -> bool:
     return spec.get("higher_is_better", True)
 
 
+def concurrency_mode(project_root: Path) -> str:
+    """Per-problem evaluation concurrency from metrics.yaml.
+
+    Returns "serial" if evaluations contend for a single hardware resource
+    (GPU, large RAM, exclusive disk lock) and must run one at a time.
+    Returns "parallel" (default) for CPU-bound problems where many agents
+    can evaluate concurrently.
+
+    The architect reads this value (surfaced in its prompt) to decide how to
+    structure `parallel_groups` in the manifest.
+    """
+    from problems._shared.constants import DEFAULT_CONCURRENCY  # type: ignore
+    mf = load_metrics_file(project_root)
+    val = str(mf.get("concurrency", DEFAULT_CONCURRENCY)).lower()
+    return val if val in ("serial", "parallel") else DEFAULT_CONCURRENCY
+
+
+def archive_checkpoints_enabled(project_root: Path) -> bool:
+    """Whether the problem opts into checkpoint archiving for reproducibility."""
+    from problems._shared.constants import DEFAULT_ARCHIVE_CHECKPOINTS  # type: ignore
+    mf = load_metrics_file(project_root)
+    return bool(mf.get("archive_checkpoints", DEFAULT_ARCHIVE_CHECKPOINTS))
+
+
 def get_target_score(project_root: Path, config: dict) -> float:
     """Get target score from metrics.yaml (preferred) or config.yaml (fallback)."""
     mf = load_metrics_file(project_root)
@@ -676,6 +700,7 @@ from orchestrator_harness import (
     safe_run,
     set_subreaper,
 )
+from problems._shared.constants import ENV_RUN_ROOT  # noqa: E402
 
 
 def _run_root() -> Path | None:
@@ -702,6 +727,17 @@ def _get_adapter(agent_role: str | None = None):
     return get_adapter(_harness_for(agent_role), opencode_model_map=oc_map)
 
 
+def _identity_kwargs(agent_name: str | None) -> dict:
+    """Identity env vars consumed by problems/_shared/eval_queue.py for the
+    same-agent kill contract. Pulls problem/attempt from CTX so call sites
+    only need to pass `agent_name` (e.g. "explore_1", "evaluator")."""
+    return {
+        "agent_name": agent_name,
+        "problem": (CTX.problem_id if CTX else None),
+        "attempt": (CTX.attempt_id if CTX else None),
+    }
+
+
 def launch_claude_session(
     project_root: Path,
     prompt_text: str,
@@ -711,6 +747,7 @@ def launch_claude_session(
     allowed_tools: list[str] | None = None,
     session_id: str | None = None,
     agent_role: str | None = None,
+    agent_name: str | None = None,
 ) -> tuple[str, str, int]:
     """Launch an agent session via the configured harness. Returns (stdout, session_id, pid)."""
     adapter = _get_adapter(agent_role)
@@ -723,6 +760,7 @@ def launch_claude_session(
         allowed_tools=allowed_tools,
         session_id=session_id,
         run_root=_run_root(),
+        **_identity_kwargs(agent_name or agent_role),
     )
 
 
@@ -735,6 +773,7 @@ def resume_claude_session(
     max_turns: int = 50,
     allowed_tools: list[str] | None = None,
     agent_role: str | None = None,
+    agent_name: str | None = None,
 ) -> str:
     """Resume an existing session with a follow-up message. The agent retains full memory."""
     adapter = _get_adapter(agent_role)
@@ -747,6 +786,7 @@ def resume_claude_session(
         max_turns=max_turns,
         allowed_tools=allowed_tools,
         run_root=_run_root(),
+        **_identity_kwargs(agent_name or agent_role),
     )
 
 
@@ -1568,7 +1608,7 @@ def _bootstrap_gen0(project_root: Path):
 
     env = os.environ.copy()
     if CTX:
-        env["IDEA_EVOLVE_RUN_ROOT"] = str(CTX.run_root)
+        env[ENV_RUN_ROOT] = str(CTX.run_root)
 
     best_score = None
     higher_better = fitness_is_higher_better(_global(project_root))
@@ -1795,6 +1835,17 @@ def build_architect_prompt(project_root: Path, gen: int, config: dict) -> str:
 
 {exp_req_section}
 
+## Evaluation concurrency for this problem
+
+`metrics.yaml: concurrency: {concurrency_mode(project_root)}`
+
+- **parallel** → group all solution agents in one parallel group: `[[a, b, c, d]]`.
+- **serial** → one agent per group: `[[a], [b], [c], [d]]`. Evaluations would otherwise
+  collide on a shared resource (GPU, port, lock). The same-agent kill contract is the
+  backstop, NOT the primary defense — your scheduling is.
+
+See `agents/architect.md` § "Parallel groups" for the full rules.
+
 ## Agent Configuration
 ```yaml
 {agent_config}
@@ -1833,12 +1884,24 @@ def build_agent_prompt(
     gen_str = f"gen{gen:03d}"
     prompt_template = _read_file(_global(project_root) / "agents" / f"{agent_type}.md")
     brief = _read_file(project_root / Path(brief_path))
+    # Solution agents need the shared eval contract inline (not just a reference) —
+    # they have no guaranteed read of agents/_shared_eval_contract.md otherwise.
+    SOLUTION_AGENTS = {"explore", "exploit", "full", "genetic"}
+    eval_contract_section = ""
+    if agent_type in SOLUTION_AGENTS:
+        contract_path = _global(project_root) / "agents" / "_shared_eval_contract.md"
+        if contract_path.exists():
+            eval_contract_section = (
+                "\n---\n\n# SHARED EVALUATION CONTRACT (mandatory rules)\n\n"
+                + _read_file(contract_path)
+                + "\n"
+            )
     ws_path = project_root / "workspace" / f"{gen_str}_{agent_type}_{instance}"
     report_path = f"{ws_path}/output/report.md"
     debrief = DEBRIEF_INSTRUCTIONS(project_root).format(report_path=report_path)
 
     return f"""{prompt_template}
-
+{eval_contract_section}
 ---
 
 # CONTEXT
@@ -2077,7 +2140,14 @@ Write all output to: `{ws_path}/output/`
 
 
 def _helpers_section(project_root: Path) -> str:
-    """Generate a prompt section listing available shared helper tools."""
+    """Generate a prompt section listing available shared helper tools.
+
+    Inlines the helpers/README.md (capped at 3000 chars) so agents see
+    "Use this when…" hooks per helper without a separate Read tool call.
+    Without this inlining, the REC-3 failure mode recurs: a helper exists
+    in code, agents never call it, and the System Critic asks for it to
+    be implemented every generation.
+    """
     helpers_dir = _problem(project_root) / "helpers"
     if not helpers_dir.exists():
         return ""
@@ -2087,7 +2157,6 @@ def _helpers_section(project_root: Path) -> str:
     lines = ["\n## Shared Helper Tools\n",
              "The following helper tools are available in `problem/helpers/`:\n"]
     for hf in helper_files:
-        # Try to extract module docstring
         doc = ""
         try:
             tree = ast.parse(hf.read_text())
@@ -2101,7 +2170,19 @@ def _helpers_section(project_root: Path) -> str:
     lines.append(f"\nImport in solution files: `from helpers.<module> import <function>`")
     lines.append(f"Examples: `from helpers.core import compute_c`  |  `from helpers.sa_calibration import calibrate_sa_temperature`")
     lines.append(f"(`evaluate.py` adds `problem/` to sys.path, so `helpers/` is directly importable)")
-    lines.append(f"See `problem/helpers/README.md` for full index and documentation.\n")
+    readme = helpers_dir / "README.md"
+    if readme.exists():
+        try:
+            body = readme.read_text()
+            cap = 3000
+            if len(body) > cap:
+                body = body[:cap] + "\n\n[TRUNCATED — read full README for details]"
+            lines.append(f"\n### helpers/README.md (inlined for discoverability)\n")
+            lines.append(body)
+        except OSError:
+            lines.append(f"See `problem/helpers/README.md` for full index.\n")
+    else:
+        lines.append(f"See `problem/helpers/README.md` for full index and documentation.\n")
     return "\n".join(lines)
 
 
@@ -2487,6 +2568,7 @@ def _run_agent_group(project_root: Path, gen: int, config: dict,
                     timeout=get_timeout(config, "debrief_recovery"),
                     max_turns=get_max_turns(config, "debrief_recovery"),
                     allowed_tools=["Read", "Write", "Glob", "Grep"],
+                    agent_role=atype, agent_name=agent_name,
                 )
             except Exception as e:
                 print(f"  Debrief recovery failed for {agent_name}: {e}")
@@ -2578,6 +2660,8 @@ def _run_agent_group(project_root: Path, gen: int, config: dict,
                 timeout=work_timeout,
                 max_turns=get_max_turns(config, atype),
                 allowed_tools=tools,
+                agent_role=atype,
+                agent_name=f"{atype}_{instance}",
             )
             _write_gen_progress(project_root, gen, agents={
                 f"{atype}_{instance}": {
@@ -2644,6 +2728,8 @@ def _run_agent_group(project_root: Path, gen: int, config: dict,
                     timeout=wrap_up_timeout,
                     max_turns=get_max_turns(config, "wrap_up"),
                     allowed_tools=["Read", "Write", "Bash", "Glob", "Grep"],
+                    agent_role=atype,
+                    agent_name=f"{atype}_{instance}",
                 )
             except SessionTimeout:
                 print(f"  {atype}_{instance} wrap-up also timed out after {wrap_up_timeout}s")
@@ -2672,6 +2758,8 @@ def _run_agent_group(project_root: Path, gen: int, config: dict,
                         timeout=debrief_timeout,
                         max_turns=get_max_turns(config, "debrief_recovery"),
                         allowed_tools=["Read", "Write", "Glob", "Grep"],
+                        agent_role=atype,
+                        agent_name=f"{atype}_{instance}",
                     )
                 else:
                     # No session to resume — fall back to new session with context
@@ -2689,6 +2777,8 @@ def _run_agent_group(project_root: Path, gen: int, config: dict,
                         timeout=debrief_timeout,
                         max_turns=get_max_turns(config, "debrief_recovery"),
                         allowed_tools=["Read", "Write", "Glob", "Grep"],
+                        agent_role=atype,
+                        agent_name=f"{atype}_{instance}",
                     )
             except Exception as e:
                 print(f"  Debrief recovery also failed for {atype}_{instance}: {e}")
@@ -2759,6 +2849,49 @@ def _run_agent_group(project_root: Path, gen: int, config: dict,
                 print(f"  ERROR in agent thread: {e}")
 
 
+def _normalize_parallel_groups(raw_groups, all_names: list[str], mode: str) -> list[list[str]]:
+    """Validate architect-supplied parallel_groups; fall back safely on any error.
+
+    Rules:
+      - serial mode: every agent gets its own group (one-at-a-time execution),
+        regardless of what the architect wrote. The kill-on-new-solution
+        contract handles intra-agent serialization; this handles inter-agent.
+      - parallel mode + valid groups: honored as-written, with dedup + filter
+        to only include known agents. Any agent missing from the manifest
+        groups is appended as its own trailing group (so nothing is silently
+        dropped).
+      - parallel mode + missing/invalid groups: fall back to one big group
+        (all agents in parallel), preserving prior behavior.
+    """
+    if mode == "serial":
+        return [[name] for name in all_names]
+
+    if not raw_groups or not isinstance(raw_groups, list):
+        return [list(all_names)] if all_names else []
+
+    seen_global: set[str] = set()
+    groups: list[list[str]] = []
+    for g in raw_groups:
+        if not isinstance(g, list):
+            continue
+        deduped = []
+        for name in g:
+            if not isinstance(name, str):
+                continue
+            if name in seen_global:
+                continue
+            if name not in all_names:
+                continue
+            seen_global.add(name)
+            deduped.append(name)
+        if deduped:
+            groups.append(deduped)
+    leftover = [n for n in all_names if n not in seen_global]
+    if leftover:
+        groups.append(leftover)
+    return groups if groups else ([list(all_names)] if all_names else [])
+
+
 def run_agents(project_root: Path, gen: int, config: dict):
     """Phase 2: Launch agents respecting parallel_groups ordering."""
     gen_str = f"gen{gen:03d}"
@@ -2804,8 +2937,16 @@ def run_agents(project_root: Path, gen: int, config: dict):
         name = f"{spec['type']}_{spec['instance']}"
         agent_lookup[name] = spec
 
-    # All agents always run in one parallel group — results feed the next generation
-    parallel_groups = [list(agent_lookup.keys())]
+    # Honor architect-specified parallel_groups when present and valid.
+    # For serial-eval problems, force one-agent-per-group regardless of manifest
+    # (otherwise the GPU lock pile-up that destroyed strawberry gen 1-3 returns).
+    mode = concurrency_mode(project_root)
+    raw_groups = manifest.get("parallel_groups")
+    parallel_groups = _normalize_parallel_groups(raw_groups, list(agent_lookup.keys()), mode)
+    if mode == "serial":
+        print(f"  Concurrency mode: SERIAL ({len(parallel_groups)} sequential groups, 1 agent each)")
+    else:
+        print(f"  Concurrency mode: PARALLEL ({len(parallel_groups)} group(s))")
 
     # Kill orphans from any prior crashed run of this generation
     _kill_generation_orphans(project_root, gen)
@@ -2951,6 +3092,7 @@ def _run_analysis_with_debrief(
         _, session_id, _pid = launch_claude_session(
             project_root, prompt, model=model, timeout=timeout,
             max_turns=max_turns, allowed_tools=allowed_tools,
+            agent_role=agent_type, agent_name=agent_type,
         )
     except SessionTimeout as e:
         timed_out = True
@@ -2979,6 +3121,7 @@ def _run_analysis_with_debrief(
                 timeout=wrap_up_timeout,
                 max_turns=get_max_turns(config, "wrap_up"),
                 allowed_tools=allowed_tools,
+                agent_role=agent_type, agent_name=agent_type,
             )
         except SessionTimeout:
             print(f"  {agent_type} wrap-up also timed out after {wrap_up_timeout}s")
@@ -3002,6 +3145,7 @@ def _run_analysis_with_debrief(
                     project_root, session_id, debrief_msg, model="sonnet",
                     timeout=debrief_timeout, max_turns=debrief_max_turns,
                     allowed_tools=["Read", "Write", "Glob", "Grep"],
+                    agent_role=agent_type, agent_name=agent_type,
                 )
             else:
                 debrief_prompt = ANALYSIS_DEBRIEF_PROMPT(project_root).format(
@@ -3012,6 +3156,7 @@ def _run_analysis_with_debrief(
                     project_root, debrief_prompt, model="sonnet",
                     timeout=debrief_timeout, max_turns=debrief_max_turns,
                     allowed_tools=["Read", "Write", "Glob", "Grep"],
+                    agent_role=agent_type, agent_name=agent_type,
                 )
         except Exception as e:
             print(f"  Debrief recovery failed for {agent_type}: {e}")

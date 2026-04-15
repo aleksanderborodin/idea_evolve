@@ -508,3 +508,27 @@ Files modified since gen 1:
 - knowledge/ideas/established/idea_012.md
 - knowledge/ideas/established/idea_001.md
 - knowledge/ideas/active/idea_006.md
+
+## Generation 3
+Files modified since gen 2:
+- knowledge/state_of_affairs.md
+- knowledge/clusters/cluster_003.md
+- knowledge/clusters/cluster_001.md
+- knowledge/patterns/confirmed/pattern_007.md
+- knowledge/patterns/confirmed/pattern_008.md
+- knowledge/experiments/gen003/experimentator_1/per_class_findings.md
+- knowledge/experiments/gen003/experimentator_1/helpers/core_update.py
+- knowledge/experiments/gen003/experimentator_1/sandbox/data/per_class_yolo11s_coco_20ep.json
+- knowledge/experiments/gen003/experimentator_1/helpers/__pycache__/core_update.cpython-312.pyc
+- knowledge/research/gen003/research_1/findings.md
+- knowledge/ideas/disputed/idea_015.md
+- knowledge/ideas/disputed/idea_001.md
+- knowledge/ideas/disputed/idea_002.md
+- knowledge/ideas/established/idea_004.md
+- knowledge/ideas/established/idea_014.md
+- knowledge/ideas/established/idea_013.md
+- knowledge/ideas/active/idea_008.md
+- agents/full.md
+- agents/explore.md
+- agents/exploit.md
+- agents/genetic.md

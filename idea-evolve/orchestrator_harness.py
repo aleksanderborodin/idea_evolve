@@ -28,6 +28,14 @@ import threading
 import uuid
 from pathlib import Path
 
+# Single source of truth for env-var names — see problems/_shared/constants.py.
+_HERE = Path(__file__).resolve().parent
+if str(_HERE) not in sys.path:
+    sys.path.insert(0, str(_HERE))
+from problems._shared.constants import (  # noqa: E402
+    ENV_AGENT_NAME, ENV_ATTEMPT, ENV_PROBLEM, ENV_RUN_ROOT,
+)
+
 
 # ---------------------------------------------------------------------------
 # Exceptions — shared by all adapters
@@ -68,11 +76,29 @@ OPENCODE_MODEL_MAP_DEFAULT = {
 }
 
 
-def _build_env(run_root: Path | None) -> dict:
+def _build_env(
+    run_root: Path | None,
+    agent_name: str | None = None,
+    problem: str | None = None,
+    attempt: str | None = None,
+) -> dict:
+    """Build the env dict for a launched agent subprocess.
+
+    Injects identity vars consumed by problems/_shared/eval_queue.py — every
+    evaluate.py spawned downstream uses these to label its queue entry and to
+    decide which other entries belong to the same agent (for the kill-on-
+    new-solution contract).
+    """
     env = os.environ.copy()
     env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = "16000"
     if run_root is not None:
-        env["IDEA_EVOLVE_RUN_ROOT"] = str(run_root)
+        env[ENV_RUN_ROOT] = str(run_root)
+    if agent_name:
+        env[ENV_AGENT_NAME] = agent_name
+    if problem:
+        env[ENV_PROBLEM] = problem
+    if attempt:
+        env[ENV_ATTEMPT] = attempt
     return env
 
 
@@ -193,7 +219,12 @@ class ClaudeCodeAdapter:
         self.model_map = model_map or CLAUDE_CODE_MODEL_MAP
 
     def _run(self, cmd, prompt_text, project_root, timeout, session_id):
-        env = _build_env(getattr(self, "_run_root", None))
+        env = _build_env(
+            getattr(self, "_run_root", None),
+            agent_name=getattr(self, "_agent_name", None),
+            problem=getattr(self, "_problem", None),
+            attempt=getattr(self, "_attempt", None),
+        )
         try:
             proc = subprocess.Popen(
                 cmd,
@@ -236,8 +267,14 @@ class ClaudeCodeAdapter:
         allowed_tools: list[str] | None = None,
         session_id: str | None = None,
         run_root: Path | None = None,
+        agent_name: str | None = None,
+        problem: str | None = None,
+        attempt: str | None = None,
     ) -> tuple[str, str, int]:
         self._run_root = run_root
+        self._agent_name = agent_name
+        self._problem = problem
+        self._attempt = attempt
         model_id = self.model_map.get(model, model)
         if session_id is None:
             session_id = str(uuid.uuid4())
@@ -267,8 +304,14 @@ class ClaudeCodeAdapter:
         max_turns: int = 50,
         allowed_tools: list[str] | None = None,
         run_root: Path | None = None,
+        agent_name: str | None = None,
+        problem: str | None = None,
+        attempt: str | None = None,
     ) -> str:
         self._run_root = run_root
+        self._agent_name = agent_name
+        self._problem = problem
+        self._attempt = attempt
         model_id = self.model_map.get(model, model)
         cmd = [
             "taskset", "-c", "2-7",
@@ -320,12 +363,13 @@ class OpenCodeAdapter:
             perm["webfetch"] = "allow"
         return {"OPENCODE_PERMISSION": json.dumps(perm)}
 
-    def _launch_streaming(self, cmd, prompt_text, project_root, timeout, run_root, extra_env):
+    def _launch_streaming(self, cmd, prompt_text, project_root, timeout, run_root, extra_env,
+                          agent_name=None, problem=None, attempt=None):
         """Launch opencode with --format json; stream stdout to capture sessionID
         from the first event. Returns (stdout_text, session_id, pid).
         Raises SessionTimeout with captured session_id attached on timeout.
         """
-        env = _build_env(run_root)
+        env = _build_env(run_root, agent_name=agent_name, problem=problem, attempt=attempt)
         env.update(extra_env)
 
         try:
@@ -409,6 +453,9 @@ class OpenCodeAdapter:
         allowed_tools: list[str] | None = None,
         session_id: str | None = None,
         run_root: Path | None = None,
+        agent_name: str | None = None,
+        problem: str | None = None,
+        attempt: str | None = None,
     ) -> tuple[str, str, int]:
         if not self._warned_max_turns:
             print(f"  NOTE: opencode has no --max-turns equivalent (requested {max_turns}); wall-clock timeout {timeout}s is the only ceiling.")
@@ -421,6 +468,7 @@ class OpenCodeAdapter:
         extra_env = self._allowed_tools_env(allowed_tools)
         stdout, sid, pid = self._launch_streaming(
             cmd, prompt_text, project_root, timeout, run_root, extra_env,
+            agent_name=agent_name, problem=problem, attempt=attempt,
         )
         if sid is None:
             raise SessionError(
@@ -439,6 +487,9 @@ class OpenCodeAdapter:
         max_turns: int = 50,
         allowed_tools: list[str] | None = None,
         run_root: Path | None = None,
+        agent_name: str | None = None,
+        problem: str | None = None,
+        attempt: str | None = None,
     ) -> str:
         model_id = self.model_map.get(model, model)
         cmd = [OPENCODE_BIN, "run", "--format", "json", "-s", session_id,
@@ -446,6 +497,7 @@ class OpenCodeAdapter:
         extra_env = self._allowed_tools_env(allowed_tools)
         stdout, _sid, _pid = self._launch_streaming(
             cmd, prompt_text, project_root, timeout, run_root, extra_env,
+            agent_name=agent_name, problem=problem, attempt=attempt,
         )
         return stdout
 

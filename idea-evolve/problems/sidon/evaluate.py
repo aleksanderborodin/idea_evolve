@@ -19,9 +19,17 @@ import traceback
 from pathlib import Path
 
 PROBLEM_ROOT = Path(__file__).parent
+_IDEA_EVOLVE_ROOT = PROBLEM_ROOT.parent.parent
+if str(_IDEA_EVOLVE_ROOT) not in sys.path:
+    sys.path.insert(0, str(_IDEA_EVOLVE_ROOT))
+
+from problems._shared import eval_queue  # noqa: E402
+from problems._shared.constants import (  # noqa: E402
+    ENV_AGENT_NAME, ENV_ATTEMPT, ENV_PROBLEM, ENV_RUN_ROOT,
+)
 
 # Cache lives in the run directory (set by orchestrator via env var).
-_RUN_ROOT = Path(os.environ["IDEA_EVOLVE_RUN_ROOT"]) if "IDEA_EVOLVE_RUN_ROOT" in os.environ else None
+_RUN_ROOT = Path(os.environ[ENV_RUN_ROOT]) if ENV_RUN_ROOT in os.environ else None
 CACHE_PATH = (_RUN_ROOT / "history" / "eval_cache.json") if _RUN_ROOT else Path("/tmp/idea_evolve_eval_cache.json")
 CACHE_LOCK_PATH = CACHE_PATH.with_suffix(".lock")
 
@@ -127,10 +135,24 @@ def main():
             except Exception:
                 pass
 
-        t0 = time.perf_counter()
-        output = load_solution(solution_path)
-        result = validate(output)
-        elapsed = time.perf_counter() - t0
+        # Queue visibility — sidon is parallel-safe, no kill-stale needed.
+        queue_id = eval_queue.enqueue(
+            os.environ.get(ENV_AGENT_NAME, "unknown"),
+            os.environ.get(ENV_PROBLEM, "sidon"),
+            os.environ.get(ENV_ATTEMPT, "unknown"),
+            solution_path,
+            status="running",
+        )
+        try:
+            t0 = time.perf_counter()
+            output = load_solution(solution_path)
+            result = validate(output)
+            elapsed = time.perf_counter() - t0
+        finally:
+            try:
+                eval_queue.dequeue(queue_id)
+            except Exception:
+                pass
 
         if track_time:
             result["eval_time_s"] = round(elapsed, 4)

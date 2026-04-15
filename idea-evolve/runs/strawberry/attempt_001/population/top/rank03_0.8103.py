@@ -1,1 +1,0 @@
-gen002/exploit_1/sol02.py

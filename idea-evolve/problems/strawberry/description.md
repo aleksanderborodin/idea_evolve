@@ -54,15 +54,48 @@ def entrypoint():
 
 ---
 
-## GPU lock — parallelism is handled automatically
+## GPU serialization, kill contract, and reproducibility
 
-evaluate.py holds a **system-wide GPU file lock** while training. If two agents run
-`evaluate.py` at the same time, the second one blocks until the first finishes. You do not
-need to worry about parallel_groups ordering — the lock makes it safe.
+This problem is **GPU-serial** (`metrics.yaml: concurrency: serial`). The architect MUST
+place strawberry agents in single-element `parallel_groups` so at most one is active at a
+time. evaluate.py also holds a system-wide GPU file lock at `GPU_LOCK_PATH` as a backstop,
+but relying on the lock for queueing causes the broken-pipe failures observed in earlier
+generations — the architect's scheduling is the primary defense.
 
-Each evaluation takes **~3-4 min** (20 fine-tuning epochs) or **~9 min** (50 from-scratch
-epochs). Evaluate solutions one at a time — write one solution, run evaluate.py, see the
-score, then decide what to try next.
+**Same-agent kill contract.** If you (the agent) launch a new `evaluate.py` while a previous
+one of yours is still training, the new invocation will safely terminate the old one and
+take the GPU. The killed solution will have **no `.score` sidecar** — treat it as
+permanently abandoned. Do not retry it; write a different `solNN.py`. See
+`docs/problem_design_guide.md` §kill-contract for the safety invariants.
+
+**Each evaluation takes ~3-4 min** (20 fine-tuning epochs) or **~9 min** (50 from-scratch
+epochs). Evaluate solutions one at a time — write one, run evaluate.py, read the `.score`,
+then decide what to try next.
+
+## Reproducing a scored solution
+
+`metrics.yaml: archive_checkpoints: true` is on for this problem. Every successful
+evaluation archives the trained `best.pt` to
+`runs/strawberry/<attempt>/checkpoints/<content_hash>.pt` keyed by the SHA-256 of the
+solution file. To verify a score is reproducible without retraining:
+
+1. **Bust the cache** (otherwise evaluate.py returns the cached score instantly):
+   ```bash
+   HASH=$(sha256sum population/genNNN/<agent>/sol01.py | cut -c1-64)
+   python3 -c "import json,fcntl,os; \
+     p='runs/strawberry/<attempt>/history/eval_cache.json'; \
+     d=json.load(open(p)); d.pop('$HASH', None); json.dump(d, open(p,'w'))"
+   ```
+2. **Re-evaluate from the archive** (skips training, just runs the test split):
+   ```bash
+   IDEA_EVOLVE_RUN_ROOT=runs/strawberry/<attempt> \
+   python3 problems/strawberry/evaluate.py --reproduce $HASH
+   ```
+3. **Expected variance:** ±0.005 mAP50 across reruns of the same checkpoint
+   (test eval is deterministic per `seed=0` — variance is driven only by
+   non-deterministic CUDA kernels).
+4. **Required artifacts:** the archived `<hash>.pt` must still exist (LRU pruned to
+   `checkpoint_retention=50` per attempt — older are evicted).
 
 ---
 
@@ -175,6 +208,8 @@ when you need detail — they are NOT in your prompt context by default.
 | `/tmp/idea_evolve_strawberry/last_train_logs/train.log` | Full stdout/stderr if YOLO wrote one | Debug warnings / CUDA OOM hints |
 | `/tmp/idea_evolve_strawberry/last_train_logs/crash_tail.log` | Only after crash: exception + context | Root-cause a failed run |
 | `/tmp/idea_evolve_strawberry/last_per_class.json` | Per-class mAP50 / mAP50_95 / precision / recall from the most recent `evaluate_on_test()` | Identify which disease is bottleneck (class imbalance is 15×) |
+| `output/<solNN>_crash_logs/` | Snapshot of `last_train_logs/` copied here ON ERROR only (results.csv, args.yaml, crash_tail.log). Written by evaluate.py next to the failing `.score` file. | Diagnose why `sol01.score` shows `is_valid: 0` — read the crash_tail + traceback |
+| `<solNN>.score` field `traceback` | Full Python traceback of any exception thrown by `entrypoint()` (up to 4000 chars) | First place to look when a solution errored — no need to re-run |
 
 ```bash
 # Example: check if training plateaued
@@ -185,10 +220,16 @@ cat /tmp/idea_evolve_strawberry/last_per_class.json | python3 -c \
   "import json, sys; d=json.load(sys.stdin)['per_class']; \
    print('\n'.join(f'{n}: mAP50={a:.3f} R={r:.3f}' \
    for n,a,r in zip(d['names'], d['mAP50'], d['recall'])))"
+
+# Example: inspect why a previous solution errored
+cat output/sol01.score                               # has error + traceback fields
+ls output/sol01_crash_logs/                          # snapshot of /tmp logs at crash time
+cat output/sol01_crash_logs/crash_tail.log           # the crash context helper wrote
 ```
 
-These artifacts are overwritten on every training run, so capture what you need before
-launching the next one.
+The `/tmp/...last_train_logs/` artifacts are overwritten on every training run. On error,
+evaluate.py copies them into `<solution>_crash_logs/` next to the failing solution so the
+context survives for future generations to learn from.
 
 ---
 

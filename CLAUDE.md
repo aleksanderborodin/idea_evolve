@@ -8,20 +8,47 @@ This file is the operational quick-reference and exhaustive issue tracker.
 scaling improvements, design decisions), you MUST update this file to reflect that change.
 CLAUDE.md is the operational quick-reference and issue tracker. Keep it accurate.**
 
+**RULE: `docs/problem_design_guide.md` is a living document. Every time we find a new
+issue with how problems or their `evaluate.py` / `validate.py` / helpers are designed —
+an error that agents couldn't diagnose, an ephemeral artifact that got lost, a footgun
+in a helper, a metric we wished we had tracked from day 1 — add the lesson to that guide
+in the relevant section. The guide exists so future problem authors don't rediscover
+the same failure modes. If you fix a real bug caused by a design gap, update the guide
+in the same edit pass as the fix.**
+
+**RULE: Doc-sync on cross-cutting changes.** When you change ANY orchestrator flag,
+`metrics.yaml` field, helper API, agent-prompt contract, queue/lock path, env-var
+name, or other behavior used across files, you MUST update ALL of:
+the relevant code, `docs/problem_design_guide.md` (the cross-reference table in §11
+lists every behavior with its code/doc/prompt locations), `CLAUDE.md` (this file's
+"What Works" or DESIGN sections), the reference problem's `description.md`, the
+reference `helpers/README.md`, and every agent prompt that mentions the behavior.
+Then run `python3 scripts/check_docs_consistency.py` before committing.
+
+**RULE: Every behavior described in `docs/problem_design_guide.md` must have a reference
+implementation in one of the `problems/*` directories.** If the guide describes a pattern
+no problem uses, delete the guide entry or implement the pattern. The guide is the
+contract problem authors read before writing a new problem.
+
+**RULE: Single source of truth for cross-cutting constants.** Paths, env-var names, and
+timeouts live in `idea-evolve/problems/_shared/constants.py`. Do not duplicate them as
+string literals in evaluate.py, helpers, docs, or agent prompts. The consistency
+checker fails when a constant name appears in a doc without resolving from that file.
+
 **RULE: When you change a component's file I/O, schema, config keys, or data flow, also update
 the relevant file in `docs/`. That folder is the technical deep-dive:**
 
-| Doc | Covers |
-|-----|--------|
-| [docs/architect.md](docs/architect.md) | Architect phase inputs/outputs/flow |
-| [docs/agents.md](docs/agents.md) | Agent workspace, output movement, session flow |
-| [docs/analysis_phases.md](docs/analysis_phases.md) | Evaluator, Critic, Consistency Reviewer |
-| [docs/knowledge_base.md](docs/knowledge_base.md) | Knowledge directory + file schemas |
-| [docs/file_layout.md](docs/file_layout.md) | Complete run directory tree |
-| [docs/harness.md](docs/harness.md) | ClaudeCode/OpenCode adapter layer |
-| [docs/dashboard.md](docs/dashboard.md) | Dashboard tabs, API endpoints, scanner functions |
-| [docs/communication.md](docs/communication.md) | Engine ↔ Dashboard file interface (what is written, what is read) |
-| [docs/problem_design_guide.md](docs/problem_design_guide.md) | How to design new problems — required files, multi-metric support, eval-time budgets, GPU/zombie pitfalls |
+| Doc | Covers | Status |
+|-----|--------|--------|
+| [docs/problem_design_guide.md](idea-evolve/docs/problem_design_guide.md) | How to design new problems — required files, multi-metric support, eval-time budgets, GPU/zombie pitfalls, scheduling/kill contract, glossary, cross-ref table | EXISTS |
+| [docs/architect.md](idea-evolve/docs/architect.md) | Architect phase inputs/outputs/flow | **MISSING** (see AUDIT-1) |
+| [docs/agents.md](idea-evolve/docs/agents.md) | Agent workspace, output movement, session flow | **MISSING** (see AUDIT-1) |
+| [docs/analysis_phases.md](idea-evolve/docs/analysis_phases.md) | Evaluator, Critic, Consistency Reviewer | **MISSING** (see AUDIT-1) |
+| [docs/knowledge_base.md](idea-evolve/docs/knowledge_base.md) | Knowledge directory + file schemas | **MISSING** (see AUDIT-1) |
+| [docs/file_layout.md](idea-evolve/docs/file_layout.md) | Complete run directory tree | **MISSING** (see AUDIT-1) |
+| [docs/harness.md](idea-evolve/docs/harness.md) | ClaudeCode/OpenCode adapter layer | **MISSING** (see AUDIT-1) |
+| [docs/dashboard.md](idea-evolve/docs/dashboard.md) | Dashboard tabs, API endpoints, scanner functions | **MISSING** (see AUDIT-1) |
+| [docs/communication.md](idea-evolve/docs/communication.md) | Engine ↔ Dashboard file interface | **MISSING** (see AUDIT-1) |
 
 ## Setup
 
@@ -403,6 +430,45 @@ skip logic and dashboard pipeline tab.
   4. To fill in the new metric for specific solutions, delete their `.score` sidecar AND
      their `eval_cache.json` entry (by content hash); the next `evaluate.py` recomputes.
   Do NOT bulk-rerun — wastes compute, perturbs rankings.
+- **Architect-driven scheduling for resource-contended problems.** `metrics.yaml` declares
+  `concurrency: serial|parallel` (default `parallel`). The orchestrator passes the mode to
+  the architect prompt context. The architect writes `parallel_groups` (groups sequential,
+  agents within parallel) — the orchestrator HONORS what it writes via
+  `_normalize_parallel_groups()` and only falls back to `[[all]]` on malformed YAML.
+  Single-element groups serialize, multi-element groups parallelize. Strawberry uses
+  `concurrency: serial` (one solution agent per group) so GPU evals never collide.
+  See [docs/problem_design_guide.md](idea-evolve/docs/problem_design_guide.md) §9.1.
+- **Universal eval queue + same-agent kill contract.** Every `evaluate.py` enqueues itself
+  in `/tmp/idea_evolve_eval_queue.json` (under `fcntl.flock`) and on entry calls
+  `eval_queue.kill_stale_same_agent(agent_name, kill_hook=...)`. The kill check enforces
+  8 invariants (queue presence, agent name match, pid alive, pgid match,
+  `/proc/<pid>/cmdline` contains `evaluate.py`, env shows the same `IDEA_EVOLVE_AGENT_NAME`,
+  per-agent fcntl mutex held); on any mismatch it **fails open** — never kills the wrong
+  process. Per-problem `eval_hooks.py` defines `kill_eval` (default = killpg SIGTERM →
+  grace → SIGKILL); strawberry's hook waits for the GPU lock to be released and logs to
+  `/tmp/idea_evolve_strawberry/kill_log.json`. Identity threaded via
+  `IDEA_EVOLVE_AGENT_NAME/PROBLEM/ATTEMPT/RUN_ROOT` env vars in `orchestrator_harness._build_env`.
+- **Agent-readable narrative proc_logs.** `problems/_shared/proc_log.Writer` writes
+  markdown timelines under `runs/<problem>/<attempt>/proc_logs/<ts>_<agent>_<kind>_<pid>.md`
+  for every non-trivial process outcome. Append-only line-buffered with `os.fsync` so they
+  survive SIGKILL up to the last line. On failure, evaluate.py invokes
+  `problems/<id>/eval_hooks.py:diagnose_failure(error_class, message, context)` and embeds
+  the markdown hint in the log under "What to try next". The `.score` sidecar gains a
+  `log_path` field on failure. Retention: 200 per attempt, `sticky: true` excluded from prune.
+  Agent prompts ([agents/_shared_eval_contract.md](idea-evolve/agents/_shared_eval_contract.md))
+  instruct agents to read `log_path` before retrying.
+- **Checkpoint archive + reproduction.** `metrics.yaml: archive_checkpoints: true` causes
+  `helpers/core.archive_checkpoint(content_hash, run_root)` to copy the trained `best.pt`
+  to `runs/<problem>/<attempt>/checkpoints/<hash>.pt` (LRU-pruned to `checkpoint_retention`).
+  `evaluate.py --reproduce <hash>` re-runs only the eval phase against the archived
+  checkpoint via `helpers/core.evaluate_from_checkpoint`. Closes the "is this baseline
+  reproducible?" question without retraining.
+- **Single source of truth for constants.** All cross-cutting paths/env-vars/timeouts
+  live in `problems/_shared/constants.py` (`EVAL_QUEUE_PATH`, `GPU_LOCK_PATH`,
+  `KILL_GRACE_SECONDS`, `KILL_DEADLINE_SECONDS`, `DEFAULT_CHECKPOINT_RETENTION`,
+  `DEFAULT_CONCURRENCY`, `ENV_AGENT_NAME`, `ENV_PROBLEM`, `ENV_ATTEMPT`). Imported by
+  every evaluate.py + helper + orchestrator module. The consistency checker
+  (`scripts/check_docs_consistency.py`) walks docs and asserts referenced constants resolve.
 - **Agent-readable disk artifacts.** Large or noisy evaluation outputs (training logs,
   per-class breakdowns, crash traces) go to stable `/tmp/idea_evolve_<problem>/...` paths,
   not into agent prompts. Agents read them via Bash/Read only when they have a specific
@@ -414,6 +480,70 @@ skip logic and dashboard pipeline tab.
 ---
 
 # ALL KNOWN PROBLEMS
+
+## AUDIT FINDINGS — discovered by Claude during 2026-04-15 consistency review
+
+These are issues I (Claude) found while implementing the GPU-contention prevention plan
+and auditing the system for doc/code consistency. They were NOT user-reported — they
+surfaced during my own review pass and are recorded here so they don't get lost.
+
+### [AUDIT-1] CLAUDE.md doc table referenced 8 nonexistent files
+The documentation table near the top of CLAUDE.md listed 9 docs in `idea-evolve/docs/` —
+only `problem_design_guide.md` actually exists. The other 8 (`architect.md`, `agents.md`,
+`analysis_phases.md`, `knowledge_base.md`, `file_layout.md`, `harness.md`, `dashboard.md`,
+`communication.md`) were referenced as if they were source-of-truth docs, but no file was
+ever created. Found by `ls idea-evolve/docs/` returning a single file. Marked as
+**MISSING** in the table. No agent prompt or script links to these files, so nothing
+broke functionally — but the rule "doc-sync on cross-cutting changes" is unenforceable
+when half the docs don't exist. **Action needed:** either create the stub docs as the
+deep-dive references CLAUDE.md claims they are, or delete the rows.
+
+### [AUDIT-2] Architect prompt was missing the per-problem `concurrency:` mode
+The orchestrator had a `concurrency_mode(project_root)` helper but never injected the
+result into the architect's prompt. The architect therefore couldn't honor the
+"serial-eval problem → one agent per group" rule from the plan, regardless of what
+`metrics.yaml` declared. Found by grepping the architect prompt for `concurrency` and
+getting zero hits. **Fixed in this session** by adding the `## Evaluation concurrency
+for this problem` block to the architect prompt builder in `orchestrator.py`.
+
+### [AUDIT-3] Solution agents were told to read `_shared_eval_contract.md` — but never received its content
+The plan called for `_shared_eval_contract.md` to be referenced by `explore.md`,
+`exploit.md`, `full.md`, `genetic.md`. The reference text was added — but the orchestrator
+never inlined the contract content into the prompt sent to the agent. Agents would have
+seen "follow the shared eval contract" with no contract attached. Found by reading
+`build_agent_prompt` and confirming no read of `_shared_eval_contract.md`. **Fixed in
+this session** by adding `SOLUTION_AGENTS = {...}` gating in `orchestrator.py` that
+inlines the contract under a `# SHARED EVALUATION CONTRACT (mandatory rules)` header.
+
+### [AUDIT-4] No unit tests written for new modules
+The plan's verification section called for 6 test files (`test_concurrency_mode.py`,
+`test_run_agents_groups.py`, `test_eval_queue.py`, `test_kill_hook_default.py`,
+`test_archive_checkpoint.py`, `test_docs_consistency.py`). Zero were written. The kill
+mechanism — the most dangerous new code — has no unit test exercising the 8 safety
+invariants. The consistency checker is wired up and passes, but its own test would
+catch regressions. **Action needed:** write at least `test_eval_queue.py` and
+`test_docs_consistency.py` before the next strawberry run.
+
+### [AUDIT-5] Kill mechanism never exercised end-to-end on real YOLO process tree
+`eval_hooks.py` for strawberry was implemented and the safety invariants are coded, but
+no integration test was run that:
+  1. Launches `evaluate.py` on a real strawberry solution.
+  2. From a second shell with the same `IDEA_EVOLVE_AGENT_NAME`, launches a second
+     `evaluate.py`.
+  3. Confirms the first process tree (parent + ultralytics dataloader workers) dies,
+     the GPU lock is released, and the new eval succeeds.
+The plan's "Kill-hook test" (verification step 4) is unverified. First real strawberry
+generation will be the production test of this code. Recommendation: run with
+`--single` and `--new-attempt` first.
+
+### [AUDIT-6] Strawberry attempt_001 evidence is uncommitted but still on disk
+Per `git status`, `runs/strawberry/attempt_001/` has uncommitted modifications and
+deletions across knowledge, history, briefs, and workspace. It documents the
+3-generation GPU contention failure that motivated this plan. Recommendation: rename
+to `_attempt_001_pre_kill_contract/` (preserves the failure trail) and start
+`attempt_002` for the first run with the new contracts. Do NOT delete — the gen-001
+score 0.8328 is unreproducible and the proc_logs from a fresh run will be the first
+real evidence the kill contract works.
 
 ## BUGS — will break things
 
@@ -862,7 +992,12 @@ This becomes important once 2+ GPU-bound problems run in parallel, or when one p
 many parallel agents all serializing at the lock — without visibility, debugging "why is
 this so slow" requires `lsof /tmp/idea_evolve_gpu.lock` and `ps`.
 
-### [DESIGN-15] General evaluation queue with dashboard visibility — TODO
+### [DESIGN-14] ~~GPU evaluation queue is invisible~~ — ADDRESSED via DESIGN-15
+The unified eval queue (DESIGN-15) supersedes the GPU-specific design. Strawberry's
+`eval_hooks.py` participates in the same `/tmp/idea_evolve_eval_queue.json`; the dashboard
+GPU panel becomes a filtered view (`gpu: true` flag) of the same data.
+
+### [DESIGN-15] ~~General evaluation queue with dashboard visibility~~ — IMPLEMENTED
 All problems (not just GPU) need a visible evaluation queue so the dashboard shows what is
 currently being evaluated and what is waiting. Right now `evaluate.py` runs inline inside
 each agent's bash session with no central tracking — the orchestrator and dashboard have no

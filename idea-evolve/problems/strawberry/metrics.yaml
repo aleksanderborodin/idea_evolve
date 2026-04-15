@@ -1,6 +1,17 @@
 track_eval_time: true
 target_score: 0.92
 
+# Evaluation is GPU-serialized via /tmp/idea_evolve_gpu.lock. Architect MUST
+# write parallel_groups so that at most ONE training-heavy agent runs at a
+# time. See docs/problem_design_guide.md §Resource-Contended Problems.
+concurrency: serial
+
+# Persist best.pt under runs/<problem>/<attempt>/checkpoints/<content_hash>.pt
+# so a scored solution can be reproduced without retraining via
+# `evaluate.py --reproduce <hash>`. LRU pruned to checkpoint_retention.
+archive_checkpoints: true
+checkpoint_retention: 50
+
 specs:
   fitness:
     description: "Mask mAP50 on the open test split (743 images) after PROXY_EPOCHS=50 training. Proxy for 100-epoch performance. Baseline ~0.84, best known ~0.87."

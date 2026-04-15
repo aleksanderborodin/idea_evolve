@@ -86,6 +86,17 @@ parallel_groups:
   - ["exploit_1"]
 ```
 
+For a `concurrency: serial` problem (e.g. strawberry), the same agents would instead use
+single-element groups so only one evaluation runs at a time:
+
+```yaml
+parallel_groups:
+  - ["explore_1"]
+  - ["explore_2"]
+  - ["research_1"]
+  - ["exploit_1"]
+```
+
 **Fields per agent:**
 - `type` — One of: `explore`, `exploit`, `genetic`, `full`, `research`, `experimentator`.
 - `instance` — Sequential number within the type for this generation (integer).
@@ -93,10 +104,33 @@ parallel_groups:
 - `brief` — Path to the instance's brief file, relative to project root: `briefs/genNNN/type_instance.md`.
 - `timeout` — (Optional) Session timeout in seconds. Agents killed after this. Use timing data from previous generations to set appropriate values. Default: 900s. Set higher for complex exploit/genetic work, lower for research.
 
-**Parallel groups:**
-- All agents in a generation run in one parallel group. They do not communicate with each other.
-- Agent results (solutions, knowledge, reports) are collected by the Evaluator and feed into the **next generation** — not the current one.
-- Do not write `parallel_groups` in the manifest. The orchestrator ignores it and runs all agents simultaneously.
+**Parallel groups — you OWN scheduling. The orchestrator honors what you write.**
+
+`parallel_groups` is a list of lists of `"type_instance"` agent names. Groups execute
+**sequentially**: group N must finish before group N+1 starts. Agents **within** one
+group execute **in parallel**. Agents do not communicate with each other; results feed
+into the **next generation** via the Evaluator.
+
+The right structure depends on the problem's `concurrency:` mode (provided in CONTEXT):
+
+- **`concurrency: parallel`** (default — sidon, gemm, permcodes): evaluations are CPU-bound
+  and cache-friendly. Group every solution agent together: `[["explore_1", "explore_2",
+  "exploit_1", "research_1"]]`. Anything else is wasted wall-clock time.
+
+- **`concurrency: serial`** (strawberry and any GPU/expensive-eval problem): only ONE
+  evaluation can run at a time without contention. Place each solution agent in its own
+  single-element group: `[["exploit_1"], ["explore_1"], ["explore_2"], ["research_1"]]`.
+  Research and experimentator agents that do **not** call `evaluate.py` heavily (pure
+  literature surveys, helper builders) MAY share a group with the running solution agent
+  — but if you are not certain, keep them solo too.
+
+- **Mixed:** if you have one heavy training run plus several light analysis tasks, use
+  e.g. `[["exploit_1"], ["research_1", "experimentator_1"]]`.
+
+**Validation:** every name in `parallel_groups` must also appear in `agents:`. No
+duplicates within or across groups. No empty groups. If `parallel_groups` is missing
+or malformed, the orchestrator falls back to `[[all agents]]` and writes a warning into
+the next architect's prompt — do not rely on the fallback for serial-eval problems.
 
 ### 2. Per-Instance Briefs — `type_instance.md`
 

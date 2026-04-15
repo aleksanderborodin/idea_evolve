@@ -30,10 +30,26 @@ from pathlib import Path
 PROBLEM_ROOT = Path(__file__).parent
 VENV_PYTHON = "/home/sasha/Desktop/idea_evolve/first_project/venv/bin/python"
 
+# Make `from problems._shared.X import Y` importable from this script
+# regardless of cwd. PROBLEM_ROOT.parent == problems/, .parent.parent == idea-evolve/.
+_IDEA_EVOLVE_ROOT = PROBLEM_ROOT.parent.parent
+if str(_IDEA_EVOLVE_ROOT) not in sys.path:
+    sys.path.insert(0, str(_IDEA_EVOLVE_ROOT))
+
+from problems._shared import eval_queue, proc_log
+from problems._shared.constants import (
+    ENV_AGENT_NAME,
+    ENV_ATTEMPT,
+    ENV_PROBLEM,
+    ENV_RUN_ROOT,
+    GPU_LOCK_PATH as _GPU_LOCK_PATH_CONST,
+)
+from problems.strawberry import eval_hooks as _strawberry_hooks
+
 # --- Cache setup ---
 _RUN_ROOT = (
-    Path(os.environ["IDEA_EVOLVE_RUN_ROOT"])
-    if "IDEA_EVOLVE_RUN_ROOT" in os.environ
+    Path(os.environ[ENV_RUN_ROOT])
+    if ENV_RUN_ROOT in os.environ
     else None
 )
 CACHE_PATH = (
@@ -43,8 +59,10 @@ CACHE_PATH = (
 )
 CACHE_LOCK_PATH = CACHE_PATH.with_suffix(".lock")
 
-# --- GPU lock: serializes all training jobs system-wide ---
-GPU_LOCK_PATH = Path("/tmp/idea_evolve_gpu.lock")
+# --- GPU lock: serializes all training jobs system-wide.
+#     Path is the canonical constant from problems/_shared/constants.py — never
+#     hardcode the string elsewhere. ---
+GPU_LOCK_PATH = Path(_GPU_LOCK_PATH_CONST)
 
 
 # ── Cache helpers ──────────────────────────────────────────────────────────────
@@ -107,7 +125,7 @@ def _write_score_sidecar(solution_path: str, result: dict):
 @contextlib.contextmanager
 def _gpu_lock():
     """
-    Exclusive file lock on /tmp/idea_evolve_gpu.lock.
+    Exclusive file lock on GPU_LOCK_PATH (see problems/_shared/constants.py).
     Blocks until the GPU is free. Works across all processes on this machine.
     This means parallel agents automatically queue — no orchestrator changes needed.
     """
@@ -149,7 +167,7 @@ def _load_and_validate_solution(filepath: str):
     return module, None
 
 
-def _error_result(msg: str) -> dict:
+def _error_result(msg: str, tb: str | None = None) -> dict:
     return {
         "fitness": 0,
         "is_valid": 0,
@@ -157,7 +175,37 @@ def _error_result(msg: str) -> dict:
         "mAP50_95": 0,
         "F1": 0,
         "error": msg[:500],
+        "traceback": (tb or "")[:4000],
     }
+
+
+# Well-known training artifact dir written by train_and_eval (helpers.core).
+# Overwritten every eval — we snapshot it next to the failing solution on error.
+TRAIN_LOG_DIR = Path("/tmp/idea_evolve_strawberry/last_train_logs")
+
+
+def _snapshot_crash_artifacts(solution_path: str):
+    """
+    On error, copy /tmp/.../last_train_logs/* next to the solution file as
+    <solution_stem>_crash_logs/. Persists per-solution so future agents can
+    read WHY their ancestor failed — the /tmp dir gets overwritten by the
+    next training run otherwise.
+    """
+    import shutil
+    try:
+        if not TRAIN_LOG_DIR.exists():
+            return
+        sol = Path(solution_path)
+        dest = sol.parent / f"{sol.stem}_crash_logs"
+        dest.mkdir(parents=True, exist_ok=True)
+        for src in TRAIN_LOG_DIR.iterdir():
+            if src.is_file():
+                try:
+                    shutil.copy2(src, dest / src.name)
+                except Exception:
+                    pass
+    except Exception:
+        pass
 
 
 def _process_entrypoint_result(raw: object) -> dict:
@@ -199,12 +247,80 @@ def _process_entrypoint_result(raw: object) -> dict:
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 
+_METRICS_PATH = PROBLEM_ROOT / "metrics.yaml"
+
+
+def _read_metrics_field(key: str, default):
+    """Tiny YAML reader — top-level scalar fields only. Avoids a yaml dep."""
+    try:
+        for line in _METRICS_PATH.read_text().splitlines():
+            line = line.strip()
+            if line.startswith(f"{key}:"):
+                _, _, val = line.partition(":")
+                val = val.strip().split("#", 1)[0].strip()
+                if val.lower() in ("true", "false"):
+                    return val.lower() == "true"
+                try:
+                    return int(val)
+                except ValueError:
+                    return val
+    except OSError:
+        pass
+    return default
+
+
+def _archive_enabled() -> bool:
+    return bool(_read_metrics_field("archive_checkpoints", False))
+
+
+def _checkpoint_retention() -> int:
+    return int(_read_metrics_field("checkpoint_retention", 50))
+
+
+def _agent_identity() -> tuple[str, str, str]:
+    """Read identity env vars injected by the orchestrator harness."""
+    return (
+        os.environ.get(ENV_AGENT_NAME, "unknown"),
+        os.environ.get(ENV_PROBLEM, "strawberry"),
+        os.environ.get(ENV_ATTEMPT, "unknown"),
+    )
+
+
+def _reproduce_mode(content_hash: str) -> int:
+    """Replay `evaluate_from_checkpoint` for an archived best.pt."""
+    if _RUN_ROOT is None:
+        print(f"ERROR: --reproduce requires {ENV_RUN_ROOT} to be set", file=sys.stderr)
+        return 1
+    # Re-exec into the venv if needed so ultralytics is importable.
+    if os.environ.get("_STRAWBERRY_IN_VENV") != "1":
+        try:
+            import importlib as _il
+            _has = _il.util.find_spec("ultralytics") is not None
+        except Exception:
+            _has = False
+        if not _has:
+            env = os.environ.copy()
+            env["_STRAWBERRY_IN_VENV"] = "1"
+            os.execve(VENV_PYTHON, [VENV_PYTHON] + sys.argv, env)
+    if str(PROBLEM_ROOT) not in sys.path:
+        sys.path.insert(0, str(PROBLEM_ROOT))
+    from helpers.core import evaluate_from_checkpoint  # type: ignore
+    metrics = evaluate_from_checkpoint(content_hash, _RUN_ROOT)
+    print(json.dumps(metrics, indent=2))
+    return 0
+
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: python3 evaluate.py <solution_file.py>")
+        print("       python3 evaluate.py --reproduce <content_hash>")
         sys.exit(1)
 
+    if sys.argv[1] == "--reproduce" and len(sys.argv) >= 3:
+        sys.exit(_reproduce_mode(sys.argv[2]))
+
     solution_path = sys.argv[1]
+    agent_name, problem, attempt = _agent_identity()
 
     try:
         # 1. Fast-path: cache check (no GPU needed, works in any Python)
@@ -218,7 +334,9 @@ def main():
         # 2. Re-exec in first_project venv if ultralytics is not available.
         #    Uses os.execve to REPLACE this process (not spawn a child), so the
         #    caller's process tree has no grandchild layer — timeout-kill via
-        #    pgroup reliably catches the training process.
+        #    pgroup reliably catches the training process. The IDEA_EVOLVE_*
+        #    identity env vars are preserved through execve so the queue/kill
+        #    contract survives the re-exec.
         if os.environ.get("_STRAWBERRY_IN_VENV") != "1":
             _has = False
             try:
@@ -238,35 +356,118 @@ def main():
             print(json.dumps(cached))
             return
 
-        # 4. Load and validate module (syntax check, entrypoint exists)
-        module, err = _load_and_validate_solution(solution_path)
-        if err is not None:
-            _cached_store(content_hash, err)
-            _write_score_sidecar(solution_path, err)
-            print(json.dumps(err))
-            return
+        # 4. Same-agent kill contract: terminate any stale evaluate.py owned by
+        #    me before I take the GPU. Defensive — never raises into the caller.
+        kill_actions = eval_queue.kill_stale_same_agent(
+            agent_name,
+            kill_hook=_strawberry_hooks.kill_eval,
+            log_event=lambda s: print(f"[evaluate.py][kill] {s}", file=sys.stderr, flush=True),
+        )
 
-        # 5. Acquire GPU lock → call entrypoint() → release GPU lock
-        t0 = time.perf_counter()
-        with _gpu_lock():
-            raw_result = module.entrypoint()
-        elapsed = time.perf_counter() - t0
+        # 5. Set up narrative log + queue entry. Both are best-effort; if RUN_ROOT
+        #    is missing (manual invocation) we just skip the log.
+        log_writer = None
+        if _RUN_ROOT is not None:
+            try:
+                log_writer = proc_log.Writer(_RUN_ROOT, agent_name, "eval", sticky=False)
+                log_writer.event(f"started for {Path(solution_path).name} (hash {content_hash[:12]})")
+                if kill_actions:
+                    log_writer.section(
+                        "Predecessor kill",
+                        "\n".join(f"- {a}" for a in kill_actions),
+                    )
+            except Exception as exc:
+                print(f"[evaluate.py] proc_log init failed: {exc!r}", file=sys.stderr)
 
-        # 6. Validate and package the result
-        result = _process_entrypoint_result(raw_result)
-        result["eval_time_s"] = round(elapsed, 1)
+        queue_id = eval_queue.enqueue(
+            agent_name, problem, attempt, solution_path, status="waiting",
+        )
+        try:
+            # 6. Load and validate module (syntax check, entrypoint exists)
+            module, err = _load_and_validate_solution(solution_path)
+            if err is not None:
+                _cached_store(content_hash, err)
+                _write_score_sidecar(solution_path, err)
+                print(json.dumps(err))
+                if log_writer is not None:
+                    log_writer.section("Error", err.get("error", "load failed"))
+                    log_writer.hints(_strawberry_hooks.diagnose_failure(
+                        "ImportError", err.get("error", ""),
+                        {"queue_at_failure": eval_queue.current_queue()},
+                    ))
+                    log_writer.finalize("LOAD_FAILED", mark_sticky=True)
+                return
 
-        # 7. Cache + sidecar + print
-        _cached_store(content_hash, result)
-        _write_score_sidecar(solution_path, result)
-        print(json.dumps(result))
+            # 7. Acquire GPU lock → mark running → call entrypoint() → release GPU lock
+            t0 = time.perf_counter()
+            with _gpu_lock():
+                eval_queue.mark_running(queue_id)
+                if log_writer is not None:
+                    log_writer.event("GPU lock acquired, training starting")
+                raw_result = module.entrypoint()
+            elapsed = time.perf_counter() - t0
+
+            # 8. Validate and package the result
+            result = _process_entrypoint_result(raw_result)
+            result["eval_time_s"] = round(elapsed, 1)
+            if log_writer is not None:
+                result["log_path"] = log_writer.log_path
+
+            # 8a. Archive best.pt for `--reproduce <hash>` if metrics.yaml says to.
+            #     Driven by the archive_checkpoints flag — read fresh each call so
+            #     a config change takes effect without restarting the orchestrator.
+            try:
+                if _RUN_ROOT is not None and _archive_enabled():
+                    if str(PROBLEM_ROOT) not in sys.path:
+                        sys.path.insert(0, str(PROBLEM_ROOT))
+                    from helpers.core import archive_checkpoint  # type: ignore
+                    archived = archive_checkpoint(
+                        content_hash, _RUN_ROOT,
+                        retention=_checkpoint_retention(),
+                    )
+                    if archived and log_writer is not None:
+                        log_writer.event(f"archived checkpoint to {archived}")
+            except Exception as exc:
+                if log_writer is not None:
+                    log_writer.event(f"checkpoint archive failed: {exc!r}")
+
+            # 9. Cache + sidecar + print
+            _cached_store(content_hash, result)
+            _write_score_sidecar(solution_path, result)
+            print(json.dumps(result))
+
+            if log_writer is not None:
+                log_writer.event(f"completed: fitness={result['fitness']}")
+                log_writer.finalize("OK")
+        finally:
+            try:
+                eval_queue.dequeue(queue_id)
+            except Exception:
+                pass
 
     except Exception as e:
-        error_result = _error_result(str(e))
+        tb = traceback.format_exc()
+        error_result = _error_result(str(e), tb=tb)
+        _snapshot_crash_artifacts(solution_path)
+        # Failure log — diagnose with strawberry-specific hints, mark sticky.
+        try:
+            if _RUN_ROOT is not None:
+                fail_log = proc_log.Writer(_RUN_ROOT, agent_name, "eval_fail", sticky=True)
+                fail_log.event(f"crashed on {Path(solution_path).name}")
+                fail_log.kv(error_class=type(e).__name__, error_message=str(e)[:200])
+                fail_log.traceback(e)
+                fail_log.hints(_strawberry_hooks.diagnose_failure(
+                    type(e).__name__, str(e),
+                    {"queue_at_failure": eval_queue.current_queue()},
+                ))
+                fail_log.finalize("CRASHED", mark_sticky=True)
+                error_result["log_path"] = fail_log.log_path
+        except Exception:
+            pass
         _write_score_sidecar(solution_path, error_result)
         print(json.dumps(error_result))
         print(f"ERROR: {e}", file=sys.stderr)
-        traceback.print_exc(file=sys.stderr)
+        print(tb, file=sys.stderr)
         sys.exit(1)
 
 
