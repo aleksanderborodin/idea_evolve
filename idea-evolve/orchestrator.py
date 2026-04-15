@@ -635,10 +635,12 @@ def phase_status(project_root: Path, gen: int) -> str:
 
                 if completed >= len(planned_agents):
                     return "agents_done"
-                elif completed > 0:
-                    # Some agents done but not all — still in progress.
-                    # Return "planned" so run_agents re-runs (skip logic in
-                    # run_single_agent uses gen_progress.json to skip completed agents).
+                else:
+                    # Some or zero agents done. Return "planned" so run_agents
+                    # launches all and skips completed ones via gen_progress.json.
+                    # IMPORTANT: do NOT fall through to the legacy fallback — it
+                    # checks reports/ which contains architect.md and would falsely
+                    # return "agents_done" when no agents have run yet.
                     return "planned"
         except Exception:
             pass
@@ -663,78 +665,39 @@ def phase_status(project_root: Path, gen: int) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Claude Code session launcher
+# Harness session launcher (thin shim over orchestrator_harness adapters)
 # ---------------------------------------------------------------------------
 
-MODEL_MAP = {
-    "opus": "claude-opus-4-6",
-    "sonnet": "claude-sonnet-4-6",
-    "haiku": "claude-haiku-4-5-20251001",
-}
+from orchestrator_harness import (
+    SessionTimeout,
+    SessionError,
+    CLAUDE_CODE_MODEL_MAP as MODEL_MAP,
+    get_adapter,
+)
 
 
-class SessionTimeout(Exception):
-    """Raised when a Claude session exceeds its timeout."""
-    def __init__(self, msg, session_id=None, pid=None):
-        super().__init__(msg)
-        self.session_id = session_id
-        self.pid = pid
+def _run_root() -> Path | None:
+    return CTX.run_root if CTX else None
 
 
-class SessionError(Exception):
-    """Raised when a Claude session exits with a non-zero return code."""
-    def __init__(self, msg, session_id=None, pid=None):
-        super().__init__(msg)
-        self.session_id = session_id
-        self.pid = pid
+def _harness_for(agent_role: str | None = None) -> str:
+    """Resolve which harness to use for a given agent role.
+    Order: explicit manifest entry (passed as agent_role == harness name already resolved)
+           > user/config.yaml `harnesses.per_agent.<role>` > `harnesses.default` > 'claude-code'.
+    For now the manifest-level override is not wired (plan keeps default = claude-code)."""
+    cfg = load_config(CTX.project_root) if CTX else {}
+    h = (cfg.get("harnesses") or {})
+    if agent_role:
+        per = h.get("per_agent") or {}
+        if agent_role in per:
+            return per[agent_role]
+    return h.get("default", "claude-code")
 
 
-def _run_claude_process(cmd, prompt_text, project_root, timeout):
-    """Low-level: run a Claude Code CLI process with timeout and process-group cleanup.
-    Returns (stdout, pid) where pid is the process ID of the launched process."""
-    env = os.environ.copy()
-    env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = "16000"
-    # Tell evaluate.py where to write its cache
-    if CTX:
-        env["IDEA_EVOLVE_RUN_ROOT"] = str(CTX.run_root)
-
-    try:
-        proc = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            cwd=str(project_root),
-            env=env,
-            start_new_session=True,
-        )
-        pid = proc.pid
-        try:
-            stdout, stderr = proc.communicate(input=prompt_text, timeout=timeout)
-        except subprocess.TimeoutExpired:
-            try:
-                os.killpg(proc.pid, signal.SIGTERM)
-                proc.wait(timeout=5)
-            except (ProcessLookupError, subprocess.TimeoutExpired):
-                try:
-                    os.killpg(proc.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-                try:
-                    proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    pass
-            raise SessionTimeout(f"Timed out after {timeout}s", pid=pid)
-
-        if proc.returncode != 0:
-            if stderr:
-                print(f"  STDERR: {stderr[:500]}")
-            raise SessionError(f"Exited with code {proc.returncode}: {stderr[:200] if stderr else 'no stderr'}")
-        return stdout, pid
-    except FileNotFoundError:
-        print("  ERROR: Claude Code CLI not found. Install with: npm install -g @anthropic-ai/claude-code")
-        sys.exit(1)
+def _get_adapter(agent_role: str | None = None):
+    cfg = load_config(CTX.project_root) if CTX else {}
+    oc_map = ((cfg.get("models") or {}).get("opencode"))
+    return get_adapter(_harness_for(agent_role), opencode_model_map=oc_map)
 
 
 def launch_claude_session(
@@ -745,32 +708,20 @@ def launch_claude_session(
     max_turns: int = 50,
     allowed_tools: list[str] | None = None,
     session_id: str | None = None,
+    agent_role: str | None = None,
 ) -> tuple[str, str, int]:
-    """Launch a new Claude Code session. Returns (stdout, session_id, pid)."""
-    model_id = MODEL_MAP.get(model, model)
-    if session_id is None:
-        session_id = str(uuid.uuid4())
-
-    cmd = [
-        "taskset", "-c", "2-7",
-        "npx", "@anthropic-ai/claude-code",
-        "--print",
-        "--model", model_id,
-        "--max-turns", str(max_turns),
-        "--session-id", session_id,
-    ]
-
-    if allowed_tools:
-        for tool in allowed_tools:
-            cmd.extend(["--allowedTools", tool])
-
-    try:
-        stdout, pid = _run_claude_process(cmd, prompt_text, project_root, timeout)
-    except SessionTimeout as e:
-        raise SessionTimeout(str(e), session_id=session_id, pid=e.pid) from None
-    except SessionError as e:
-        raise SessionError(str(e), session_id=session_id) from None
-    return stdout, session_id, pid
+    """Launch an agent session via the configured harness. Returns (stdout, session_id, pid)."""
+    adapter = _get_adapter(agent_role)
+    return adapter.launch(
+        project_root=project_root,
+        prompt_text=prompt_text,
+        model=model,
+        timeout=timeout,
+        max_turns=max_turns,
+        allowed_tools=allowed_tools,
+        session_id=session_id,
+        run_root=_run_root(),
+    )
 
 
 def resume_claude_session(
@@ -781,31 +732,20 @@ def resume_claude_session(
     timeout: int = 300,
     max_turns: int = 50,
     allowed_tools: list[str] | None = None,
+    agent_role: str | None = None,
 ) -> str:
-    """Resume an existing Claude Code session with a follow-up message.
-    The agent retains full memory of its previous work."""
-    model_id = MODEL_MAP.get(model, model)
-
-    cmd = [
-        "taskset", "-c", "2-7",
-        "npx", "@anthropic-ai/claude-code",
-        "--print",
-        "--resume", session_id,
-        "--model", model_id,
-        "--max-turns", str(max_turns),
-    ]
-
-    if allowed_tools:
-        for tool in allowed_tools:
-            cmd.extend(["--allowedTools", tool])
-
-    try:
-        stdout, _pid = _run_claude_process(cmd, prompt_text, project_root, timeout)
-        return stdout
-    except SessionTimeout as e:
-        raise SessionTimeout(str(e), session_id=session_id, pid=e.pid) from None
-    except SessionError as e:
-        raise SessionError(str(e), session_id=session_id) from None
+    """Resume an existing session with a follow-up message. The agent retains full memory."""
+    adapter = _get_adapter(agent_role)
+    return adapter.resume(
+        project_root=project_root,
+        session_id=session_id,
+        prompt_text=prompt_text,
+        model=model,
+        timeout=timeout,
+        max_turns=max_turns,
+        allowed_tools=allowed_tools,
+        run_root=_run_root(),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -2371,6 +2311,7 @@ def run_architect(project_root: Path, gen: int, config: dict):
             timeout=get_timeout(config, "architect"),
             max_turns=get_max_turns(config, "architect"),
             allowed_tools=["Read", "Write", "Glob", "Grep", "Bash"],
+            agent_role="architect",
         )
     except SessionTimeout as e:
         timed_out = True
@@ -2384,6 +2325,7 @@ def run_architect(project_root: Path, gen: int, config: dict):
                 timeout=get_timeout(config, "architect_wrapup"),
                 max_turns=get_max_turns(config, "architect"),
                 allowed_tools=["Read", "Write", "Glob", "Grep", "Bash"],
+                agent_role="architect",
             )
             print(f"  Architect wrap-up complete")
         except (SessionTimeout, SessionError) as e2:
@@ -3314,8 +3256,10 @@ def run_generation(project_root: Path, gen: int, config: dict) -> float:
     gen_t0 = time.time()
 
     if status == "not_started":
-        _write_run_state(project_root, current_gen=gen, current_phase="architect", agents={})
+        _write_run_state(project_root, current_gen=gen, current_phase="architect",
+                         agents={"architect": {"status": "running"}})
         run_architect(project_root, gen, config)
+        _write_run_state(project_root, agents={"architect": {"status": "done"}})
         status = "planned"
 
     if status == "planned":

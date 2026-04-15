@@ -53,8 +53,9 @@ All state lives in files. If the orchestrator crashes, it resumes from exactly w
 ### Prerequisites
 
 - **Python 3.12+** — orchestrator, dashboard, evaluation
-- **Node.js 22+** — Claude Code CLI runtime
+- **Node.js 22+** — Claude Code CLI runtime (default harness)
 - **Anthropic API key** — [console.anthropic.com](https://console.anthropic.com)
+- *(optional)* **[OpenCode](https://opencode.ai)** — alternative harness for routing individual agents through non-Anthropic providers (e.g. via ModelGate)
 
 ### Install
 
@@ -67,11 +68,22 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# Claude Code CLI
+# Claude Code CLI (default harness)
 npm install -g @anthropic-ai/claude-code
 
-# API key (add to ~/.bashrc for persistence)
-export ANTHROPIC_API_KEY="sk-ant-..."
+# (optional) OpenCode — only needed if you route any agent to the opencode harness
+curl -fsSL https://opencode.ai/install | bash
+
+# Secrets: store in .env at the repo root (gitignored)
+cat > .env <<'EOF'
+ANTHROPIC_API_KEY=sk-ant-...
+# Only needed for the opencode harness via ModelGate:
+MODELGATE_API_KEY=rp_...
+MODELGATE_BASE_URL=https://api.modelgate.ru/v1
+EOF
+
+# Load secrets before running
+set -a; source .env; set +a
 ```
 
 ### Run
@@ -94,6 +106,56 @@ python3 orchestrator.py . --problem sidon --dry-run
 ```
 
 Two orchestrators can run simultaneously on different problems — each works in its own isolated directory.
+
+## Harnesses: routing agents to different CLIs
+
+Every agent session is launched through a **harness adapter**. Two are built-in:
+
+| Harness | Binary | Provider reach |
+|---|---|---|
+| `claude-code` *(default)* | `npx @anthropic-ai/claude-code` | Anthropic (Claude) |
+| `opencode` | `opencode run` | Anything opencode supports — Anthropic, OpenAI, Gemini, local, or routed via ModelGate |
+
+Both adapters expose the same `launch()` / `resume()` contract, so wrap-up and debrief recovery after a timeout work identically. OpenCode's session ids are assigned by the server and captured from the first streamed JSON event; Claude Code accepts caller-assigned UUIDs. Details and contract tests: [idea-evolve/orchestrator_harness.py](idea-evolve/orchestrator_harness.py), [idea-evolve/tests/test_adapters.py](idea-evolve/tests/test_adapters.py).
+
+### Selecting a harness per agent
+
+Edit [idea-evolve/user/config.yaml](idea-evolve/user/config.yaml):
+
+```yaml
+harnesses:
+  default: claude-code        # harness used when no per_agent override matches
+  per_agent: {}               # override by role — only list the EXCEPTIONS
+                              # (listing a role whose harness == default is a no-op)
+
+models:
+  opencode:                   # alias → provider/model (only consulted by the opencode harness)
+    opus:   modelgate/claude-sonnet-4-5
+    sonnet: modelgate/minimax-m2.7
+    haiku:  modelgate/minimax-m2.7
+```
+
+Resolution order at every launch site: `per_agent[role]` → `default` → `claude-code` (with warning on unknown names). Only list roles in `per_agent` whose harness differs from `default`.
+
+**Example A — keep everything on Claude, route explorers through opencode only:**
+
+```yaml
+harnesses:
+  default: claude-code
+  per_agent:
+    explore: opencode
+```
+
+**Example B — flip the default to opencode, keep only the architect on claude-code:**
+
+```yaml
+harnesses:
+  default: opencode
+  per_agent:
+    architect: claude-code
+```
+
+**Fidelity notes.** OpenCode has no `--max-turns` equivalent; wall-clock timeout is the only ceiling (a one-time warning is logged per run). Agent prompt templates are Claude-tuned, so routing `architect` or `evaluator` to a non-Claude model may degrade reasoning quality — keep those on `claude-code` unless you specifically want to validate otherwise.
 
 ## Defining Your Own Problem
 

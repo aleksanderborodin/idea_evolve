@@ -18,6 +18,39 @@ pip install -r requirements.txt
 
 All commands below assume the venv is active. Dependencies: `requirements.txt` at project root.
 
+### Secrets and provider credentials (`.env`)
+
+Secrets and provider endpoints live in `/home/sasha/Desktop/idea_evolve/.env` (project root,
+gitignored via `.gitignore` entry `.env`). Everything in this file is loaded into the shell
+environment before running the orchestrator or any harness CLI.
+
+Current keys:
+
+| Variable | Purpose |
+|---|---|
+| `MODELGATE_API_KEY` | OpenAI-compatible API key for the ModelGate provider (format `rp_...`). Referenced from `~/.config/opencode/opencode.json` as `{env:MODELGATE_API_KEY}`. |
+| `MODELGATE_BASE_URL` | ModelGate base URL (`https://api.modelgate.ru/v1`). Currently hard-coded in opencode's provider config too; duplicated in `.env` so Python clients / future harnesses can read it. |
+
+Load pattern (bash):
+
+```bash
+set -a; source .env; set +a
+```
+
+Future additions expected (do not commit real values): `ANTHROPIC_API_KEY` (used by `claude-code`
+if we ever run against a non-default provider), `OPENAI_API_KEY` (for codex when/if added).
+
+**Never commit `.env`.** If you add a new variable, document it in the table above.
+
+### OpenCode provider setup (ModelGate)
+
+OpenCode is configured at `~/.config/opencode/opencode.json` with a single provider `modelgate`
+using the OpenAI-compatible `@ai-sdk/openai-compatible` driver. Registered models:
+`modelgate/deepseek-v3.2`, `modelgate/gpt-4o`, `modelgate/claude-sonnet-4-5`. Add new models by
+editing the `provider.modelgate.models` block (model id on left is what opencode sees as
+`modelgate/<id>`). The provider reads its API key from `{env:MODELGATE_API_KEY}` so the
+shell must have `.env` loaded before invoking `opencode run`.
+
 ## Running
 
 **IMPORTANT: always `cd idea-evolve` first.** The orchestrator takes `.` as the project root
@@ -108,6 +141,96 @@ from the last completed phase by inspecting which files exist (`phase_status()`)
 **Agents are launched as:** `npx @anthropic-ai/claude-code --print --model <model> --max-turns <N>`
 with `--allowedTools Read,Write,Bash,Glob,Grep`. Each agent gets a lean prompt with file paths to read
 (not inline content), so prompts stay small regardless of knowledge base size.
+
+### Harness layer
+
+Agent subprocesses are launched through a `HarnessAdapter` abstraction in
+`idea-evolve/orchestrator_harness.py`. Two adapters are supported:
+
+- **`ClaudeCodeAdapter`** (default) — `npx @anthropic-ai/claude-code --print`. Session ids are
+  caller-assigned UUIDs. Wrap-up/debrief resumes via `--resume <uuid>`. Models from
+  `CLAUDE_CODE_MODEL_MAP` (`opus|sonnet|haiku` → Anthropic model ids).
+- **`OpenCodeAdapter`** — `opencode run --format json`. Session ids are **server-assigned**
+  (`ses_<26chars>`) and emitted in the first JSON event on stdout. The adapter streams stdout
+  in a reader thread so the id is captured before any potential timeout-kill, then raises
+  `SessionTimeout(session_id=...)` so wrap-up/debrief can resume with `-s <ses_id>`.
+  No `--max-turns` equivalent — wall-clock timeout is the only ceiling (warning logged once).
+  Tool allowlist is translated into `OPENCODE_PERMISSION` env JSON (edit/bash/webfetch).
+
+Selection is per-agent via `user/config.yaml`:
+
+```yaml
+harnesses:
+  default: claude-code      # or: opencode
+  per_agent: {}             # e.g. {explore: opencode, architect: claude-code}
+
+models:
+  opencode:                 # opencode alias → provider/model
+    opus: modelgate/claude-sonnet-4-5
+    sonnet: modelgate/minimax-m2.7
+    haiku: modelgate/minimax-m2.7
+```
+
+`launch_claude_session()` / `resume_claude_session()` in `orchestrator.py` are thin shims
+that dispatch to the configured adapter via `_get_adapter(agent_role)`. Call-site names kept
+for legacy reasons; both accept an optional `agent_role` kwarg to resolve `per_agent` overrides.
+
+**Resolution order** (per launch): `harnesses.per_agent[agent_role]` → `harnesses.default` →
+`claude-code` (with one-line warning on unknown names).
+
+**`per_agent` keys** accept the agent role names the orchestrator passes from call sites:
+`architect`, `explore`, `exploit`, `genetic`, `full`, `research`, `experimentator`,
+`evaluator`, `system_critic`, `consistency_reviewer`, `wrap_up`, `debrief_recovery`.
+Any call site that does NOT pass `agent_role=` falls back to `harnesses.default` — so
+flipping `default: opencode` is the simplest way to route "everything except one or two
+roles" to opencode.
+
+**Currently wired call sites** (pass `agent_role=` explicitly):
+- `run_architect()` launch + wrap-up resume → `agent_role="architect"`
+
+Other call sites (agent work, wrap-up, debrief, analysis) currently rely on
+`harnesses.default`. If you need finer per-role routing beyond the architect
+exception, thread `agent_role=<role>` into the launch sites in `run_single_agent()`
+(work/wrap-up/debrief) and `run_analysis()` (evaluator / system_critic / consistency_reviewer).
+
+### Pre-flight for the opencode harness
+
+OpenCode reads its API key from the shell env (`{env:MODELGATE_API_KEY}` in
+`~/.config/opencode/opencode.json`). Always load `.env` before launching the orchestrator
+if any agent is routed to opencode:
+
+```bash
+set -a; source .env; set +a
+cd idea-evolve && python3 orchestrator.py . --problem sidon --single
+```
+
+Without this, opencode exits silently with empty stdout and the adapter raises
+`SessionError: opencode launch produced no sessionID in stdout`.
+
+### Example: architect on claude-code, everything else on opencode
+
+```yaml
+architect_model: sonnet        # architect runs Claude Sonnet via claude-code
+
+harnesses:
+  default: opencode
+  per_agent:
+    architect: claude-code     # keep Claude-tuned prompt on Claude
+
+models:
+  opencode:
+    opus:   modelgate/claude-sonnet-4-5
+    sonnet: modelgate/minimax-m2.7
+    haiku:  modelgate/minimax-m2.7
+```
+
+This is the configuration validated end-to-end on the permcodes problem
+(single-generation run, 2026-04-15 attempt).
+
+Contract tests live in `idea-evolve/tests/test_adapters.py`
+(`cd idea-evolve && python3 -m pytest tests/test_adapters.py -v`).
+Unit tests (7) always run. Integration tests (3) auto-skip if the `opencode` binary or
+`MODELGATE_API_KEY` is absent.
 
 ## File Structure
 
@@ -415,6 +538,16 @@ On first run, `knowledge/clusters/` and `history/generations/` didn't exist. `sh
 to nonexistent dirs raised `FileNotFoundError`. Fixed: added `mkdir(parents=True, exist_ok=True)`
 before copying to clusters dir and generations dir.
 
+### [BUG-46] ~~`phase_status()` skips agents when evaluator workspace exists from a bad prior run~~ — FIXED
+When agents fail to launch (e.g. opencode binary not on PATH) the orchestrator may still
+advance to the evaluator phase and produce evaluator workspace output. On restart, even after
+gen_progress.json is cleaned, `phase_status()` finds the evaluator workspace and returns
+`"evaluator_done"`, skipping agents entirely. Root cause: the manifest-based agent check
+fell through to legacy filesystem fallbacks when 0 agents were complete. Fixed: if the
+manifest check finds fewer than all agents complete, always return `"planned"` (even for
+0 completed) instead of falling through to fallbacks that can't distinguish evaluator output
+from agent output.
+
 ### [BUG-45] ~~Orphaned architect writes partial manifest; restarted orchestrator uses it~~ — FIXED
 If the orchestrator is killed mid-architect-session, the architect process becomes an orphan
 and keeps running. It may have already written an intermediate `manifest.yaml` (e.g. with only
@@ -541,6 +674,31 @@ Could trigger API rate limits depending on tier, causing sessions to fail or deg
 Gen 1 has no clusters, no coverage matrix, no solution-idea map, no population summary.
 All agents get "no data yet" placeholders. The Evaluator must create all knowledge structures
 from scratch with no examples. Gen 1-2 knowledge quality may be poor and set a bad foundation.
+
+### [DESIGN-12] Model tier aliases are not semantically enforced across harnesses
+The `opus`/`sonnet`/`haiku` aliases mean different things depending on the harness. For
+`claude-code`, they map to actual Claude model tiers with meaningful capability differences
+(Opus > Sonnet > Haiku). For `opencode`, the aliases currently all point to
+`modelgate/minimax-m2.7` — so every agent gets the same model regardless of tier. This means
+high-reasoning roles (evaluator, experimentator, architect) that are supposed to get Opus
+are silently downgraded. Additionally, different providers have different strengths — a
+model that works well for code generation (Minimax) may not reason as well as Claude for
+knowledge synthesis (evaluator) or strategic planning (architect).
+
+**Problem:** We have no validation, warning, or per-role model routing that accounts for the
+actual capabilities of non-Claude models. The `models.opencode:` block is purely a lookup
+table with no quality signal.
+
+**Future work:**
+- Distinguish "reasoning-heavy" roles (architect, evaluator, consistency_reviewer,
+  experimentator) from "workhorse" roles (explore, exploit, genetic, full, research)
+- Allow separate `models.opencode.high_reasoning` and `models.opencode.workhorse` keys, or
+  full per-role model overrides in config
+- Log a warning when a role configured for `opus` is mapped to the same model as `haiku`
+- Test non-Claude models on evaluator/architect tasks to measure quality regression
+
+**Current workaround:** Keep architect on `claude-code` (real Claude Sonnet) via
+`per_agent.architect: claude-code`. All other roles use Minimax via opencode.
 
 ### [DESIGN-11] ~~Architect skips experimentator for recurring helper requests~~ — MITIGATED
 When `system_recommendations.md` asks for a shared helper (e.g. SA calibration utility),

@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "errors": [],
+  "completed_gens": [],
+  "pid": 32947,
+  "started_at": "2026-04-15T13:41:01.910377+00:00",
+  "target_gen": 30,
+  "status": "running",
+  "current_gen": 1,
+  "current_phase": "system_critic",
+  "agents": {},
+  "last_updated": "2026-04-15T13:41:01.910870+00:00"
+}

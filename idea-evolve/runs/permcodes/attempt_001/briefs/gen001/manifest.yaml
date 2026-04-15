@@ -1,0 +1,25 @@
+generation: 1
+strategy_summary: "Cold start: establish AGL(1,8) baseline at 616, explore ILS extension, try alternative algebraic groups, survey literature for paths beyond 616"
+agents:
+  - type: full
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen001/full_1.md"
+    timeout: 900
+  - type: explore
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen001/explore_1.md"
+    timeout: 1200
+  - type: explore
+    instance: 2
+    model: sonnet
+    brief: "briefs/gen001/explore_2.md"
+    timeout: 1200
+  - type: research
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen001/research_1.md"
+    timeout: 600
+parallel_groups:
+  - ["full_1", "explore_1", "explore_2", "research_1"]

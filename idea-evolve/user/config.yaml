@@ -78,11 +78,29 @@ max_turns:
 
 # --- Models ---
 default_model: sonnet              # Default model for agents (Architect overrides per-agent)
-architect_model: opus              # Architect always uses highest reasoning model
+architect_model: sonnet            # Architect always uses highest reasoning model
 experimentator_model: opus         # Experimentator creates shared tools, needs high reasoning
 
 # --- Parallelism ---
 max_parallel_sessions: 10          # Max concurrent Claude Code sessions
+
+# --- Agent harnesses (which CLI launches each agent session) ---
+# default: claude-code | opencode
+# per_agent: optional overrides by agent role (architect, explore, exploit, full, genetic,
+#   experimentator, evaluator, system_critic, consistency_reviewer).
+# Unknown harness names fall back to claude-code with a warning.
+harnesses:
+  default: opencode
+  per_agent:
+    architect: claude-code         # keep architect on Claude (Claude-tuned prompt)
+
+# Per-harness model aliases. Keys `opus|sonnet|haiku` map to provider/model strings.
+# Opencode reads from `~/.config/opencode/opencode.json` providers; ModelGate preferred.
+models:
+  opencode:
+    opus:   modelgate/minimax-m2.7
+    sonnet: modelgate/minimax-m2.7
+    haiku:  modelgate/minimax-m2.7
 
 # --- Knowledge management (advisory — passed to agents as guidance, not enforced) ---
 knowledge_hierarchy:
