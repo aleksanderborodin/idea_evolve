@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "errors": [
+    {
+      "gen": 1,
+      "phase": "agents",
+      "agent": "full_1",
+      "type": "timeout",
+      "message": "Timed out after 2700s",
+      "ts": "2026-04-16T15:01:21.282582+00:00"
+    },
+    {
+      "gen": 2,
+      "phase": "agents",
+      "agent": "experimentator_1",
+      "type": "timeout",
+      "message": "Timed out after 1800s",
+      "ts": "2026-04-16T15:59:13.050129+00:00"
+    },
+    {
+      "gen": 2,
+      "phase": "agents",
+      "agent": "explore_1",
+      "type": "timeout",
+      "message": "Timed out after 2100s",
+      "ts": "2026-04-16T16:04:13.024377+00:00"
+    }
+  ],
+  "completed_gens": [
+    1
+  ],
+  "pid": 52671,
+  "started_at": "2026-04-16T15:26:22.861204+00:00",
+  "target_gen": 30,
+  "status": "running",
+  "current_gen": 2,
+  "current_phase": "agents_running",
+  "agents": {
+    "exploit_1": {
+      "status": "done",
+      "finished_at": "2026-04-16T15:59:43.072129+00:00",
+      "solutions": 1,
+      "elapsed": 1830.7
+    },
+    "experimentator_1": {
+      "status": "done",
+      "finished_at": "2026-04-16T15:59:43.719673+00:00",
+      "solutions": 0,
+      "elapsed": 1831.2
+    },
+    "explore_1": {
+      "status": "wrapping_up"
+    },
+    "explore_2": {
+      "status": "done",
+      "finished_at": "2026-04-16T15:45:21.371603+00:00",
+      "solutions": 8,
+      "elapsed": 968.9
+    },
+    "research_1": {
+      "status": "done",
+      "finished_at": "2026-04-16T15:51:04.915387+00:00",
+      "solutions": 0,
+      "elapsed": 1312.4
+    }
+  },
+  "last_updated": "2026-04-16T16:04:13.025401+00:00"
+}

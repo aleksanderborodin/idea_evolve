@@ -132,6 +132,25 @@ duplicates within or across groups. No empty groups. If `parallel_groups` is mis
 or malformed, the orchestrator falls back to `[[all agents]]` and writes a warning into
 the next architect's prompt — do not rely on the fallback for serial-eval problems.
 
+**Light Evaluator between groups.** The orchestrator runs a *Light Evaluator* after
+each group that produced output (except the last group — the heavy evaluator runs
+right after it). The light evaluator:
+
+- Reads only THAT group's solutions/reports/findings
+- Writes new ideas/patterns into `knowledge/` and a `group_notes.md` into
+  `knowledge/group_notes/genNNN/group{K}.md`
+- Is visible to the NEXT group's agents before they start, so each group builds on
+  the prior group's discoveries instead of duplicating them
+- Does NOT rewrite state_of_affairs, coverage matrix, or clusters — that stays with
+  the end-of-generation heavy evaluator
+
+**What this means for your scheduling:** more (smaller) sequential groups give the
+pipeline more chances to learn mid-generation, at the cost of a light-eval call
+between each pair. Fewer (larger) groups ship more work in parallel but skip the
+inter-group learning opportunity. For fast-iteration / parallel problems, prefer
+1 big group. For serial-eval problems where you already have one-agent-per-group,
+you get progressive learning for free (no extra grouping work required).
+
 ### 2. Per-Instance Briefs — `type_instance.md`
 
 Each agent instance receives its own brief file. Every brief has two mandatory sections:

@@ -14,6 +14,7 @@ from dashboard.data import (
     get_feedback,
     get_file_tree,
     get_gen_progress,
+    get_light_evaluator_summary,
     get_generation_status,
     get_initial_scores,
     get_knowledge,
@@ -361,6 +362,11 @@ def generation_progress(gen):
     return jsonify(get_gen_progress(gen))
 
 
+@api_bp.route("/generation/<int:gen>/light_evaluators")
+def generation_light_evaluators(gen):
+    return jsonify({"gen": gen, "groups": get_light_evaluator_summary(gen)})
+
+
 @api_bp.route("/generation/<int:gen>")
 def generation(gen):
     gen_str = f"gen{gen:03d}"
@@ -370,6 +376,7 @@ def generation(gen):
         "manifest": get_manifest(gen),
         "reports": get_reports(gen),
         "solutions": [s for s in get_solutions() if s["gen"] == gen],
+        "light_evaluators": get_light_evaluator_summary(gen),
     }
 
     from dashboard.data.config import get_project_root

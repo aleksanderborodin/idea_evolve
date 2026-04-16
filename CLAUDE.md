@@ -73,6 +73,8 @@ Current keys:
 | `MODELGATE_API_KEY` | OpenAI-compatible API key for the ModelGate provider (format `rp_...`). Referenced from `~/.config/opencode/opencode.json` as `{env:MODELGATE_API_KEY}`. |
 | `MODELGATE_BASE_URL` | ModelGate base URL (`https://api.modelgate.ru/v1`). Currently hard-coded in opencode's provider config too; duplicated in `.env` so Python clients / future harnesses can read it. |
 | `KAGGLE_API_TOKEN` | Kaggle competitions CLI token (format `KGAT_...`). Generated at kaggle.com → Settings → API. Used by `scripts/new_kaggle_problem.py` and any evaluate.py that needs to re-pull competition data. See [docs/problem_design_guide.md §13](docs/problem_design_guide.md#13-turning-a-kaggle-competition-into-a-problem). |
+| `CHEAPGPT_API_KEY` | CheapGPT (aiproductiv.ru) API key — OpenAI-compatible proxy routed to OpenAI, ~3× cheaper, works from RU without VPN. JWT-format token from cheapgpt.ru personal cabinet. Used by the `cheapgpt` opencode provider (`~/.config/opencode/opencode.json`) for GPT-5.4 / GPT-5.4-mini. Currently routed as the `opus` tier in `user/config.yaml`. |
+| `CHEAPGPT_BASE_URL` | CheapGPT base URL (`https://api.aiproductiv.ru/v1`). Hard-coded in opencode's provider block too; duplicated here for Python clients. |
 
 Load pattern (bash):
 
@@ -85,14 +87,27 @@ if we ever run against a non-default provider), `OPENAI_API_KEY` (for codex when
 
 **Never commit `.env`.** If you add a new variable, document it in the table above.
 
-### OpenCode provider setup (ModelGate)
+### OpenCode provider setup (ModelGate + CheapGPT)
 
-OpenCode is configured at `~/.config/opencode/opencode.json` with a single provider `modelgate`
-using the OpenAI-compatible `@ai-sdk/openai-compatible` driver. Registered models:
-`modelgate/deepseek-v3.2`, `modelgate/gpt-4o`, `modelgate/claude-sonnet-4-5`. Add new models by
-editing the `provider.modelgate.models` block (model id on left is what opencode sees as
-`modelgate/<id>`). The provider reads its API key from `{env:MODELGATE_API_KEY}` so the
-shell must have `.env` loaded before invoking `opencode run`.
+OpenCode is configured at `~/.config/opencode/opencode.json` with two providers, both using
+the OpenAI-compatible `@ai-sdk/openai-compatible` driver:
+
+- **`modelgate`** — `https://api.modelgate.ru/v1`, key from `{env:MODELGATE_API_KEY}`.
+  Models: `modelgate/deepseek-v3.2`, `modelgate/gpt-4o`, `modelgate/claude-sonnet-4-5`,
+  `modelgate/minimax-m2.7`.
+- **`cheapgpt`** — `https://api.aiproductiv.ru/v1`, key from `{env:CHEAPGPT_API_KEY}`.
+  OpenAI proxy (~3× cheaper, RU-accessible). Models: `cheapgpt/gpt-5.4`,
+  `cheapgpt/gpt-5.4-mini`, `cheapgpt/gpt-5.3-codex`, `cheapgpt/gpt-5.2-codex`,
+  `cheapgpt/gpt-5.2`. gpt-5.4 has `reasoning: true` + image input.
+
+Add new models by editing the relevant provider block (id on left = opencode's
+`provider/<id>`). Both providers read their API key from env, so the shell must
+have `.env` loaded (`set -a; source .env; set +a`) before `opencode run`.
+
+Current tier mapping in `idea-evolve/user/config.yaml` (`models.opencode`):
+`opus → cheapgpt/gpt-5.4`, `sonnet → modelgate/minimax-m2.7`,
+`haiku → modelgate/minimax-m2.7`. High-reasoning roles (architect, evaluator,
+experimentator) hit GPT-5.4; workhorse roles stay on Minimax.
 
 ## Running
 
@@ -145,13 +160,23 @@ Problem files at `idea-evolve/problems/sidon/`. Fitness direction read from `met
 Helpers: `is_sidon`, `count_violations`, `differences`, `can_add`, `is_prime` in `helpers/core.py`.
 Previous problems: Binary-Ternary GEMM (`problems/gemm/`), Permutation Codes M(8,5) (`problems/permcodes/`).
 
-**Also available: CayleyPy Megaminx** (`problems/megaminx/`) — solve 1001 scrambled Megaminx
-states (Kaggle competition `cayley-py-megaminx`), minimize total path length. Class A Kaggle
-problem (test set downloadable, metric self-checking). Baseline: cayleypy beam search
-(~100–300k). Target: 90k (top Kaggle score: 80,499). CPU-only; `concurrency: parallel`.
-Helpers wrap cayleypy's `BeamSearchAlgorithm`, `MeetInTheMiddle`, and `find_path`. Data at
-`problems/megaminx/data/` (gitignored; refresh via `scripts/new_kaggle_problem.py --refresh megaminx`).
-Start: `python3 orchestrator.py . --problem megaminx --new-attempt`.
+**Also available: CayleyPy Megaminx** (`problems/megaminx/`) — solve Kaggle competition
+`cayley-py-megaminx` (1001 scrambled Megaminx states; minimize total path length; lower
+is better). Class A (test set downloadable, metric self-checking). **GPU**: RTX 5060 Ti
+(Blackwell), CUDA 12.8 via torch 2.11.0+cu128; NVIDIA MPS enabled for true concurrent
+GPU kernels across agents. `concurrency: parallel`. Eval default is a **stratified 1/10
+proxy** (every 10th id = 101 puzzles; preserves full depth distribution; ~7 min/eval).
+`--full` operator override evaluates all 1001 (~70 min). Score anchors (proxy units):
+sample_submission floor **50,572**; baseline_cayleypy (unguided) ~40–50k; **target 15,000**;
+Kaggle top-3 ≈ 8,050. Multiply by ~10 for full-set equivalent. Per-eval `.score` includes
+per-depth-bucket breakdown ({special, short, medium, hard, very_hard} × {count, fitness,
+solved, invalid}) plus diagnostics (`compression_ratio`, `improved_count`, `max_path_length`,
+`p50_path_length`, `p95_path_length`). Helpers expose `load_sample_submission_paths()` /
+`_lengths()` — every sample_submission path is valid and `len == scramble_depth ==
+initial_state_id` for ids 1..1000. Data at `problems/megaminx/data/` (gitignored; refresh
+via `scripts/new_kaggle_problem.py --refresh megaminx`). Start MPS daemon once per boot
+(`CUDA_MPS_PIPE_DIRECTORY=/tmp/nvidia-mps CUDA_MPS_LOG_DIRECTORY=/tmp/nvidia-mps-log nvidia-cuda-mps-control -d`),
+load `.env`, then: `python3 orchestrator.py . --problem megaminx --new-attempt`.
 
 ### Adding a Kaggle competition
 
@@ -238,10 +263,11 @@ orchestrator is running, 60s when idle.
 The orchestrator is a stateless Python loop. All state lives in files. If it crashes, it resumes
 from the last completed phase by inspecting which files exist (`phase_status()`).
 
-**Generation loop (6 phases):**
+**Generation loop (6 phases + per-group light eval):**
 1. **Architect** — reads system state, writes `manifest.yaml` + per-agent briefs to `briefs/genNNN/`
 2. **Agent work sessions** — launched in parallel per `parallel_groups` in manifest. Each agent reads files, writes code, runs evaluate.py, iterates, writes debrief report. All in one session.
-3. **Evaluator** — collects scores from `.score` files, extracts knowledge (ideas/patterns/facts), updates clusters, generates coverage matrix
+   - **2.5 Light Evaluator (per-group)** — after each group in a multi-group manifest (except the last), a lightweight evaluator reads ONLY that group's output, adds genuinely new ideas/patterns to `knowledge/`, and writes `knowledge/group_notes/genNNN/group{K}.md` + `reports/genNNN/evaluator_group{K}.md`. The NEXT group's agents read the group_notes before they start, so progress compounds inside a generation instead of being locked up until phase 3. Skipped when a group produces literally nothing, on single-group manifests, or when disabled via `analysis.evaluator_light.enabled: false`. Sonnet by default, short turn budget (~400), scope restricted to `new_ideas/` + `new_patterns/` + `group_notes.md` + `report.md` — NEVER rewrites state of affairs, coverage matrix, clusters, or solution-idea map.
+3. **Evaluator (heavy, end-of-gen)** — collects scores from `.score` files, CONSOLIDATES what the light evaluators added across all groups, extracts/merges knowledge, updates clusters, rewrites state of affairs, generates coverage matrix. Reads `reports/genNNN/evaluator_group*.md` and `knowledge/group_notes/genNNN/` as part of its input set.
 4. **System Critic** — reads agent reports, identifies pipeline problems, writes recommendations
 5. **Consistency Review** — every 3rd gen or on strategic shift: audits knowledge base, rewrites State of Affairs
 6. **Finalize** — update rankings, population summary, score progression, detect user interventions
@@ -381,6 +407,25 @@ skip logic and dashboard pipeline tab.
 
 ## What Works
 
+- **Per-group Light Evaluator (two-tier evaluator).** The heavy end-of-generation
+  Evaluator (opus, full consolidation) is now preceded by a per-group Light
+  Evaluator (sonnet, surgical scope) that runs between agent groups in
+  multi-group manifests. Each light eval reads only its group's output and:
+  (a) adds genuinely new ideas/patterns into `knowledge/ideas/` and
+  `knowledge/patterns/` so the NEXT group's agents see them, (b) writes a short
+  `knowledge/group_notes/genNNN/group{K}.md` that subsequent agents read as part
+  of their knowledge hierarchy (wired into `build_agent_prompt`), and (c) writes
+  its debrief to `reports/genNNN/evaluator_group{K}.md` for the heavy evaluator
+  to consolidate later. Skip rules (in `run_light_evaluator`):
+  single-group manifests skip (heavy is next anyway), the final group in any
+  manifest skips (heavy is next), groups that produced literally nothing skip,
+  and `analysis.evaluator_light.enabled: false` skips. Defaults live in
+  `DEFAULT_TIMEOUTS` / `DEFAULT_MAX_TURNS` under the key `evaluator_light`
+  (900s / 220 turns) and overridable via `user/config.yaml`. `gen_progress.json`
+  tracks per-group status under `light_evaluators.group{K}`. Surfaced on the
+  dashboard via a sub-phase pipeline node (`pn-lighteval`) and the
+  `/api/generation/<gen>/light_evaluators` endpoint. Prompt template:
+  [idea-evolve/agents/evaluator_light.md](idea-evolve/agents/evaluator_light.md).
 - **Architect debrief and failure reporting.** After each architect session, `architect_report.md`
   is copied from `briefs/genNNN/` to `reports/genNNN/architect.md`. The System Critic reads it
   automatically as part of `reports/genNNN/`. The next Architect gets it via `prev_gen_reports.md`.
@@ -1183,6 +1228,57 @@ resources:
 
 **The `concurrency: serial|parallel` flag stays as the simple default**; problems
 that need granular pools opt in by adding `resources:`.
+
+### [DESIGN-19] Light Evaluator between groups — open risks
+
+**What it is.** A Phase 2.5 `Light Evaluator` that runs after each multi-group
+generation's parallel group except the last. Reads only THAT group's
+outputs, writes `new_ideas/`, `new_patterns/`, `group_notes.md`, and a
+per-group `report.md`, so the next group's agents see what the earlier
+group already tried. Code: `orchestrator.py:run_light_evaluator` +
+`build_light_evaluator_prompt`; template: `agents/evaluator_light.md`;
+config: `analysis.evaluator_light` (`enabled: true`, `model: sonnet`,
+`max_turns: 400`, `timeout: 900s`). Skipped on single-group manifests
+(majority of `concurrency: parallel` problems) and on groups that produced
+no output.
+
+**Known risks — none verified yet; first real run will stress-test them:**
+
+1. **Double-counting ideas with Heavy Evaluator.** Light eval writes
+   `knowledge/ideas/<lifecycle>/*.md` mid-generation. Heavy eval at
+   end-of-gen may re-extract the same idea under a different name (LLMs
+   are inconsistent about idea naming). No dedup layer between them; the
+   Heavy evaluator's prompt now points to `knowledge/group_notes/` +
+   `reports/genNNN/evaluator_group*.md` but the template
+   (`agents/evaluator.md`) isn't updated to say "consolidate, don't
+   duplicate." Watch `knowledge/ideas/active/` for obvious dupes after
+   gen 1; if seen, add a dedup pass or update the template.
+2. **Wall-clock penalty on serial-eval problems.** Strawberry uses
+   `concurrency: serial` → one agent per group → light eval runs between
+   every pair of agents. 5+ agents per gen × 900 s budget each =
+   potentially +1 hour per gen. Megaminx is `parallel` so most gens
+   should produce a single group and pay zero penalty — but if the
+   architect splits for any reason (e.g. isolating research agents),
+   the penalty hits. Consider per-problem toggle of `evaluator_light.enabled`.
+3. **No strategic-shift escalation.** Heavy Evaluator can set
+   `strategic_shift: true` to trigger an emergency Consistency Review.
+   Light Evaluator can't — it has no access to that flag. So a major
+   mid-gen discovery (e.g. "all current solutions use the wrong
+   objective") is propagated only via `group_notes.md` to the next
+   group, not lifted into a State-of-Affairs rewrite.
+4. **group_notes/ never pruned.** `knowledge/group_notes/genNNN/` is
+   created per gen and never compacted. Over 30 gens with multi-group
+   plans, accumulates indefinitely. Low urgency; flag when >10 MB.
+5. **Untested at the time of writing.** The code is uncommitted and the
+   template is untracked (2026-04-16). Megaminx gen 1 will be the first
+   real trial. If the architect produces a single group (per architect.md
+   guidance for parallel problems), the path is never exercised.
+6. **Preflight vs. rollback.** `agents/evaluator_light.md` is now in
+   `REQUIRED_GLOBAL_FILES`. Any rollback to a commit before
+   `long_eval_support` without removing this entry will fail preflight.
+
+**Action once a real run completes**: promote verified behavior to
+"What Works" and remove resolved items above.
 
 ## SPEC DEVIATIONS — intentional differences from the design doc
 

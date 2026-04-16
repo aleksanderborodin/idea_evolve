@@ -35,10 +35,18 @@ agents:
 analysis:
   evaluator:
     enabled: true
-    model: opus                    # Evaluator needs high reasoning quality
+    model: sonnet                  # Heavy end-of-generation evaluator — full consolidation
+  evaluator_light:
+    enabled: true                  # Runs AFTER EACH parallel group (except the last) so
+    model: sonnet                  # the next group's agents see new ideas/patterns immediately.
+                                   # Surgical scope: only new_ideas + new_patterns + group_notes.
+                                   # Skipped on single-group manifests (heavy eval is next anyway)
+                                   # and on groups that produced zero solutions.
   system_critic:
     enabled: true
     model: sonnet                  # Critic is lighter-weight analysis
+  consistency_reviewer:
+    model: sonnet                  # Audit/rewrite state-of-affairs; keep on sonnet with architect on opus
 
 # --- Timeouts (seconds) ---
 # Three-phase timeout: work → wrap-up → debrief recovery.
@@ -53,7 +61,8 @@ timeouts:
   architect: 1800                  # Architect planning session
   architect_wrapup: 600            # Architect wrap-up if planning session timed out
   agent_default: 2700              # Default work phase for solution agents
-  evaluator: 2700                  # Evaluator analysis phase
+  evaluator: 2700                  # Heavy evaluator (end of generation)
+  evaluator_light: 900             # Light evaluator (per-group, runs between groups)
   system_critic: 1800              # System critic analysis phase
   consistency_reviewer: 2700       # Consistency review phase
   wrap_up: 2700                    # Wrap-up session (continue work after timeout)
@@ -73,13 +82,17 @@ max_turns:
   experimentator: 1500
   research: 1500
   evaluator: 1500
+  evaluator_light: 400             # Per-group light evaluator (small scope, short turn budget)
   system_critic: 600
   consistency_reviewer: 1500
 
 # --- Models ---
-default_model: sonnet              # Default model for agents (Architect overrides per-agent)
-architect_model: sonnet            # Architect always uses highest reasoning model
-experimentator_model: opus         # Experimentator creates shared tools, needs high reasoning
+# Tier aliases resolved via models.opencode below (opus → cheapgpt/gpt-5.4,
+# sonnet → modelgate/minimax-m2.7). Only the architect runs on opus; everything
+# else stays on sonnet to control cost.
+default_model: sonnet              # Default for solution agents (explore/exploit/full/genetic/research)
+architect_model: opus              # Architect plans the generation — high-reasoning role
+experimentator_model: sonnet       # Experimentator stays on sonnet per current policy
 
 # --- Parallelism ---
 max_parallel_sessions: 10          # Max concurrent Claude Code sessions
@@ -97,8 +110,8 @@ harnesses:
 # Opencode reads from `~/.config/opencode/opencode.json` providers; ModelGate preferred.
 models:
   opencode:
-    opus:   modelgate/minimax-m2.7
-    sonnet: modelgate/minimax-m2.7
+    opus:   cheapgpt/gpt-5.4          # high-reasoning roles (architect, evaluator, experimentator)
+    sonnet: modelgate/minimax-m2.7    # workhorse roles (explore, exploit, full, genetic, critic)
     haiku:  modelgate/minimax-m2.7
 
 # --- Knowledge management (advisory — passed to agents as guidance, not enforced) ---

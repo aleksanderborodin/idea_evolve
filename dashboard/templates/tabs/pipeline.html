@@ -22,10 +22,17 @@
         </div>
         <div class="pipeline-arrow" id="pa-2"><div class="arrow-line"></div></div>
 
+        <div class="pipeline-node pipeline-subphase" data-pipe-phase="agents_done" id="pn-lighteval">
+          <div class="node-icon">&#9788;</div>
+          <div class="node-title">Light Eval <span class="subphase-tag">per-group</span></div>
+          <div class="node-desc" id="lightEvalDesc">After each group: new ideas + notes so next group builds on them</div>
+        </div>
+        <div class="pipeline-arrow" id="pa-2b"><div class="arrow-line"></div></div>
+
         <div class="pipeline-node" data-pipe-phase="evaluator_done" id="pn-evaluator">
           <div class="node-icon">&#9878;</div>
-          <div class="node-title">Evaluator</div>
-          <div class="node-desc">Collect scores, extract knowledge, update clusters</div>
+          <div class="node-title">Evaluator <span class="subphase-tag">heavy</span></div>
+          <div class="node-desc">End-of-gen consolidation: state of affairs, coverage matrix, clusters</div>
         </div>
         <div class="pipeline-arrow" id="pa-3"><div class="arrow-line"></div></div>
 

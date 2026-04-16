@@ -1,11 +1,95 @@
 ---
+name: sample_submission_fallback
+lifecycle: active
+confidence: high
+cluster: baselines
+supported_by: [baseline_submission.py, initial_facts.md#scramble_depth_equals_id]
+contradicted_by: []
+related_ideas: [cayleypy_beam_search, budget_aware_per_bucket]
+---
+
+# sample_submission as a guaranteed-valid fallback
+
+`helpers.core.load_sample_submission_paths()` returns Kaggle's provided
+sample paths — **every one is valid** (confirmed by data inspection and
+the `cayleypy-megaminx-first-steps.ipynb` hint). Path length equals
+scramble depth equals `initial_state_id` (for ids 1..1000).
+
+Use this as a **safety net** in every solution:
+
+```python
+def entrypoint():
+    from helpers.core import load_test, load_sample_submission_paths, is_solved, apply_path
+    sample = load_sample_submission_paths()
+    tests = load_test(proxy=True)
+    out = {}
+    for sid, state in tests.items():
+        # Try your fast/cheap/clever search first
+        path = my_search(state, budget_hint=sid)  # budget grows with depth
+        # Verify; fall back to sample if broken or worse
+        if path and is_solved(apply_path(state, path)) and len(path.split(".")) <= len(sample[sid].split(".")):
+            out[sid] = path
+        else:
+            out[sid] = sample[sid]
+    return out
+```
+
+The floor this buys you is `compression_ratio = 1.0` on puzzles you can't
+improve. Every real optimization move (compression_ratio < 1.0) is a win
+stacked on top of the freebie; no move is a regression.
+
+**Sub-ideas worth exploring:**
+
+- Per-puzzle budget tuned to depth: shallow puzzles deserve heavy search
+  (the freebie is only marginally better than optimal); deep puzzles are
+  hopeless with unguided search and should fast-fail back to sample.
+- Path stitching: split sample[sid] at the midpoint, search from both
+  endpoints toward center, and splice if you find a shorter bridge.
+- Move cancellation: compress sample_submission paths by removing adjacent
+  `X.-X` cancellations. Free 5-15% improvement with zero search.
+
+---
+name: budget_aware_per_bucket
+lifecycle: active
+confidence: medium
+cluster: search_algorithms
+supported_by: [initial_facts.md#score_anchors]
+contradicted_by: []
+related_ideas: [sample_submission_fallback, cayleypy_beam_search, predictor_training]
+---
+
+# Budget-aware per-bucket search
+
+The score is dominated by the `very_hard` bucket (ids 501-1000, or ids
+{500, 510, ..., 1000} in the stratified proxy — 50 out of 101 puzzles).
+Spending equal wall-clock on every puzzle is wrong:
+
+- `short` (depth 1-25): cheap; beam_width ~256, max_steps = 2×depth.
+  Should solve all with compression_ratio ≈ 0.3-0.5 easily.
+- `medium` (depth 26-100): unguided beam's sweet spot. beam_width ~1024,
+  max_steps = depth + 20.
+- `hard` (depth 101-500): unguided beam fails. Either use a trained
+  predictor, MITM, or bail quickly to sample_submission.
+- `very_hard` (depth 501-1000): no single-pass search works. Consider
+  preprocessing (macro-move compression of sample) + partial search, or
+  falling back entirely.
+
+Strategic question: is it better to spend 5 minutes solving one `very_hard`
+puzzle 50% shorter (saves ~250 moves), or 30 seconds per puzzle on 10
+`short` puzzles solving each 80% shorter (saves ~10 moves each = 100 total)?
+The first wins. Prioritize depth over breadth in budget allocation.
+
+The `.score` sidecar's `bucket_<name>_fitness` / `bucket_<name>_solved`
+tell you exactly where the leverage is after each eval.
+
+---
 name: cayleypy_beam_search
 lifecycle: active
 confidence: high
 cluster: search_algorithms
 supported_by: [baseline_cayleypy.py]
 contradicted_by: []
-related_ideas: [predictor_training, meet_in_the_middle]
+related_ideas: [predictor_training, meet_in_the_middle, sample_submission_fallback]
 ---
 
 # CayleyPy beam search (no predictor)

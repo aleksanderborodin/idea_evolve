@@ -20,6 +20,7 @@ from .scanner import (
     get_active_agents,
     get_feedback,
     get_gen_progress,
+    get_light_evaluator_summary,
     get_knowledge_lifecycle_counts,
     get_state_of_affairs_staleness,
     get_frontier_data,

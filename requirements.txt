@@ -18,6 +18,12 @@ kaggle>=1.6,<2.1
 # optax>=0.2         # permcodes problem
 # ml_dtypes>=0.4     # jax dependency
 
-# Megaminx problem (CPU-only torch; remove --index-url comment if on GPU box)
-# pip install torch --index-url https://download.pytorch.org/whl/cpu
+# Megaminx problem — cayleypy does beam search on a Cayley graph and requires torch.
+#
+# torch is NOT listed here because the correct wheel depends on hardware:
+#   - CPU-only:          pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   - NVIDIA CUDA 12.x:  pip install torch --index-url https://download.pytorch.org/whl/cu124
+#   - NVIDIA Blackwell (RTX 50xx, e.g. 5060 Ti):
+#       pip install torch --index-url https://download.pytorch.org/whl/cu128
+# Pick ONE before/after `pip install -r requirements.txt`.
 cayleypy>=0.1,<1.0

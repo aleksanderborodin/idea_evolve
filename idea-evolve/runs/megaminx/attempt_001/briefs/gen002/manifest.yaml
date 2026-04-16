@@ -1,0 +1,30 @@
+generation: 2
+strategy_summary: "Shift gen002 from compression-floor variants to first real guided-search measurements while preserving one radical search track and one algebraic track."
+agents:
+  - type: exploit
+    instance: 1
+    model: opus
+    brief: "briefs/gen002/exploit_1.md"
+    timeout: 2400
+  - type: experimentator
+    instance: 1
+    model: opus
+    brief: "briefs/gen002/experimentator_1.md"
+    timeout: 1800
+  - type: explore
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen002/explore_1.md"
+    timeout: 2100
+  - type: explore
+    instance: 2
+    model: sonnet
+    brief: "briefs/gen002/explore_2.md"
+    timeout: 1800
+  - type: research
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen002/research_1.md"
+    timeout: 1800
+parallel_groups:
+  - ["exploit_1", "experimentator_1", "explore_1", "explore_2", "research_1"]

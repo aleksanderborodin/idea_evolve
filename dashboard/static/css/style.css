@@ -931,6 +931,38 @@ body::after {
   color: var(--accent-dim);
 }
 
+/* Sub-phase nodes (e.g. Light Evaluator) — visually lighter than main phases. */
+.pipeline-node.pipeline-subphase {
+  min-width: 115px;
+  max-width: 135px;
+  opacity: 0.88;
+  border-style: dashed;
+  padding: 14px 12px;
+}
+
+.pipeline-node.pipeline-subphase .node-title {
+  font-size: 0.72rem;
+}
+
+.pipeline-node.pipeline-subphase .node-desc {
+  font-size: 0.58rem;
+}
+
+.subphase-tag {
+  display: inline-block;
+  font-size: 0.55rem;
+  font-weight: 400;
+  color: var(--text-tertiary);
+  background: var(--bg-deep);
+  border: 1px solid var(--border-bright);
+  border-radius: 999px;
+  padding: 1px 6px;
+  margin-left: 4px;
+  vertical-align: middle;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
 .node-icon {
   font-size: 1.5rem;
   margin-bottom: 8px;

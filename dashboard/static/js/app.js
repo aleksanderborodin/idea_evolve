@@ -175,7 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 // --- End Context Management ---
 
-const PHASE_ORDER = ['not_started', 'architect', 'planned', 'agents_running', 'agents_done', 'evaluator_running', 'evaluator_done', 'critic_running', 'critic_done', 'consistency_running', 'consistency_done', 'complete'];
+const PHASE_ORDER = ['not_started', 'architect', 'planned', 'agents_running', 'light_evaluator_running', 'agents_done', 'evaluator_running', 'evaluator_done', 'critic_running', 'critic_done', 'consistency_running', 'consistency_done', 'complete'];
 
 let overviewData = null;
 let solutionsData = null;
@@ -333,6 +333,7 @@ async function loadOverview() {
   const runningToStep = {
     architect: 'planned',
     agents_running: 'agents_done',
+    light_evaluator_running: 'agents_done',
     evaluator_running: 'evaluator_done',
     critic_running: 'critic_done',
     consistency_running: 'consistency_done',
@@ -350,6 +351,8 @@ async function loadOverview() {
 
   // Pipeline (if visible)
   updatePipeline(currentPhase);
+  // Light evaluator summary for current generation
+  refreshLightEvalSummary(s.current_gen);
 
   // Agent type cards (dynamic from config)
   renderAgentCards(data.agent_types || []);
@@ -401,6 +404,7 @@ function updatePipeline(currentPhase) {
   const runningToStep = {
     architect: 'planned',
     agents_running: 'agents_done',
+    light_evaluator_running: 'agents_done',
     evaluator_running: 'evaluator_done',
     critic_running: 'critic_done',
     consistency_running: 'consistency_done',
@@ -432,6 +436,42 @@ function updatePipeline(currentPhase) {
     } else {
       arrow.classList.remove('flow-active');
     }
+  }
+  // Sub-phase arrow between Agent Work and Light Eval shares the Agent Work arrow state
+  const arrow2b = document.getElementById('pa-2b');
+  if (arrow2b) {
+    if (activeNodeIdx >= 2) arrow2b.classList.add('flow-active');
+    else arrow2b.classList.remove('flow-active');
+  }
+}
+
+async function refreshLightEvalSummary(gen) {
+  // Populates the Light Eval pipeline node's description with per-group summary.
+  // Safe no-op if the endpoint isn't available or the node has been removed.
+  const node = document.getElementById('lightEvalDesc');
+  if (!node || !gen) return;
+  try {
+    const q = typeof getApiParams === 'function' ? getApiParams() : '';
+    const res = await fetch(`/api/generation/${gen}/light_evaluators${q}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const groups = (data && data.groups) || [];
+    if (groups.length === 0) {
+      node.textContent = 'After each group: new ideas + notes so next group builds on them';
+      return;
+    }
+    const counts = groups.reduce((acc, g) => {
+      acc[g.status] = (acc[g.status] || 0) + 1;
+      return acc;
+    }, {});
+    const parts = [];
+    if (counts.complete) parts.push(counts.complete + ' done');
+    if (counts.running) parts.push(counts.running + ' running');
+    if (counts.skipped) parts.push(counts.skipped + ' skipped');
+    if (counts.failed) parts.push(counts.failed + ' failed');
+    node.textContent = `gen ${gen}: ${parts.join(', ') || 'pending'}`;
+  } catch (e) {
+    // non-fatal
   }
 }
 

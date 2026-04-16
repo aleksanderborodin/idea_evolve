@@ -29,11 +29,22 @@ def _is_legacy_layout() -> bool:
 
 
 def list_problems() -> list[str]:
-    """List problem IDs from problems/ directory."""
+    """List problem IDs from problems/ directory.
+
+    Skips underscore-prefixed entries (`__pycache__`, `_shared`, `_kaggle_template`, ...)
+    which are internal modules / templates, not problems. A real problem must also have a
+    `description.md` to be selectable.
+    """
     problems_dir = _PROJECT_ROOT / "problems"
     if not problems_dir.is_dir():
         return []
-    return sorted(d.name for d in problems_dir.iterdir() if d.is_dir())
+    return sorted(
+        d.name
+        for d in problems_dir.iterdir()
+        if d.is_dir()
+        and not d.name.startswith("_")
+        and (d / "description.md").is_file()
+    )
 
 
 def list_attempts(problem_id: str) -> list[str]:

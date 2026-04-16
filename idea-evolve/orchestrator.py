@@ -182,6 +182,7 @@ DEFAULT_MAX_TURNS = {
     "research": 280,
     "experimentator": 400,
     "evaluator": 800,
+    "evaluator_light": 220,
     "system_critic": 200,
     "consistency_reviewer": 280,
     "wrap_up": 400,
@@ -280,8 +281,8 @@ def _write_gen_progress(project_root: Path, gen: int, **updates):
             else:
                 state = {"schema_version": 1, "agents": {}}
             for k, v in updates.items():
-                if k == "agents" and isinstance(v, dict):
-                    state.setdefault("agents", {}).update(v)
+                if k in ("agents", "light_evaluators") and isinstance(v, dict):
+                    state.setdefault(k, {}).update(v)
                 else:
                     state[k] = v
             state["last_updated"] = datetime.now(timezone.utc).isoformat()
@@ -400,6 +401,7 @@ REQUIRED_GLOBAL_FILES = [
     "agents/research.md",
     "agents/experimentator.md",
     "agents/evaluator.md",
+    "agents/evaluator_light.md",
     "agents/system_critic.md",
     "agents/consistency_review.md",
     "prompts/debrief_instructions.md",
@@ -526,6 +528,7 @@ DEFAULT_TIMEOUTS = {
     "architect_wrapup": 600,
     "agent_default": 3060,
     "evaluator": 3060,
+    "evaluator_light": 900,
     "system_critic": 2040,
     "consistency_reviewer": 3060,
     "wrap_up": 3060,
@@ -1084,6 +1087,63 @@ def move_evaluator_outputs(project_root: Path, gen: int):
         dest = project_root / "reports" / gen_str
         dest.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dest / "evaluator_debrief.md")
+
+
+def _light_evaluator_name(group_idx: int) -> str:
+    """Workspace / gen_progress key for the per-group light evaluator."""
+    return f"evaluator_light_group{group_idx}"
+
+
+def move_light_evaluator_outputs(project_root: Path, gen: int, group_idx: int):
+    """Move per-group light evaluator outputs.
+
+    Light evaluator only produces: new_ideas/, new_patterns/, group_notes.md,
+    report.md. It does NOT touch clusters, state_of_affairs, coverage matrix,
+    or solution-idea map — those belong to the heavy evaluator at end-of-gen.
+    """
+    gen_str = f"gen{gen:03d}"
+    ws_output = (
+        project_root / "workspace" / f"{gen_str}_{_light_evaluator_name(group_idx)}" / "output"
+    )
+    if not ws_output.exists():
+        return
+
+    # new_ideas / new_patterns — route by lifecycle frontmatter, same as heavy
+    src = ws_output / "new_ideas"
+    if src.exists():
+        for f in src.iterdir():
+            lifecycle = _read_frontmatter_field(f, "lifecycle", "active")
+            dest_dir = project_root / "knowledge" / "ideas" / lifecycle
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(f, dest_dir / f.name)
+            _remove_from_other_lifecycles(
+                project_root / "knowledge" / "ideas", f.name, lifecycle, _IDEA_LIFECYCLES
+            )
+
+    src = ws_output / "new_patterns"
+    if src.exists():
+        for f in src.iterdir():
+            lifecycle = _read_frontmatter_field(f, "lifecycle", "active")
+            dest_dir = project_root / "knowledge" / "patterns" / lifecycle
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(f, dest_dir / f.name)
+            _remove_from_other_lifecycles(
+                project_root / "knowledge" / "patterns", f.name, lifecycle, _PATTERN_LIFECYCLES
+            )
+
+    # group_notes.md — accumulated under knowledge/ so NEXT group's agents can read it
+    src = ws_output / "group_notes.md"
+    if src.exists():
+        notes_dir = project_root / "knowledge" / "group_notes" / gen_str
+        notes_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, notes_dir / f"group{group_idx}.md")
+
+    # report.md — this light evaluator's debrief, read by heavy evaluator later
+    src = ws_output / "report.md"
+    if src.exists():
+        dest = project_root / "reports" / gen_str
+        dest.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest / f"evaluator_group{group_idx}.md")
 
 
 def move_critic_outputs(project_root: Path, gen: int):
@@ -1923,8 +1983,9 @@ Your brief's "Read first" section lists specific files. In addition, always read
 4. `{project_root}/knowledge/facts/` — All fact files (global context)
 5. `{project_root}/knowledge/ideas/active/` — Current active ideas
 6. `{project_root}/knowledge/clusters/` — Topic cluster summaries (read ones relevant to your task)
-{f"7. `{project_root}/population/best.py` — Current best solution" if gen > 1 else ""}
-{"8" if gen > 1 else "7"}. `{project_root}/problem/initial_programs/` — Example/baseline programs
+7. `{project_root}/knowledge/group_notes/{gen_str}/` — Light Evaluator notes from earlier agent groups THIS generation (if any). These tell you what other agents already tried and discovered minutes ago — read them so you don't repeat work.
+{f"8. `{project_root}/population/best.py` — Current best solution" if gen > 1 else ""}
+{"9" if gen > 1 else "8"}. `{project_root}/problem/initial_programs/` — Example/baseline programs
 
 For deeper context, you can read any file in the project. The knowledge hierarchy is:
 - Layer 0: `knowledge/state_of_affairs.md` (read always)
@@ -2018,6 +2079,8 @@ def build_evaluator_prompt(project_root: Path, gen: int, config: dict) -> str:
 8. `{project_root}/history/solution_idea_map.md` — Current solution-idea associations
 9. `{project_root}/knowledge/research/{gen_str}/` — Research findings this generation
 10. `{ws_path}/knowledge_dump.md` — **PRE-CONCATENATED** knowledge dump (ideas, clusters, patterns in one file — read this FIRST to save turns, then drill into individual files only if needed)
+11. `{project_root}/knowledge/group_notes/{gen_str}/` — per-group notes from the Light Evaluator (one file per group in this generation). Light evaluators ran between agent groups and added new ideas/patterns incrementally; your job is to CONSOLIDATE across all groups now.
+12. `{project_root}/reports/{gen_str}/evaluator_group*.md` — Light Evaluator debriefs, one per group
 
 ## Idea Limits
 
@@ -2053,6 +2116,95 @@ Write all output to: `{ws_path}/output/`
 9. `output/evaluator_report.md` — include `strategic_shift: true` or `false`
 10. `output/agent_gaps.md` — synthesized gaps from agent reports
 {"11. `output/state_of_affairs.md` — GENERATION 1 ONLY: initial Layer 0" if gen == 1 else ""}
+
+{debrief}
+"""
+
+
+def build_light_evaluator_prompt(
+    project_root: Path, gen: int, group_idx: int,
+    group_agent_names: list[str], config: dict,
+) -> str:
+    """Per-group light evaluator prompt.
+
+    Much smaller scope than the heavy evaluator: only reads THIS group's
+    agents, only writes new_ideas/, new_patterns/, group_notes.md, report.md.
+    """
+    gen_str = f"gen{gen:03d}"
+    prompt_template = _read_file(_global(project_root) / "agents" / "evaluator_light.md")
+    ws_path = project_root / "workspace" / f"{gen_str}_{_light_evaluator_name(group_idx)}"
+    report_path = f"{ws_path}/output/report.md"
+
+    # Collect the paths this light eval should read for each agent in the group.
+    # Solution agents land in population/; research in knowledge/research/; experimentator
+    # in knowledge/experiments/. Every agent type also has a report in reports/.
+    agent_sources: list[str] = []
+    for name in group_agent_names:
+        pop_dir = project_root / "population" / gen_str / name
+        if pop_dir.exists() and any(pop_dir.iterdir()):
+            agent_sources.append(f"- `{pop_dir}/` — solutions + .score + observations")
+        if name.startswith("research_"):
+            rdir = project_root / "knowledge" / "research" / gen_str / name
+            if rdir.exists() and any(rdir.iterdir()):
+                agent_sources.append(f"- `{rdir}/` — research findings + papers summarized")
+        if name.startswith("experimentator_"):
+            edir = project_root / "knowledge" / "experiments" / gen_str / name
+            if edir.exists() and any(edir.iterdir()):
+                agent_sources.append(f"- `{edir}/` — experiment artifacts + helpers")
+        report_file = project_root / "reports" / gen_str / f"{name}.md"
+        if report_file.exists():
+            agent_sources.append(f"- `{report_file}` — agent debrief")
+
+    # Notes from earlier groups in this generation (so the light eval builds on them)
+    prior_notes_section = ""
+    notes_dir = project_root / "knowledge" / "group_notes" / gen_str
+    if notes_dir.exists():
+        priors = sorted(notes_dir.glob("group*.md"))
+        if priors:
+            prior_notes_section = (
+                "\n## Notes from earlier groups in this generation "
+                "(read for context, do NOT duplicate)\n"
+                + "\n".join(f"- `{p}`" for p in priors)
+                + "\n"
+            )
+
+    debrief = DEBRIEF_INSTRUCTIONS(project_root).format(report_path=report_path)
+
+    return f"""{prompt_template}
+
+---
+
+# CONTEXT FOR GENERATION {gen}, GROUP {group_idx}
+
+You are the **Light Evaluator** for group {group_idx} of generation {gen}.
+More groups may follow before the Heavy Evaluator runs at end-of-generation.
+
+## Agents in this group
+{chr(10).join(f'- {name}' for name in group_agent_names)}
+
+## Files to read (scoped)
+
+Read ONLY these agent outputs — do NOT scan the full `population/` directory:
+{chr(10).join(agent_sources) if agent_sources else '- (no outputs produced — this should not happen; see report.md)'}
+
+For reference (read for context, do NOT modify):
+- `{project_root}/problem/description.md`
+- `{project_root}/knowledge/state_of_affairs.md`
+- `{project_root}/knowledge/ideas/active/` — CHECK BEFORE creating new idea files
+- `{project_root}/knowledge/ideas/established/`
+{prior_notes_section}
+## Output
+
+Write all output to: `{ws_path}/output/`
+
+1. `output/new_ideas/*.md` — ONLY genuinely new ideas (strict rules in the template above)
+2. `output/new_patterns/*.md` — ONLY genuinely new patterns
+3. `output/group_notes.md` — short summary for next group's agents (target 200–400 words)
+4. `output/report.md` — your debrief (read by Heavy Evaluator at end of generation)
+
+DO NOT write state_of_affairs.md, coverage_matrix.md, solution_idea_map.md,
+updated_ideas/, updated_clusters/, generation_snapshot.md, agent_gaps.md, or
+evaluator_report.md. Those belong to the Heavy Evaluator. Stay surgical.
 
 {debrief}
 """
@@ -2955,6 +3107,7 @@ def run_agents(project_root: Path, gen: int, config: dict):
     agent_statuses = {name: {"status": "waiting"} for name in agent_lookup}
     _write_run_state(project_root, agents=agent_statuses)
 
+    is_multi_group = len(parallel_groups) > 1
     for group_idx, group in enumerate(parallel_groups):
         seen = set()
         deduped_group = []
@@ -2965,10 +3118,30 @@ def run_agents(project_root: Path, gen: int, config: dict):
         group_specs = [agent_lookup[name] for name in deduped_group if name in agent_lookup]
         if not group_specs:
             continue
-        if len(parallel_groups) > 1:
-            names = [f"{s['type']}_{s['instance']}" for s in group_specs]
-            print(f"  --- Group {group_idx + 1}/{len(parallel_groups)}: {names} ---")
+        group_agent_names = [f"{s['type']}_{s['instance']}" for s in group_specs]
+        if is_multi_group:
+            print(f"  --- Group {group_idx + 1}/{len(parallel_groups)}: {group_agent_names} ---")
         _run_agent_group(project_root, gen, config, group_specs, max_parallel)
+
+        # Light Evaluator runs between groups so the next group's agents see
+        # what this group discovered. Skipped on:
+        #   - single-group manifests (heavy evaluator runs right after anyway)
+        #   - the final group (heavy evaluator runs right after anyway)
+        is_last_group = (group_idx == len(parallel_groups) - 1)
+        if is_multi_group and not is_last_group:
+            try:
+                run_light_evaluator(
+                    project_root, gen, group_idx, group_agent_names, config
+                )
+            except Exception as e:
+                print(f"  WARNING: light evaluator for group {group_idx} failed: {e}")
+                # Record failure but don't block next group
+                _write_gen_progress(project_root, gen, light_evaluators={
+                    f"group{group_idx}": {
+                        "status": "failed", "error": str(e)[:200],
+                        "agents": group_agent_names,
+                    }
+                })
 
 
 def _preconcat_knowledge(project_root: Path, ws: Path):
@@ -3163,6 +3336,131 @@ def _run_analysis_with_debrief(
         _record_timing(project_root, gen, f"{agent_type}_debrief", time.time() - t0 - elapsed)
 
 
+def run_light_evaluator(
+    project_root: Path, gen: int, group_idx: int,
+    group_agent_names: list[str], config: dict,
+):
+    """Phase 2.5: Light Evaluator — runs after each agent group (except the last).
+
+    Fast, surgical pass over THIS group's solutions so the NEXT group's agents
+    see new ideas/patterns before they start. The Heavy Evaluator (`run_evaluator`)
+    still runs at end-of-generation for full consolidation.
+
+    Skip rules:
+      - skipped if gen_progress already marks this group's light eval complete
+      - skipped if the group produced no solutions (only research/experimentator)
+    """
+    gen_str = f"gen{gen:03d}"
+    label = _light_evaluator_name(group_idx)
+    group_key = f"group{group_idx}"
+
+    # Crash-recovery skip
+    progress = _read_gen_progress(project_root, gen)
+    le_progress = progress.get("light_evaluators", {}).get(group_key, {})
+    if le_progress.get("status") in ("complete", "skipped"):
+        print(f"  Light evaluator for group {group_idx} already {le_progress.get('status')}, skipping")
+        return
+
+    # Disabled in config
+    if not config.get("analysis", {}).get("evaluator_light", {}).get("enabled", True):
+        print(f"  Light evaluator disabled in config, skipping group {group_idx}")
+        _write_gen_progress(project_root, gen, light_evaluators={
+            group_key: {"status": "skipped", "reason": "disabled",
+                         "completed_at": datetime.now(timezone.utc).isoformat()}
+        })
+        return
+
+    # Skip ONLY if the group produced literally no meaningful output anywhere
+    # (no solutions, no reports, no research findings, no experiment artifacts).
+    # Research and experimentator groups DO deserve a light eval — their findings
+    # are the very thing the next group's agents need to see.
+    produced_anything = False
+    for name in group_agent_names:
+        pop_dir = project_root / "population" / gen_str / name
+        if pop_dir.exists() and any(pop_dir.iterdir()):
+            produced_anything = True
+            break
+        report_file = project_root / "reports" / gen_str / f"{name}.md"
+        if report_file.exists():
+            produced_anything = True
+            break
+        # Research agents route findings to knowledge/research/{gen_str}/
+        if name.startswith("research_"):
+            rdir = project_root / "knowledge" / "research" / gen_str / name
+            if rdir.exists() and any(rdir.iterdir()):
+                produced_anything = True
+                break
+        # Experimentator agents route experiments to knowledge/experiments/{gen_str}/
+        if name.startswith("experimentator_"):
+            edir = project_root / "knowledge" / "experiments" / gen_str / name
+            if edir.exists() and any(edir.iterdir()):
+                produced_anything = True
+                break
+    if not produced_anything:
+        print(f"  Skipping light evaluator for group {group_idx} — group produced nothing")
+        _write_gen_progress(project_root, gen, light_evaluators={
+            group_key: {
+                "status": "skipped", "reason": "no_output",
+                "agents": group_agent_names,
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+            }
+        })
+        return
+
+    print(f"\n  --- Light Evaluator (group {group_idx}, agents: {group_agent_names}) ---")
+
+    started_at = datetime.now(timezone.utc).isoformat()
+    _write_gen_progress(project_root, gen, light_evaluators={
+        group_key: {
+            "status": "running",
+            "agents": group_agent_names,
+            "started_at": started_at,
+        }
+    })
+    _write_run_state(project_root, agents={label: {"status": "running", "started_at": started_at}})
+
+    ws = create_analysis_workspace(project_root, gen, label)
+    for subdir in ["new_ideas", "new_patterns"]:
+        (ws / "output" / subdir).mkdir(exist_ok=True)
+
+    model = config.get("analysis", {}).get("evaluator_light", {}).get("model", "sonnet")
+    prompt = build_light_evaluator_prompt(
+        project_root, gen, group_idx, group_agent_names, config
+    )
+
+    t0 = time.time()
+    _run_analysis_with_debrief(
+        project_root, gen, label, ws, prompt, model=model,
+        timeout=get_timeout(config, "evaluator_light"),
+        max_turns=get_max_turns(config, "evaluator_light"),
+        allowed_tools=["Read", "Write", "Bash", "Glob", "Grep"], config=config,
+    )
+    _record_timing(project_root, gen, label, time.time() - t0)
+
+    try:
+        move_light_evaluator_outputs(project_root, gen, group_idx)
+        cleanup_workspace(project_root, gen, label)
+        _write_gen_progress(project_root, gen, light_evaluators={
+            group_key: {
+                "status": "complete",
+                "agents": group_agent_names,
+                "started_at": started_at,
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+            }
+        })
+        _write_run_state(project_root, agents={label: {"status": "done"}})
+    except Exception as e:
+        print(f"  ERROR moving light evaluator outputs: {e}")
+        _write_gen_progress(project_root, gen, light_evaluators={
+            group_key: {
+                "status": "failed", "error": str(e)[:200],
+                "agents": group_agent_names, "started_at": started_at,
+            }
+        })
+        _write_run_state(project_root, agents={label: {"status": "failed"}})
+    print(f"  Light Evaluator complete (group {group_idx})")
+
+
 def run_evaluator(project_root: Path, gen: int, config: dict):
     print(f"\n{'='*60}")
     print(f"  GENERATION {gen} — Phase 3: Evaluator")
@@ -3295,7 +3593,9 @@ def run_consistency_review(project_root: Path, gen: int, config: dict):
     for subdir in ["updated_ideas", "updated_clusters"]:
         (ws / "output" / subdir).mkdir(exist_ok=True)
 
-    model = config.get("architect_model", "opus")
+    model = config.get("analysis", {}).get("consistency_reviewer", {}).get(
+        "model", config.get("architect_model", "opus")
+    )
     prompt = build_consistency_prompt(project_root, gen, config)
 
     _run_analysis_with_debrief(

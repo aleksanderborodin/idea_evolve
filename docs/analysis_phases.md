@@ -1,7 +1,109 @@
 # Analysis Phases
 
-Three analysis phases run after agents finish each generation: Evaluator, System Critic,
-and Consistency Reviewer.
+Four analysis passes run during a generation:
+a per-group **Light Evaluator** (phase 2.5, after each parallel group in multi-group
+manifests) and three end-of-generation passes — **Heavy Evaluator**, **System Critic**,
+**Consistency Reviewer**.
+
+---
+
+## Light Evaluator (Phase 2.5 — per parallel group)
+
+Fast, surgical pass that runs **after each agent group** in a multi-group manifest
+(except the final group — the heavy evaluator runs right after it anyway). Its job
+is to unblock the NEXT group's agents by publishing any new ideas/patterns THIS
+group produced, before the next group starts.
+
+### When it runs / when it skips
+
+Runs when ALL of:
+- Manifest has more than one group in `parallel_groups`
+- The current group is not the final group
+- The group produced at least one artifact (solution, report, research finding, or experiment)
+- `analysis.evaluator_light.enabled` is `true` in `user/config.yaml` (default)
+
+Skipped otherwise (including on single-group manifests — the heavy evaluator is next anyway).
+
+### Input files
+
+| File | Purpose |
+|------|---------|
+| `population/gen{NNN}/{agent}/` | Solutions + .score + observations for THIS group only |
+| `reports/gen{NNN}/{agent}.md` | Agent debrief for THIS group only |
+| `knowledge/research/gen{NNN}/{agent}/` | Research findings from this group's research agents |
+| `knowledge/experiments/gen{NNN}/{agent}/` | Experiments from this group's experimentator agents |
+| `knowledge/ideas/active/` + `knowledge/ideas/established/` | Existing ideas — for dedup checks before creating new |
+| `knowledge/state_of_affairs.md` | Current Layer 0 — context only, not modified |
+| `knowledge/group_notes/gen{NNN}/group*.md` | Prior groups' notes from EARLIER in this generation |
+
+### Workspace
+
+`workspace/gen{NNN}_evaluator_light_group{K}/output/`
+
+```
+output/
+├── new_ideas/*.md        # ONLY genuinely new ideas (strict dedup rules)
+├── new_patterns/*.md     # ONLY genuinely new patterns
+├── group_notes.md        # 200-400 word summary for NEXT group's agents
+└── report.md             # Debrief read by Heavy Evaluator at end of gen
+```
+
+**Explicitly NOT produced:** state_of_affairs.md, coverage_matrix.md,
+solution_idea_map.md, updated_ideas/, updated_clusters/, generation_snapshot.md,
+agent_gaps.md, evaluator_report.md. Those belong to the Heavy Evaluator.
+
+### Output movement — `move_light_evaluator_outputs()`
+
+```
+new_ideas/*.md    → knowledge/ideas/{lifecycle}/     (same lifecycle routing as heavy)
+new_patterns/*.md → knowledge/patterns/{lifecycle}/
+group_notes.md    → knowledge/group_notes/gen{NNN}/group{K}.md
+report.md         → reports/gen{NNN}/evaluator_group{K}.md
+```
+
+### Progress tracking
+
+`briefs/gen{NNN}/gen_progress.json` gains a `light_evaluators` block:
+
+```json
+{
+  "light_evaluators": {
+    "group0": {
+      "status": "complete",
+      "agents": ["explore_1", "explore_2"],
+      "started_at": "...",
+      "completed_at": "..."
+    },
+    "group1": { "status": "skipped", "reason": "no_output" }
+  }
+}
+```
+
+Possible statuses: `running`, `complete`, `skipped`, `failed`.
+
+### Key functions
+
+| Function | Description |
+|----------|-------------|
+| `run_light_evaluator(project_root, gen, group_idx, names, config)` | Runs one light evaluator |
+| `build_light_evaluator_prompt(...)` | Scoped prompt — only this group's agent outputs |
+| `move_light_evaluator_outputs(project_root, gen, group_idx)` | Routes outputs |
+| `_light_evaluator_name(group_idx)` | Workspace / gen_progress key: `evaluator_light_group{K}` |
+
+### Defaults
+
+| Setting | Default | Config path |
+|---------|---------|-------------|
+| Enabled | `true` | `analysis.evaluator_light.enabled` |
+| Model | `sonnet` | `analysis.evaluator_light.model` |
+| Timeout | 900s | `timeouts.evaluator_light` |
+| Max turns | 400 | `max_turns.evaluator_light` |
+
+### Dashboard surface
+
+- Sub-phase pipeline node (`pn-lighteval`) on the Pipeline tab — dashed border, per-group tag
+- API: `GET /api/generation/<gen>/light_evaluators` → list of group status entries
+- Scanner: `get_light_evaluator_summary(gen)` + phase value `light_evaluator_running`
 
 ---
 

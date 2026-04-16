@@ -43,6 +43,9 @@ runs/{problem_id}/{attempt_id}/
 │   │   └── confirmed/pattern_NNN.md
 │   ├── clusters/cluster_NNN.md
 │   ├── facts/fact_NNN.md
+│   ├── group_notes/                    (per-group Light Evaluator notes — visible to later agents in the same gen)
+│   │   └── gen{NNN}/
+│   │       └── group{K}.md             Short summary (200-400 words) of what group K discovered
 │   ├── research/
 │   │   └── gen{NNN}/research_{N}/      Research agent archives
 │   │       ├── findings.md
@@ -58,6 +61,7 @@ runs/{problem_id}/{attempt_id}/
 │       ├── {type}_{instance}.md        From workspace output/report.md (e.g. explore_1.md)
 │       ├── evaluator.md                From evaluator workspace generation_snapshot.md
 │       ├── evaluator_debrief.md        Evaluator debrief if separate from main report
+│       ├── evaluator_group{K}.md       Per-group Light Evaluator debrief (one per parallel_groups entry that ran a light eval)
 │       └── system_critic_debrief.md    System critic debrief
 │
 ├── feedback/                           (OUTPUT of analysis phases, INPUT to architect)

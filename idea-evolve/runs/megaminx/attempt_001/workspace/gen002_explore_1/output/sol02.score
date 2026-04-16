@@ -1,0 +1,5 @@
+{
+  "is_valid": 0,
+  "fitness": 1000000000,
+  "error": "syntax: closing parenthesis '}' does not match opening parenthesis '[' (<unknown>, line 46)"
+}

@@ -1,0 +1,36 @@
+{
+  "generations": {
+    "gen001": {
+      "architect": 191.3,
+      "agent_explore_2_work": 354.4,
+      "agent_explore_2": 354.4,
+      "agent_research_1_work": 713.4,
+      "agent_research_1": 713.5,
+      "agent_explore_1_work": 1183.5,
+      "agent_explore_1": 1183.5,
+      "agent_full_1_work": 2700.6,
+      "agent_full_1_wrap_up": 572.6,
+      "agent_full_1_debrief": 595.2,
+      "agent_full_1": 3295.8,
+      "evaluator": 324.9,
+      "evaluator_debrief": 16.8,
+      "system_critic": 111.0,
+      "consistency_reviewer": 87.8,
+      "consistency_reviewer_debrief": 9.5,
+      "total": 4037.3
+    },
+    "gen002": {
+      "architect": 169.5,
+      "agent_explore_2_work": 968.9,
+      "agent_explore_2": 968.9,
+      "agent_research_1_work": 1312.4,
+      "agent_research_1": 1312.4,
+      "agent_experimentator_1_work": 1800.6,
+      "agent_exploit_1_work": 1830.7,
+      "agent_exploit_1": 1830.7,
+      "agent_experimentator_1_wrap_up": 30.7,
+      "agent_experimentator_1": 1831.2,
+      "agent_explore_1_work": 2100.6
+    }
+  }
+}

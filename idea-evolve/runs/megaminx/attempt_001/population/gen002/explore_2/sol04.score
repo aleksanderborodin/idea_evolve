@@ -1,0 +1,13 @@
+{
+  "fitness": 1000000000,
+  "is_valid": 0,
+  "avg_path_length": 1000000,
+  "solved_count": 0,
+  "expected_count": 0,
+  "invalid_count": 0,
+  "error": "unknown move '-'; expected one of ['-B', '-BL', '-BR', '-D', '-DL', '-DR', '-F', '-FL', '-FR', '-L', '-R', '-U', 'B', 'BL', 'BR', 'D', 'DL', 'DR', 'F', 'FL', 'FR', 'L', 'R', 'U']",
+  "traceback": "Traceback (most recent call last):\n  File \"/home/sasha/Desktop/idea_evolve/idea-evolve/problems/megaminx/evaluate.py\", line 186, in main\n    predictions = _load_solution(solution_path)\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/sasha/Desktop/idea_evolve/idea-evolve/problems/megaminx/evaluate.py\", line 118, in _load_solution\n    return module.entrypoint()\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/home/sasha/Desktop/idea_evolve/idea-evolve/runs/megaminx/attempt_001/workspace/gen002_explore_2/output/sol04.py\", line 37, in entrypoint\n    if is_solved(apply_path(state, compressed_sid)):\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/sasha/Desktop/idea_evolve/idea-evolve/problems/megaminx/helpers/core.py\", line 190, in apply_path\n    s = apply_move(s, move)\n        ^^^^^^^^^^^^^^^^^^^\n  File \"/home/sasha/Desktop/idea_evolve/idea-evolve/problems/megaminx/helpers/core.py\", line 180, in apply_move\n    raise ValueError(f\"unknown move {move_name!r}; expected one of {sorted(GENERATOR_SET)}\")\nValueError: unknown move '-'; expected one of ['-B', '-BL', '-BR', '-D', '-DL', '-DR', '-F', '-FL', '-FR', '-L', '-R', '-U', 'B', 'BL', 'BR', 'D', 'DL', 'DR', 'F', 'FL', 'FR', 'L', 'R', 'U']\n",
+  "eval_time_s": 23.7237,
+  "eval_started_at": "2026-04-16T15:36:53+00:00",
+  "eval_ended_at": "2026-04-16T15:37:17+00:00"
+}

@@ -2,14 +2,25 @@
 # See docs/problem_design_guide.md §4 (multi-metric) and §13 (Kaggle).
 
 # All score-scale fields below (target_score, lower_bound, upper_bound,
-# significant_change) are in PROXY units (sum over 100 puzzles, the default
-# eval mode). Kaggle scores the FULL set (1001 puzzles), so the rough
-# Kaggle equivalent is `proxy × 10.01`. Operator override: `evaluate.py --full`.
+# significant_change) are in PROXY units. The default proxy is a stratified
+# 1/10 slice — every 10th id from the full 1001-row test set (ids
+# [0, 10, 20, ..., 1000] = 101 puzzles). Because depth == id for ids 1..1000,
+# the stratified proxy preserves the full depth distribution at 1/10 scale,
+# so proxy scores extrapolate to full by ~10×. Operator override: `evaluate.py --full`.
 show_eval_time_in_prompts: true
-target_score: 7800   # ≈ 78,000 on Kaggle full set (user goal)
 
-# parallel: agents may run evaluate.py concurrently. CPU-only beam search.
-# If/when GPU-trained predictors enter the population, see DESIGN-18 in CLAUDE.md.
+# Anchors (proxy units):
+#   ~50,572   sample_submission submitted verbatim (zero search)
+#   ~40-50k   baseline_cayleypy (unguided beam search; fails on deep scrambles)
+#   20,000    reasonable improvement over sample_submission
+#   15,000    target (ambitious but reachable with a trained predictor)
+#    9,000    stretch (≈ Kaggle top-10 territory)
+#    8,050    Kaggle top-3 equivalent (80,499 ÷ 10)
+target_score: 15000
+
+# parallel: agents may run evaluate.py concurrently. NVIDIA MPS is enabled on
+# this box (see .env → CUDA_MPS_PIPE_DIRECTORY) so multiple cayleypy beam
+# searches share the GPU without time-slicing overhead.
 concurrency: parallel
 
 # No model checkpoints to archive — the solution code IS the artifact.
@@ -17,14 +28,14 @@ archive_checkpoints: false
 
 specs:
   fitness:
-    description: "Sum of path lengths across the proxy test set (lower is better). Multiply by ~10.01 for Kaggle full-set equivalent. Top Kaggle LB: 80,499 (full) ≈ 8,041 (proxy)."
+    description: "Sum of path lengths across the stratified proxy (101 puzzles). Multiply by ~10 for the full-set Kaggle equivalent. Top Kaggle full-set: 80,499 ≈ 8,050 proxy."
     decimals: 0
     is_primary: true
     higher_is_better: false
     lower_bound: 8000
     upper_bound: 60000
     include_in_prompts: true
-    significant_change: 10
+    significant_change: 50
     # Lower-is-better sentinel — see docs/problem_design_guide.md §13.10.
     # update_rankings filters score >= sentinel * 0.9 = 9e8.
     sentinel_value: 1000000000
@@ -33,6 +44,8 @@ specs:
     description: "1 iff every test puzzle had a valid path that reached the central state."
     higher_is_better: true
     sentinel_value: 0
+
+  # ---- Core counts -------------------------------------------------------
 
   avg_path_length:
     description: "fitness / expected_count, useful for human comparison."
@@ -48,11 +61,131 @@ specs:
     sentinel_value: 0
 
   expected_count:
-    description: "Test set size for this eval (PROXY_SIZE=100 or FULL_SIZE=1001)."
+    description: "Test set size for this eval (proxy: 101, full: 1001)."
     higher_is_better: true
     sentinel_value: 0
 
   invalid_count:
     description: "Rows with missing or non-solving paths."
+    higher_is_better: false
+    sentinel_value: 1001
+
+  # ---- Diagnostic distribution stats ------------------------------------
+
+  compression_ratio:
+    description: "fitness / sum(sample_submission lengths) on the same subset. 1.0 = echoing the zero-search freebie; <1.0 = real search gains; Kaggle top-3 ≈ 0.16."
+    higher_is_better: false
+    decimals: 4
+    include_in_prompts: true
+    sentinel_value: 1000000
+
+  improved_count:
+    description: "Rows where our path is strictly shorter than sample_submission's. Complements compression_ratio: broad-but-small vs narrow-but-deep improvement."
+    higher_is_better: true
+    include_in_prompts: true
+    sentinel_value: 0
+
+  max_path_length:
+    description: "Longest path among SOLVED puzzles. Bounded max = search has a real horizon; max = 1000 = falling back to sample_submission on deep rows."
+    higher_is_better: false
+    include_in_prompts: true
+    sentinel_value: 1000000
+
+  p50_path_length:
+    description: "Median path length over solved puzzles only."
+    higher_is_better: false
+    include_in_prompts: true
+    sentinel_value: 1000000
+
+  p95_path_length:
+    description: "95th-percentile path length over solved puzzles only — catches tail failures."
+    higher_is_better: false
+    include_in_prompts: true
+    sentinel_value: 1000000
+
+  # ---- Per-depth-bucket breakdowns --------------------------------------
+  #
+  # Buckets defined in helpers/core.BUCKETS:
+  #   special   id=0        (1 puzzle, 72-move scramble outlier)
+  #   short     id 1-25     (shallow — any predictor should ace these)
+  #   medium    id 26-100   (unguided beam sweet spot)
+  #   hard      id 101-500  (needs learned predictor or MITM)
+  #   very_hard id 501-1000 (dominates the score; Kaggle-top territory)
+  #
+  # Each bucket reports {count, fitness, solved, invalid}. Fitness + solved
+  # for the four non-special buckets surface in prompts so agents see
+  # *where* they're losing score. special/count/invalid stay silent in
+  # prompts (derivable or constant) but remain in .score for dashboards.
+
+  bucket_special_count:
+    higher_is_better: true
+    sentinel_value: 0
+  bucket_special_fitness:
+    higher_is_better: false
+    sentinel_value: 1000000000
+  bucket_special_solved:
+    higher_is_better: true
+    sentinel_value: 0
+  bucket_special_invalid:
+    higher_is_better: false
+    sentinel_value: 1001
+
+  bucket_short_count:
+    higher_is_better: true
+    sentinel_value: 0
+  bucket_short_fitness:
+    higher_is_better: false
+    sentinel_value: 1000000000
+    include_in_prompts: true
+  bucket_short_solved:
+    higher_is_better: true
+    sentinel_value: 0
+    include_in_prompts: true
+  bucket_short_invalid:
+    higher_is_better: false
+    sentinel_value: 1001
+
+  bucket_medium_count:
+    higher_is_better: true
+    sentinel_value: 0
+  bucket_medium_fitness:
+    higher_is_better: false
+    sentinel_value: 1000000000
+    include_in_prompts: true
+  bucket_medium_solved:
+    higher_is_better: true
+    sentinel_value: 0
+    include_in_prompts: true
+  bucket_medium_invalid:
+    higher_is_better: false
+    sentinel_value: 1001
+
+  bucket_hard_count:
+    higher_is_better: true
+    sentinel_value: 0
+  bucket_hard_fitness:
+    higher_is_better: false
+    sentinel_value: 1000000000
+    include_in_prompts: true
+  bucket_hard_solved:
+    higher_is_better: true
+    sentinel_value: 0
+    include_in_prompts: true
+  bucket_hard_invalid:
+    higher_is_better: false
+    sentinel_value: 1001
+
+  bucket_very_hard_count:
+    higher_is_better: true
+    sentinel_value: 0
+  bucket_very_hard_fitness:
+    higher_is_better: false
+    sentinel_value: 1000000000
+    include_in_prompts: true
+  bucket_very_hard_solved:
+    higher_is_better: true
+    sentinel_value: 0
+    include_in_prompts: true
+  bucket_very_hard_invalid:
     higher_is_better: false
     sentinel_value: 1001

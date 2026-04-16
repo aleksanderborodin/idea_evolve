@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "agents": {
+    "explore_1": {
+      "status": "complete",
+      "outputs_moved": true,
+      "completed_at": "2026-04-16T14:36:04.165844+00:00",
+      "solutions": 5
+    },
+    "full_1": {
+      "status": "complete",
+      "outputs_moved": true,
+      "completed_at": "2026-04-16T15:11:16.505735+00:00",
+      "solutions": 1
+    },
+    "explore_2": {
+      "status": "complete",
+      "outputs_moved": true,
+      "completed_at": "2026-04-16T14:22:15.210647+00:00",
+      "solutions": 5
+    },
+    "research_1": {
+      "status": "complete",
+      "outputs_moved": true,
+      "completed_at": "2026-04-16T14:28:14.254902+00:00",
+      "solutions": 0
+    }
+  },
+  "last_updated": "2026-04-16T15:20:26.615977+00:00",
+  "evaluator": {
+    "status": "complete"
+  },
+  "system_critic": {
+    "status": "complete"
+  },
+  "consistency_review": {
+    "status": "complete"
+  },
+  "finalize": {
+    "status": "complete"
+  }
+}

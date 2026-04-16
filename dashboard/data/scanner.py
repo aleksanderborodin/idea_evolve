@@ -167,11 +167,18 @@ def get_phase_status(gen: int) -> str:
     if ev_ws.exists():
         return "evaluator_running"
 
-    # Check agent workspaces (exclude evaluator/critic/consistency)
+    # Light evaluator (per-group) workspaces appear as gen{NNN}_evaluator_light_group{K}.
+    # A running light evaluator means we're still inside the agents phase.
+    light_eval_prefix = f"{gen_str}_evaluator_light_group"
+    light_eval_ws = [d for d in (ws.glob(f"{light_eval_prefix}*") if ws.exists() else []) if d.is_dir()]
+    if light_eval_ws:
+        return "light_evaluator_running"
+
+    # Check agent workspaces (exclude evaluator/critic/consistency/light-evaluators)
     special = {f"{gen_str}_evaluator", f"{gen_str}_system_critic", f"{gen_str}_consistency_reviewer"}
     agent_workspaces = [
         d for d in (ws.glob(f"{gen_str}_*") if ws.exists() else [])
-        if d.is_dir() and d.name not in special
+        if d.is_dir() and d.name not in special and not d.name.startswith(light_eval_prefix)
     ]
 
     pop_dir = root / "population" / gen_str
@@ -787,6 +794,12 @@ def get_active_agents() -> list[dict]:
         if current_gen_str and gen_str != current_gen_str:
             continue
         agent_id = parts[1]  # e.g. explore_1
+        # Skip analysis-phase workspaces — those are not "agents" for the live grid.
+        # They surface elsewhere (run_state pseudo-agents + reports tab).
+        if agent_id in ("evaluator", "system_critic", "consistency_reviewer"):
+            continue
+        if agent_id.startswith("evaluator_light_group"):
+            continue
 
         # Determine agent type and instance
         agent_parts = agent_id.rsplit("_", 1)
@@ -972,6 +985,41 @@ def get_gen_progress(gen: int) -> dict:
         except Exception:
             pass
     return {}
+
+
+def get_light_evaluator_summary(gen: int) -> list[dict]:
+    """Return per-group light evaluator status for dashboard rendering.
+
+    Each entry: {group_idx, status, agents, started_at, completed_at, reason, report_path}.
+    Reads gen_progress.json `light_evaluators` block and enriches with report paths
+    when the group report has been moved to reports/genNNN/evaluator_group{N}.md.
+    """
+    root = _root()
+    gen_str = f"gen{gen:03d}"
+    progress = get_gen_progress(gen)
+    le = progress.get("light_evaluators", {}) or {}
+    entries = []
+    for key in sorted(le.keys()):
+        info = le[key] or {}
+        # key format "groupN"
+        try:
+            idx = int(key.replace("group", ""))
+        except ValueError:
+            idx = -1
+        report_file = root / "reports" / gen_str / f"evaluator_group{idx}.md"
+        notes_file = root / "knowledge" / "group_notes" / gen_str / f"group{idx}.md"
+        entries.append({
+            "group_idx": idx,
+            "status": info.get("status", "unknown"),
+            "agents": info.get("agents", []),
+            "started_at": info.get("started_at"),
+            "completed_at": info.get("completed_at"),
+            "reason": info.get("reason"),
+            "error": info.get("error"),
+            "report_path": str(report_file.relative_to(root)) if report_file.exists() else None,
+            "notes_path": str(notes_file.relative_to(root)) if notes_file.exists() else None,
+        })
+    return entries
 
 
 def get_knowledge_lifecycle_counts() -> dict:

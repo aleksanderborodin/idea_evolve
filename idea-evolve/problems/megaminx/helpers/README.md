@@ -31,7 +31,7 @@ Symbol index for `helpers.core`. Solutions import from here.
 | `score_path` | `(initial, path) -> (length, valid)` | Length if solved, sentinel if not. |
 | `score_predictions` | `({sid: path}, proxy=True) -> (fitness, is_valid, aux)` | Sum scoring with auxiliaries. |
 | `write_submission` | `(predictions, path)` | Kaggle CSV format (only for `submit_to_kaggle.py`). |
-| `cayleypy_beam_solver` | `(state, beam_width=1000, max_steps=200) -> str | None` | Lazy-imports cayleypy + torch. No pretrained predictor for Megaminx — beam search is unguided. Slow first call. |
+| `cayleypy_beam_solver` | `(state, beam_width=1000, max_steps=200, predictor=None) -> str | None` | Lazy-imports cayleypy + torch. `predictor=None` → unguided beam. Pass a `cayleypy.Predictor` to guide the search. Slow first call. |
 
 ## Notes
 
@@ -41,6 +41,21 @@ Symbol index for `helpers.core`. Solutions import from here.
   `Predictor.pretrained(graph)` raises `KeyError` for Megaminx. The top
   Kaggle scores were achieved with custom-trained predictors or hand-tuned
   search — that's the optimization room agents have to explore.
+- **Guided beam search.** `cayleypy_beam_solver(..., predictor=...)` now
+  accepts any `cayleypy.Predictor`. Zero-training baseline worth trying:
+
+  ```python
+  import cayleypy
+  gdef = cayleypy.Puzzles.megaminx()
+  graph = cayleypy.CayleyGraph(gdef)
+  predictor = cayleypy.Predictor(graph, "hamming")   # no training needed
+  path = cayleypy_beam_solver(state, beam_width=512, max_steps=150,
+                              predictor=predictor)
+  ```
+
+  `"hamming"` = number of cells not in their solved position. Free lower
+  bound on remaining depth; often enough to break ties in the beam over
+  unguided search. Train a small MLP on random-walk states for real gains.
 - **Cache coherence.** `load_test(proxy=True)` deterministically returns the
   first `PROXY_SIZE` rows by sid ASC. Don't shuffle — content-hash caching
   depends on identical bytes producing identical scores.

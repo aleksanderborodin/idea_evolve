@@ -164,7 +164,9 @@ def main() -> int:
 
         content_hash = _file_hash(solution_path)
         # Cache key includes mode so proxy/full results don't collide.
-        cache_key = f"{content_hash}:{'full' if args.full else 'proxy'}"
+        # "proxy_strat" tag disambiguates from the old first-100 proxy in
+        # case an older eval_cache.json is around.
+        cache_key = f"{content_hash}:{'full' if args.full else 'proxy_strat'}"
         cached = _cached_lookup(cache_key)
         if cached is not None:
             _write_score_sidecar(solution_path, cached)
