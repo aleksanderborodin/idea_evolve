@@ -1,0 +1,15 @@
+competition_id: cayley-py-megaminx
+classification: A
+local_eval_strategy: self_check
+primary_metric_name: sum_path_length
+primary_metric_direction: lower_is_better
+primary_metric_kaggle_leaderboard_top: 80499
+downloaded_at: 2026-04-16T11:25:44+00:00
+file_hashes:
+  puzzle_info.json: sha256:1780a8368d504fd75f448d25e5bede9adb498b35db6a3251e920bbc8524adfca
+  sample_submission.csv: sha256:2595d2619b881470653953aad2a26d89b58086cbedea52ba6b20a40d6f0bc562
+  test.csv: sha256:d168ec570167a48a0b8d4f67c8a28f09956c7d49b6bc45450f02f3b945de11cb
+holdout_spec: null
+simulator_spec: null
+tos_accepted_by: sasha
+tos_accepted_at: 2026-04-16T11:25:44+00:00

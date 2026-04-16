@@ -62,7 +62,7 @@ All commands below assume the venv is active. Dependencies: `requirements.txt` a
 
 ### Secrets and provider credentials (`.env`)
 
-Secrets and provider endpoints live in `/home/sasha/Desktop/idea_evolve/.env` (project root,
+Secrets and provider endpoints live in `/home/sasha/Desktop/project_alpha/.env` (project root,
 gitignored via `.gitignore` entry `.env`). Everything in this file is loaded into the shell
 environment before running the orchestrator or any harness CLI.
 
@@ -72,6 +72,7 @@ Current keys:
 |---|---|
 | `MODELGATE_API_KEY` | OpenAI-compatible API key for the ModelGate provider (format `rp_...`). Referenced from `~/.config/opencode/opencode.json` as `{env:MODELGATE_API_KEY}`. |
 | `MODELGATE_BASE_URL` | ModelGate base URL (`https://api.modelgate.ru/v1`). Currently hard-coded in opencode's provider config too; duplicated in `.env` so Python clients / future harnesses can read it. |
+| `KAGGLE_API_TOKEN` | Kaggle competitions CLI token (format `KGAT_...`). Generated at kaggle.com → Settings → API. Used by `scripts/new_kaggle_problem.py` and any evaluate.py that needs to re-pull competition data. See [docs/problem_design_guide.md §13](docs/problem_design_guide.md#13-turning-a-kaggle-competition-into-a-problem). |
 
 Load pattern (bash):
 
@@ -143,6 +144,28 @@ Invalid solutions get sentinel score (0) per the general rule below.
 Problem files at `idea-evolve/problems/sidon/`. Fitness direction read from `metrics.yaml`.
 Helpers: `is_sidon`, `count_violations`, `differences`, `can_add`, `is_prime` in `helpers/core.py`.
 Previous problems: Binary-Ternary GEMM (`problems/gemm/`), Permutation Codes M(8,5) (`problems/permcodes/`).
+
+**Also available: CayleyPy Megaminx** (`problems/megaminx/`) — solve 1001 scrambled Megaminx
+states (Kaggle competition `cayley-py-megaminx`), minimize total path length. Class A Kaggle
+problem (test set downloadable, metric self-checking). Baseline: cayleypy beam search
+(~100–300k). Target: 90k (top Kaggle score: 80,499). CPU-only; `concurrency: parallel`.
+Helpers wrap cayleypy's `BeamSearchAlgorithm`, `MeetInTheMiddle`, and `find_path`. Data at
+`problems/megaminx/data/` (gitignored; refresh via `scripts/new_kaggle_problem.py --refresh megaminx`).
+Start: `python3 orchestrator.py . --problem megaminx --new-attempt`.
+
+### Adding a Kaggle competition
+
+1. **Accept competition rules on kaggle.com.** Click "Understand and Accept" once per comp.
+   Without this, downloads fail with HTTP 403.
+2. **Ensure `KAGGLE_API_TOKEN` in `.env`** (see secrets table above), then
+   `set -a && source .env && set +a`.
+3. **Scaffold the problem dir + download data:**
+   ```
+   cd idea-evolve
+   python3 scripts/new_kaggle_problem.py <kaggle_comp_id> <problem_id> --class A|B|C|D
+   ```
+   Class choices are defined in [docs/problem_design_guide.md §13.1](docs/problem_design_guide.md).
+   Fill in the `<PLACEHOLDER>` tags in `problems/<problem_id>/` following the §13 recipe.
 
 **Also available: Strawberry Disease Segmentation** (`problems/strawberry/`) — fine-tune YOLO11
 for instance segmentation of 7 strawberry diseases, maximize mask mAP50 on the open test split
@@ -1122,6 +1145,44 @@ wasting wall-clock time.
 and should be stated as a hard rule in `architect.md`, not a soft "MAY share a group."
 
 **Not yet implemented.**
+
+### [DESIGN-18] Architect-driven resource-aware scheduling (mixed-compute pools)
+
+**Problem.** The current `concurrency: serial|parallel` flag is binary. It cannot
+express "this problem has 8 CPU slots and 1 GPU slot — the architect should
+schedule one GPU-heavy agent per group plus several CPU-light agents alongside
+it." A Kaggle problem like Megaminx may evolve from a CPU-only baseline (cayleypy
+beam search) into a GPU-trained predictor — at which point the system needs to
+keep the GPU slot saturated by exactly one agent at a time *while* CPU-only
+explorers run in parallel.
+
+**Status.** Tracked via [docs/problem_design_guide.md §13.13](docs/problem_design_guide.md).
+Not yet implemented. Megaminx ships with `concurrency: parallel` and CPU-only
+baselines; if/when GPU variants matter, this design must land first.
+
+**Planned schema** for `metrics.yaml`:
+```yaml
+resources:
+  pools:
+    cpu: 8
+    gpu: 1
+  per_agent_hints:
+    explore: cpu
+    full: gpu
+```
+
+**What needs to change** (when implementing):
+| Layer | Change |
+|---|---|
+| `metrics.yaml` schema | New optional `resources:` block |
+| `orchestrator.py` | Parse `resources`, pass per-pool budget to architect |
+| `agents/architect.md` | New "Resource pools" section — colocate one GPU agent + N CPU agents per group; never exceed pool counts |
+| `evaluate.py` (per problem) | Acquire `/tmp/idea_evolve_<problem>_<pool>.lock` before pool-specific work; backstop on misallocation |
+| `dashboard/` | Per-pool utilization panel (eval queue tagged by pool) |
+| `scripts/check_docs_consistency.py` | Validate `resources.pools` keys + per-agent hints reference real agent types |
+
+**The `concurrency: serial|parallel` flag stays as the simple default**; problems
+that need granular pools opt in by adding `resources:`.
 
 ## SPEC DEVIATIONS — intentional differences from the design doc
 

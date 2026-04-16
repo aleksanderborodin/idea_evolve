@@ -4,3 +4,8 @@ __pycache__/
 *.pyc
 .env
 
+# Kaggle-competition data (see docs/problem_design_guide.md §13).
+# Pattern uses /* (not /) so the directory itself stays trackable; the
+# .kaggle_spec.yaml manifest is committed via the negation below.
+idea-evolve/problems/*/data/*
+!idea-evolve/problems/*/data/.kaggle_spec.yaml

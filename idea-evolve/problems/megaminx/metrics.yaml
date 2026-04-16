@@ -1,0 +1,58 @@
+# Megaminx — Kaggle competition cayley-py-megaminx (Class A: self-checking).
+# See docs/problem_design_guide.md §4 (multi-metric) and §13 (Kaggle).
+
+# All score-scale fields below (target_score, lower_bound, upper_bound,
+# significant_change) are in PROXY units (sum over 100 puzzles, the default
+# eval mode). Kaggle scores the FULL set (1001 puzzles), so the rough
+# Kaggle equivalent is `proxy × 10.01`. Operator override: `evaluate.py --full`.
+show_eval_time_in_prompts: true
+target_score: 7800   # ≈ 78,000 on Kaggle full set (user goal)
+
+# parallel: agents may run evaluate.py concurrently. CPU-only beam search.
+# If/when GPU-trained predictors enter the population, see DESIGN-18 in CLAUDE.md.
+concurrency: parallel
+
+# No model checkpoints to archive — the solution code IS the artifact.
+archive_checkpoints: false
+
+specs:
+  fitness:
+    description: "Sum of path lengths across the proxy test set (lower is better). Multiply by ~10.01 for Kaggle full-set equivalent. Top Kaggle LB: 80,499 (full) ≈ 8,041 (proxy)."
+    decimals: 0
+    is_primary: true
+    higher_is_better: false
+    lower_bound: 8000
+    upper_bound: 60000
+    include_in_prompts: true
+    significant_change: 10
+    # Lower-is-better sentinel — see docs/problem_design_guide.md §13.10.
+    # update_rankings filters score >= sentinel * 0.9 = 9e8.
+    sentinel_value: 1000000000
+
+  is_valid:
+    description: "1 iff every test puzzle had a valid path that reached the central state."
+    higher_is_better: true
+    sentinel_value: 0
+
+  avg_path_length:
+    description: "fitness / expected_count, useful for human comparison."
+    higher_is_better: false
+    decimals: 2
+    include_in_prompts: true
+    sentinel_value: 1000000
+
+  solved_count:
+    description: "How many of the test puzzles the solution actually solved."
+    higher_is_better: true
+    include_in_prompts: true
+    sentinel_value: 0
+
+  expected_count:
+    description: "Test set size for this eval (PROXY_SIZE=100 or FULL_SIZE=1001)."
+    higher_is_better: true
+    sentinel_value: 0
+
+  invalid_count:
+    description: "Rows with missing or non-solving paths."
+    higher_is_better: false
+    sentinel_value: 1001

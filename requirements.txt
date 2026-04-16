@@ -7,6 +7,9 @@ PyYAML>=6.0
 # Dashboard
 Flask>=3.0
 
+# Kaggle-competition problems (docs/problem_design_guide.md §13)
+kaggle>=1.6,<2.1
+
 # Problem-specific (uncomment as needed)
 # numpy>=1.26        # permcodes problem
 # scipy>=1.12        # permcodes problem
@@ -14,3 +17,7 @@ Flask>=3.0
 # jaxlib>=0.4        # permcodes problem
 # optax>=0.2         # permcodes problem
 # ml_dtypes>=0.4     # jax dependency
+
+# Megaminx problem (CPU-only torch; remove --index-url comment if on GPU box)
+# pip install torch --index-url https://download.pytorch.org/whl/cpu
+cayleypy>=0.1,<1.0

@@ -1,0 +1,19 @@
+# Committed classification manifest. See docs/problem_design_guide.md §13.3.
+# Fields marked <REPLACE> must be filled by scripts/new_kaggle_problem.py or
+# manually before the problem can pass scripts/check_docs_consistency.py.
+#
+# This skeleton file uses placeholders ON PURPOSE and is excluded from the
+# consistency check via _is_skeleton() in check_docs_consistency.py.
+
+competition_id: <REPLACE>           # Kaggle URL slug, e.g. cayley-py-megaminx
+classification: <REPLACE>           # A | B | C | D (see §13.1; E never lands on disk)
+local_eval_strategy: <REPLACE>      # self_check | holdout_split | simulator | submit
+primary_metric_name: <REPLACE>
+primary_metric_direction: <REPLACE> # higher_is_better | lower_is_better
+primary_metric_kaggle_leaderboard_top: <REPLACE>
+downloaded_at: <REPLACE>            # UTC ISO-8601 from new_kaggle_problem.py
+file_hashes: {}                     # {filename: "sha256:HEX"} populated by --refresh
+holdout_spec: null                  # only for class C: {train_file, split_ratio, split_seed}
+simulator_spec: null                # only for class D: {module_path, entrypoint, install_hint}
+tos_accepted_by: <REPLACE>          # operator who clicked "Accept" on kaggle.com
+tos_accepted_at: <REPLACE>          # ISO-8601 of acceptance (operator memory)

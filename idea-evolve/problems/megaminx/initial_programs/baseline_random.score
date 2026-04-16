@@ -1,0 +1,11 @@
+{
+  "fitness": 100000000,
+  "is_valid": 0,
+  "avg_path_length": 1000000.0,
+  "solved_count": 0,
+  "expected_count": 100,
+  "invalid_count": 100,
+  "eval_time_s": 0.5263,
+  "eval_started_at": "2026-04-16T11:34:17+00:00",
+  "eval_ended_at": "2026-04-16T11:34:17+00:00"
+}

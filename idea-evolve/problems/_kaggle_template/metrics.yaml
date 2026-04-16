@@ -1,0 +1,30 @@
+# Metrics contract. See docs/problem_design_guide.md §4 (multi-metric) and §13 (Kaggle).
+# This is a skeleton — copy to problems/<id>/metrics.yaml and replace <PLACEHOLDERS>.
+
+show_eval_time_in_prompts: true
+target_score: <TARGET_SCORE>
+
+# parallel | serial. See docs/problem_design_guide.md §9.
+concurrency: parallel
+
+# Set true only if entrypoint() trains a model whose checkpoint agents may want
+# to reproduce without retraining. Most Kaggle problems don't need this.
+archive_checkpoints: false
+
+specs:
+  fitness:
+    description: "<Primary metric description, e.g. 'RMSE on the val fold' or 'sum of path lengths'>"
+    decimals: <NUM_DECIMALS>
+    is_primary: true
+    higher_is_better: <true | false>
+    lower_bound: <FLOAT>
+    upper_bound: <FLOAT>
+    include_in_prompts: true
+    significant_change: <FLOAT>
+    # For higher_is_better: true → sentinel_value: 0
+    # For higher_is_better: false → sentinel_value: 1000000000  (see §13.10)
+    sentinel_value: <SENTINEL>
+  is_valid:
+    description: "1 if entrypoint returned a valid prediction dict, 0 otherwise"
+    higher_is_better: true
+    sentinel_value: 0

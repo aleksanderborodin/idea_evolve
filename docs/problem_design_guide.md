@@ -607,6 +607,8 @@ script verifies the references resolve.
 | Proc logs | `problems/_shared/proc_log.py:Writer` | this guide §9.3 | `_shared_eval_contract.md` § "Reading failure logs" |
 | Archive checkpoint | `metrics.yaml: archive_checkpoints`, helpers/core.py `archive_checkpoint`/`evaluate_from_checkpoint` | this guide §9.4 | per-problem `description.md` "Reproducing a scored solution" |
 | Identity env vars | `problems/_shared/constants.py:ENV_AGENT_NAME` etc., `orchestrator_harness._build_env` | this guide §9.2 | (transparent to agents) |
+| Kaggle competition import | `scripts/new_kaggle_problem.py`, `problems/_kaggle_template/`, `problems/_shared/constants.py:KAGGLE_*` | this guide §13 | (transparent to agents) |
+| Kaggle classification manifest | `problems/<id>/data/.kaggle_spec.yaml`, `scripts/check_docs_consistency.py:check_kaggle_specs()` | this guide §13.3 | (operator-facing) |
 
 ---
 
@@ -627,3 +629,260 @@ from problems._shared.constants import (
 **Never duplicate these as string literals in evaluate.py, helpers, or docs.** The
 consistency checker walks code + docs and fails if a constant name appears in a doc
 without resolving from `constants.py`.
+
+---
+
+## 13. Turning a Kaggle competition into a problem
+
+Kaggle competitions are a rich source of well-scoped optimization tasks with
+clear scalar metrics. The orchestrator has no Kaggle awareness — the integration
+lives entirely at the problem-author layer. This section is the canonical recipe.
+
+The reference implementations are:
+
+- **Skeleton:** [`idea-evolve/problems/_kaggle_template/`](../idea-evolve/problems/_kaggle_template/)
+- **Worked example (Class A):** [`idea-evolve/problems/megaminx/`](../idea-evolve/problems/megaminx/)
+- **Scaffolding script:** [`idea-evolve/scripts/new_kaggle_problem.py`](../idea-evolve/scripts/new_kaggle_problem.py)
+- **Submit-to-Kaggle (opt-in):** [`idea-evolve/scripts/submit_to_kaggle.py`](../idea-evolve/scripts/submit_to_kaggle.py)
+
+### 13.1 Classification first
+
+Every Kaggle competition is one of five classes. Classify before you write any
+code — the answer drives every later decision.
+
+| Class | Definition | Local-eval fidelity | Recommended |
+|---|---|---|---|
+| **A** | Test set downloadable AND metric is self-checking from inputs alone (Megaminx, optimization, search) | Perfect — local = Kaggle | ✅ Ideal |
+| **B** | Test set downloadable AND ground-truth labels released | Perfect — reproducible | ✅ Ideal |
+| **C** | Test inputs downloadable, labels hidden; large train set available (most prediction comps) | Good with holdout | ✅ With care |
+| **D** | Code/notebook-only, or server-side synthetic test (RL, ARC Prize) | None unless simulator replicated | ⚠️ Only if simulator is reproducible |
+| **E** | TOS-gated, proprietary data, redistribution-blocked | N/A | ❌ Skip |
+
+If the answer is E, stop. Don't proceed.
+
+### 13.2 TOS and credentials
+
+1. **Accept the rules** on `kaggle.com/competitions/<comp_id>/rules` — click
+   "Understand and Accept". Without this, every download returns HTTP 403.
+2. **Get a token** at `kaggle.com/settings → Create New API Token` (downloads
+   `kaggle.json`).
+3. **Store it** in the project `.env` (see [CLAUDE.md § Secrets](../CLAUDE.md))
+   as `KAGGLE_API_TOKEN=KGAT_...`. Load with `set -a && source .env && set +a`
+   before running any Kaggle-touching script.
+4. The constant name `KAGGLE_API_TOKEN_ENV` is exported from
+   `problems/_shared/constants.py`. Read the env var via that name in code.
+
+### 13.3 The `.kaggle_spec.yaml` contract
+
+Every Kaggle problem ships a committed manifest at
+`problems/<id>/data/.kaggle_spec.yaml`. Even when the data payload is gitignored
+(see §13.4), this file commits — it is the source of truth for what
+competition the problem mirrors. Schema:
+
+```yaml
+competition_id: cayley-py-megaminx          # Kaggle URL slug
+classification: A                            # A | B | C | D
+local_eval_strategy: self_check              # self_check | holdout_split | simulator | submit
+primary_metric_name: sum_path_length
+primary_metric_direction: lower_is_better
+primary_metric_kaggle_leaderboard_top: 80499
+downloaded_at: 2026-04-16T19:30:00Z
+file_hashes:
+  puzzle_info.json: sha256:...
+  test.csv: sha256:...
+  sample_submission.csv: sha256:...
+holdout_spec: null                           # only for class C
+simulator_spec: null                         # only for class D
+tos_accepted_by: sasha
+tos_accepted_at: 2026-04-16T19:30:00Z
+```
+
+`scripts/check_docs_consistency.py:check_kaggle_specs()` validates the
+classification + strategy on every spec.
+
+### 13.4 Data acquisition
+
+```bash
+cd idea-evolve
+python3 scripts/new_kaggle_problem.py <kaggle_id> <problem_id> --class A|B|C|D
+```
+
+What it does:
+
+- Copies `problems/_kaggle_template/` → `problems/<problem_id>/`.
+- Runs `kaggle competitions download -c <id> -p problems/<id>/data/ --unzip`.
+- Catches HTTP 403 → prints TOS-acceptance instructions.
+- Warns if data > 1 GB.
+- Writes `data/.kaggle_spec.yaml` with `competition_id`, `classification`,
+  UTC timestamp, and per-file sha256.
+
+**The data dir is gitignored** via `idea-evolve/problems/*/data/` in the repo
+root `.gitignore`, with `!.../data/.kaggle_spec.yaml` to negate the spec.
+Operators on each machine must download for themselves; the spec lets them
+verify the bytes match.
+
+To pull updated competition data later:
+
+```bash
+python3 scripts/new_kaggle_problem.py --refresh <problem_id>
+```
+
+This re-downloads, diffs hashes, prints a warning if anything changed, and tells
+the operator to clear `runs/<id>/*/history/eval_cache.json` so cached scores
+get recomputed against the new data.
+
+### 13.5 Solution interface
+
+Every Kaggle problem's `entrypoint()` returns a Python dict in whatever shape
+the domain expects — `{puzzle_id: path}` for Megaminx, `{image_id: class}` for
+classification, `{row_id: probability}` for tabular, etc.
+
+`evaluate.py` does the translation to a Kaggle-equivalent score using
+`helpers.core.score_predictions()`. **Never write a Kaggle-format
+`submission.csv` during evaluation** — that's only for `submit_to_kaggle.py`
+and lives in `helpers/core.write_submission()`.
+
+### 13.6 Metric mapping to `metrics.yaml`
+
+| Kaggle behavior | metrics.yaml field |
+|---|---|
+| "Higher is better" (accuracy, AUC, F1) | `higher_is_better: true`, `sentinel_value: 0` |
+| "Lower is better" (RMSE, log-loss, path length) | `higher_is_better: false`, `sentinel_value: 1000000000` |
+| Display direction in dashboard | `lower_bound`/`upper_bound` set to the LB range |
+| Round-off for display | `decimals` |
+| Threshold for "real" improvement | `significant_change` (rendered as `~` if smaller) |
+
+**Sentinel for lower-is-better must be very large** — see §13.10.
+
+### 13.7 Class C (holdout) discipline
+
+When the test labels are hidden, you cannot evaluate locally against the real
+test set. Three rules to keep your local score honest:
+
+1. **Split the train set once** with a fixed seed committed to the spec:
+   ```yaml
+   holdout_spec:
+     train_file: train.csv
+     split_ratio: 0.85
+     split_seed: 17
+     split_strategy: stratified_by_class   # or random, time_based, group_kfold
+   ```
+2. **Never let `evaluate.py` touch `test.csv`** — it has no labels; any
+   "score" computed against it is meaningless. Only `helpers.core.write_submission()`
+   reads it (and only when `submit_to_kaggle.py` is invoked).
+3. **Periodically calibrate** by submitting top-5 solutions monthly via
+   `scripts/submit_to_kaggle.py`. Record the local-vs-public score gap in
+   `runs/<id>/<attempt>/kaggle_submissions.jsonl` (the script does this).
+
+### 13.8 Class D (simulator) guidance
+
+If the competition's evaluation requires running a simulator (RL, code-eval),
+you have two options:
+
+- **Replicate the simulator locally** if it's small and well-specified
+  (Halite-style envs, simple games). Place it in `helpers/simulator.py` and
+  have `evaluate.py` call it on every agent output. Spec the location:
+  ```yaml
+  simulator_spec:
+    module_path: helpers.simulator
+    entrypoint: run
+    install_hint: "pip install halite-engine==2.0"
+  ```
+- **Skip** if the simulator is complex, slow, or requires Kaggle infrastructure
+  (notebook-only competitions, ML-judging competitions). The Kaggle competition
+  is not a good idea-evolve problem in that case.
+
+### 13.9 Proxy vs full eval (universal pattern)
+
+Most Kaggle test sets are too large for every-solution evaluation. The
+universal pattern (matches strawberry's Mode 1 vs Mode 2):
+
+- `helpers/core.py` exports `PROXY_SIZE` and `FULL_SIZE` constants.
+- `entrypoint()` itself decides which mode by passing `proxy=True/False` to
+  `helpers.core.load_test()`.
+- `evaluate.py` exposes only an operator-facing `--full` override (used by
+  `submit_to_kaggle.py` and manual re-scoring).
+
+Why solution-driven (not env/CLI): both alternatives break content-hash cache
+coherence. Same bytes must always produce the same score, or the cache lies.
+
+### 13.10 Sentinel for `lower_is_better`
+
+Use **`1_000_000_000` (1e9)**. The orchestrator's `update_rankings()` filters
+with `not higher_better and score >= sentinel * 0.9`. Real scores must be
+comfortably below the filter — leave at least 3 orders of magnitude of buffer
+above the realistic worst case.
+
+For `higher_is_better: true`, the sentinel is `0` (matches existing problems).
+
+### 13.11 Submit-to-Kaggle (opt-in only)
+
+```bash
+python3 scripts/submit_to_kaggle.py <problem_id> <solution.py> [--message TEXT]
+```
+
+- Calls `entrypoint()` with `full=True`.
+- Calls `helpers.core.write_submission(predictions, path)` to produce the CSV.
+- Submits via `kaggle competitions submit`.
+- Polls until scored, returns the public LB score.
+- Logs `{timestamp, solution, public_score}` to
+  `runs/<id>/<latest_attempt>/kaggle_submissions.jsonl`.
+
+**Never call from `evaluate.py`.** Kaggle rate-limits submissions (typically
+5/day). Operator-controlled only.
+
+### 13.12 Edge cases
+
+- **Big datasets (>1 GB):** the scaffold script warns; consider a partial-load
+  helper that streams instead of materializing.
+- **External-data rules:** some competitions forbid extra training data.
+  Document any such restriction in `problems/<id>/initial_facts.md` so
+  agents know.
+- **Mid-competition test-set updates:** `--refresh` diffs hashes and tells you
+  to clear the eval cache.
+- **Library cache races:** if your problem uses a library that downloads
+  models on first run (cayleypy, HuggingFace, ultralytics), pre-warm the cache
+  during scaffolding so parallel agents don't race on first eval.
+- **GPU access:** Kaggle problems default to `concurrency: parallel` on CPU.
+  If a problem grows GPU-dependent, follow §9 (declare `serial`, ship
+  `eval_hooks.py`, acquire `GPU_LOCK_PATH`).
+
+### 13.13 Resource-aware scheduling (roadmap, not yet implemented)
+
+Some Kaggle problems will eventually have *mixed* compute needs: a baseline
+that runs in 2 seconds on CPU plus an experimental beam-search variant that
+needs 3 minutes on GPU. The current binary `concurrency: serial|parallel`
+flag can't express "run 4 CPU agents in parallel + 1 GPU agent in the same
+group". Tracked as **DESIGN-18** in CLAUDE.md.
+
+Planned schema (NOT YET ACTIVE):
+
+```yaml
+resources:
+  pools:
+    cpu: 8                # max simultaneous CPU-only evals
+    gpu: 1                # max simultaneous GPU evals
+  per_agent_hints:
+    explore: cpu          # the architect colocates this in a CPU slot
+    full: gpu             # the architect places this in the GPU slot
+```
+
+Until DESIGN-18 lands, Kaggle problems should declare a single
+`concurrency: parallel` (or `serial` for full-time GPU) and let the
+backstop locks handle contention.
+
+### 13.14 Quick checklist for a new Kaggle problem
+
+- [ ] Classified (A/B/C/D); E means stop.
+- [ ] TOS accepted on kaggle.com.
+- [ ] `KAGGLE_API_TOKEN` in `.env`.
+- [ ] `python3 scripts/new_kaggle_problem.py <kaggle_id> <id> --class X` ran cleanly.
+- [ ] `data/.kaggle_spec.yaml` filled (no remaining `<REPLACE>`).
+- [ ] `description.md` placeholders all replaced.
+- [ ] `metrics.yaml` has correct direction + sentinel (1e9 for lower-is-better).
+- [ ] `helpers/core.py:load_test()` and `score_predictions()` implemented.
+- [ ] `helpers/README.md` reflects the actual symbol set.
+- [ ] At least one `initial_programs/baseline_*.py` produces `is_valid=1`.
+- [ ] `python3 scripts/check_docs_consistency.py` exits 0.
+- [ ] `python3 orchestrator.py . --problem <id> --new-attempt --dry-run` succeeds.
+- [ ] `python3 problems/<id>/evaluate.py problems/<id>/initial_programs/baseline_*.py` returns valid JSON.

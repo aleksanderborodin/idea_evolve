@@ -21,13 +21,18 @@ import re
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent      # idea-evolve/
 IDEA_EVOLVE = REPO_ROOT
+PROJECT_ROOT = REPO_ROOT.parent                         # project_alpha/
 CONSTANTS_FILE = IDEA_EVOLVE / "problems" / "_shared" / "constants.py"
 
+sys.path.insert(0, str(IDEA_EVOLVE))
+from problems._shared.constants import KAGGLE_PROBLEM_SKELETON  # noqa: E402
+
+
 DOC_TARGETS = [
-    REPO_ROOT.parent / "CLAUDE.md",  # /home/sasha/Desktop/idea_evolve/CLAUDE.md
-    IDEA_EVOLVE / "docs" / "problem_design_guide.md",
+    PROJECT_ROOT / "CLAUDE.md",
+    PROJECT_ROOT / "docs" / "problem_design_guide.md",
     IDEA_EVOLVE / "agents" / "_shared_eval_contract.md",
     IDEA_EVOLVE / "agents" / "architect.md",
     IDEA_EVOLVE / "agents" / "explore.md",
@@ -37,6 +42,12 @@ DOC_TARGETS = [
     IDEA_EVOLVE / "problems" / "strawberry" / "description.md",
     IDEA_EVOLVE / "problems" / "strawberry" / "helpers" / "README.md",
 ]
+
+
+def _is_skeleton(path: Path) -> bool:
+    """True if `path` is inside the Kaggle skeleton dir, which must be skipped
+    by every problem-dir walk (it ships placeholder content, not real code)."""
+    return any(part == KAGGLE_PROBLEM_SKELETON for part in path.parts)
 
 # Constants whose VALUES are duplicated as string literals in non-constants.py
 # files — flag this. Only the canonical literal in constants.py is allowed.
@@ -87,8 +98,10 @@ def check_no_duplicate_literals() -> list[str]:
     for code_file in IDEA_EVOLVE.rglob("*.py"):
         if code_file.resolve() in (CONSTANTS_FILE.resolve(), self_path):
             continue
-        # skip pycache, archives
+        # skip pycache, archives, and the Kaggle skeleton (placeholder content)
         if "__pycache__" in code_file.parts or "/runs/" in str(code_file):
+            continue
+        if _is_skeleton(code_file):
             continue
         try:
             text = code_file.read_text()
@@ -139,6 +152,8 @@ def check_eval_hooks_present() -> list[str]:
     import yaml  # noqa: PLC0415
     failures = []
     for metrics in IDEA_EVOLVE.glob("problems/*/metrics.yaml"):
+        if _is_skeleton(metrics):
+            continue
         try:
             data = yaml.safe_load(metrics.read_text()) or {}
         except Exception as e:
@@ -155,6 +170,35 @@ def check_eval_hooks_present() -> list[str]:
     return failures
 
 
+def check_kaggle_specs() -> list[str]:
+    """Every .kaggle_spec.yaml must declare a valid classification + strategy.
+
+    Enforces the contract documented in docs/problem_design_guide.md §13.3.
+    Skeleton spec is allowed to contain `<REPLACE>` placeholders.
+    """
+    import yaml  # noqa: PLC0415
+    failures = []
+    valid_class = {"A", "B", "C", "D"}
+    valid_strategy = {"self_check", "holdout_split", "simulator", "submit"}
+    for spec in IDEA_EVOLVE.glob("problems/*/data/.kaggle_spec.yaml"):
+        if _is_skeleton(spec):
+            continue  # skeleton uses placeholders
+        try:
+            data = yaml.safe_load(spec.read_text()) or {}
+        except Exception as e:
+            failures.append(f"{spec}: invalid YAML ({e})")
+            continue
+        cls = str(data.get("classification") or "").strip()
+        strat = str(data.get("local_eval_strategy") or "").strip()
+        if cls not in valid_class:
+            failures.append(f"{spec}: classification {cls!r} not in {sorted(valid_class)}")
+        if strat not in valid_strategy:
+            failures.append(f"{spec}: local_eval_strategy {strat!r} not in {sorted(valid_strategy)}")
+        if not data.get("competition_id"):
+            failures.append(f"{spec}: missing competition_id")
+    return failures
+
+
 def main() -> int:
     constants = parse_constants()
     all_failures = []
@@ -163,6 +207,7 @@ def main() -> int:
     all_failures += check_metrics_keys_parsed()
     all_failures += check_shared_contract_referenced()
     all_failures += check_eval_hooks_present()
+    all_failures += check_kaggle_specs()
 
     if all_failures:
         print(f"FAIL — {len(all_failures)} consistency issues:\n", file=sys.stderr)

@@ -44,3 +44,20 @@ PROC_LOGS_SUBDIR = "proc_logs"
 
 # Checkpoint archive subdirectory under runs/<problem>/<attempt>/.
 CHECKPOINTS_SUBDIR = "checkpoints"
+
+# ---- Kaggle-competition-as-problem constants (docs/problem_design_guide.md §13) ----
+
+# Env var that the kaggle CLI reads for authentication. Added to .env.
+KAGGLE_API_TOKEN_ENV = "KAGGLE_API_TOKEN"
+
+# Template directory (leading underscore so the orchestrator's problem scan
+# can skip it). The scaffolding script copies this into problems/<new_id>/.
+KAGGLE_PROBLEM_SKELETON = "_kaggle_template"
+
+# Per-problem data subdirectory. Gitignored via pattern
+# `idea-evolve/problems/*/data/`; the .kaggle_spec.yaml inside is negated
+# so the classification/hash manifest commits even when the payload doesn't.
+DATA_SUBDIR = "data"
+
+# Name of the committed Kaggle classification manifest inside DATA_SUBDIR.
+KAGGLE_SPEC_FILENAME = ".kaggle_spec.yaml"
