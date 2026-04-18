@@ -196,8 +196,12 @@ the highest-leverage direction.
 
 ## Hardware + concurrency
 
-- CPU-only. `metrics.yaml: concurrency: parallel`.
-- Multiple agents may evaluate solutions concurrently; no GPU lock.
+- GPU available (RTX 5060 Ti, CUDA 12.8 via torch 2.11.0+cu128) with NVIDIA MPS
+  daemon enabled so concurrent evals share the device without time-slicing.
+- `metrics.yaml: concurrency: 3` — up to 3 agents may evaluate simultaneously.
+  The architect sizes `parallel_groups` to ≤ 3; the orchestrator auto-splits
+  anything larger. No physical GPU lock in evaluate.py — memory-bound sharing
+  is enforced by MPS, and the numeric budget prevents over-subscription.
 - cayleypy requires torch; CPU torch is fine. Install:
   `pip install torch --index-url https://download.pytorch.org/whl/cpu` then
   `pip install cayleypy`.

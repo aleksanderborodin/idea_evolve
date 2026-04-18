@@ -8,6 +8,10 @@ show_eval_time_in_prompts: true
 # Target: beat the best known lower bound of 616 (Smith & Montemanni 2012)
 target_score: 624
 
+# Numeric eval-slot budget — 0 = unlimited (CPU-bound, cache-friendly eval).
+# See docs/problem_design_guide.md §9.
+concurrency: 0
+
 specs:
   fitness:
     description: Code size (number of codewords/permutations)

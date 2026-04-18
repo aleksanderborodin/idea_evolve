@@ -60,7 +60,10 @@ SENSITIVE_LITERALS = [
     "IDEA_EVOLVE_RUN_ROOT",
 ]
 
-EXPECTED_METRICS_KEYS = ["concurrency", "archive_checkpoints", "checkpoint_retention"]
+EXPECTED_METRICS_KEYS = [
+    "concurrency", "archive_checkpoints", "checkpoint_retention",
+    "evaluator_light_enabled",
+]
 
 
 def parse_constants() -> dict[str, str]:
@@ -148,7 +151,12 @@ def check_shared_contract_referenced() -> list[str]:
 
 
 def check_eval_hooks_present() -> list[str]:
-    """Problems with concurrency: serial must ship an eval_hooks.py."""
+    """Problems with concurrency: 1 must ship an eval_hooks.py.
+
+    concurrency is a non-negative integer (see docs/problem_design_guide.md §9.1).
+    Any non-integer value is a schema violation — fail loudly rather than
+    guess a mode.
+    """
     import yaml  # noqa: PLC0415
     failures = []
     for metrics in IDEA_EVOLVE.glob("problems/*/metrics.yaml"):
@@ -159,12 +167,24 @@ def check_eval_hooks_present() -> list[str]:
         except Exception as e:
             failures.append(f"{metrics}: invalid YAML ({e})")
             continue
-        mode = (data.get("concurrency") or "parallel").strip().lower()
-        if mode == "serial":
+        if "concurrency" not in data:
+            failures.append(
+                f"{metrics.parent.name}: missing `concurrency:` key "
+                f"(must be a non-negative integer — 0 unlimited, 1 serial, N>1 bounded)"
+            )
+            continue
+        raw = data["concurrency"]
+        if isinstance(raw, bool) or not isinstance(raw, int) or raw < 0:
+            failures.append(
+                f"{metrics.parent.name}: concurrency must be a non-negative integer, "
+                f"got {raw!r}"
+            )
+            continue
+        if raw == 1:
             hook = metrics.parent / "eval_hooks.py"
             if not hook.exists():
                 failures.append(
-                    f"{metrics.parent.name}: concurrency: serial but no eval_hooks.py — "
+                    f"{metrics.parent.name}: concurrency: 1 but no eval_hooks.py — "
                     f"required for problem-specific kill_eval()"
                 )
     return failures

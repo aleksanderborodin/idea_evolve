@@ -8,6 +8,15 @@ Evaluator** will run at end-of-generation for full consolidation. Your job is
 **surgical**: capture what THIS group's solutions taught us, fast, so the NEXT
 group's agents can build on it before they start.
 
+You run for **every** `concurrency:` budget — 0 (unlimited), 1 (serial), and N
+(bounded). On serial-eval problems (`concurrency: 1`), each group holds a single
+agent, so you run between every agent: agent N+1 reads your output before it
+starts, turning serial eval into a mid-gen learning loop instead of forcing each
+agent to wait for the end-of-gen Heavy Evaluator. The skip rules (single-group
+manifests, the last group of any manifest, groups that produced nothing) are
+handled by the orchestrator — if you were invoked, there IS a next group that
+needs what you extract.
+
 You are NOT the Heavy Evaluator. Specifically, you MUST NOT:
 
 - Rewrite `state_of_affairs.md`
@@ -64,42 +73,73 @@ population. Also read (for context, no modifications):
 7. **Write `report.md`** — same content plus a short list of what you produced
    (file names only) for the Heavy Evaluator.
 
-## Strict rules for creating a new idea
+## Creating a new idea
 
-Create an idea file only if ALL of these hold:
+Create an idea file only if BOTH of these hold:
 
 - No existing idea in `knowledge/ideas/{active,established,disputed}/` captures
-  this strategy (check by name and first-paragraph content).
+  this strategy (check by name and first-paragraph content — never duplicate).
 - At least one solution in THIS group demonstrates it.
-- You can describe the idea in 2–3 sentences clearly enough that a future agent
-  can implement it without reading the original solution.
 
-If in doubt, **do not** create the idea. Put your observation in
-`group_notes.md` instead. The Heavy Evaluator will catch anything important
-that you deferred.
+If an existing idea already captures the concept, do NOT create a new file.
+Note in `group_notes.md` that this group exercised it, and mention any new
+evidence in `report.md` so the existing idea can be updated at end-of-gen.
 
-Ideas use the same YAML frontmatter as the Heavy Evaluator's template:
+An Idea is a deliberate strategy or technique that a solution can implement.
+Examples: "greedy nearest-neighbor heuristic," "two-opt local search,"
+"penalize revisited states."
+
+Frontmatter:
 
 ```yaml
 ---
 type: idea
 id: idea_NNN
 name: "Short descriptive name"
-lifecycle: active
+lifecycle: active | established | disputed | debunked | archived
 confidence: 0.0-1.0
 first_seen: generation_N
 last_updated: generation_N
 last_confirmed_gen: generation_N
 supported_by: [solution_ids]
-contradicted_by: []
-related_ideas: []
-cluster: null
+contradicted_by: [solution_ids]
+related_ideas: [idea_ids]
+cluster: cluster_id or null
 tags: [tag1, tag2]
 ---
 ```
 
+Body: **2-4 paragraphs** describing the idea, how it works, when it helps,
+and current evidence for/against. A future agent must be able to implement
+the idea from this file alone, without reading the original solution.
+
 Pick an `id` that is **not already used** in any lifecycle directory. Scan
 `knowledge/ideas/*/idea_*.md` filenames first.
+
+## Creating a new pattern
+
+A Pattern is a recurring observation about how solutions behave — not a
+strategy, but something you notice. Examples: "solutions that use random
+restarts tend to score above 80," "greedy approaches plateau around 65."
+
+Frontmatter:
+
+```yaml
+---
+type: pattern
+id: pattern_NNN
+name: "Short descriptive name"
+lifecycle: active | confirmed
+confidence: 0.0-1.0
+first_seen: generation_N
+last_updated: generation_N
+evidence: [solution_ids]
+related_ideas: [idea_ids]
+tags: [tag1, tag2]
+---
+```
+
+Body: **1-3 paragraphs** describing the pattern and its evidence.
 
 ## `group_notes.md` template
 

@@ -1,8 +1,9 @@
 """Megaminx-specific failure-diagnosis hints.
 
-`kill_eval` is intentionally NOT defined here — Megaminx runs CPU-only with
-`concurrency: parallel`, so the orchestrator falls back to
-`problems/_shared/eval_hooks_default.kill_eval` (SIGTERM → grace → SIGKILL).
+`kill_eval` is intentionally NOT defined here — Megaminx runs with
+`concurrency: 3` (GPU via NVIDIA MPS, memory-bounded parallel slots), so the
+orchestrator falls back to `problems/_shared/eval_hooks_default.kill_eval`
+(SIGTERM → grace → SIGKILL).
 """
 
 from __future__ import annotations

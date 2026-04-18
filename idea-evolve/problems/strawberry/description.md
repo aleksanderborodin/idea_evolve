@@ -56,7 +56,7 @@ def entrypoint():
 
 ## GPU serialization, kill contract, and reproducibility
 
-This problem is **GPU-serial** (`metrics.yaml: concurrency: serial`). The architect MUST
+This problem is **GPU-serial** (`metrics.yaml: concurrency: 1`). The architect MUST
 place strawberry agents in single-element `parallel_groups` so at most one is active at a
 time. evaluate.py also holds a system-wide GPU file lock at `GPU_LOCK_PATH` as a backstop,
 but relying on the lock for queueing causes the broken-pipe failures observed in earlier

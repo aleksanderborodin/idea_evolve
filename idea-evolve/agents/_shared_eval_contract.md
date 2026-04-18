@@ -47,9 +47,11 @@ When a `.score` shows `is_valid: 0`, an `error` field, or a non-finite fitness:
    `solNN.py` that addresses it.
 
 If the failure looks like resource contention (broken pipe, CUDA OOM with low requested
-memory, suspicious timeouts), check whether the architect placed your agent in a
-single-element `parallel_group` for a `concurrency: serial` problem. If not, that is a
-plan-level bug — note it in your debrief.
+memory, suspicious timeouts), check `metrics.yaml: concurrency` — it is a non-negative
+integer eval-slot budget (0 = unlimited, 1 = serial, N = at most N per group). For
+`concurrency: 1` your agent should be the only member of its `parallel_group`; for
+`concurrency: N` the group size should be ≤ N. If the budget is clearly violated, that
+is a plan-level bug — note it in your debrief.
 
 ## Per-evaluation artifacts
 

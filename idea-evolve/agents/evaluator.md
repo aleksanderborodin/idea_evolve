@@ -18,9 +18,31 @@ The CONTEXT section below provides absolute paths to everything you need. Key in
 - **evaluate.py** (`problem/evaluate.py`) — the scoring script. Only run it if a solution is missing its `.score` file.
 - **Knowledge dump** (`knowledge_dump.md` in your workspace) — pre-concatenated ideas, clusters, and patterns. Read this first to save turns, then drill into individual files only if needed.
 - **Knowledge directory** (`knowledge/`) — ideas, patterns, facts, and clusters (Layer 0-2).
+- **Light Evaluator outputs from this generation** — if multi-group:
+  - `knowledge/group_notes/genNNN/group*.md` — per-group narrative notes
+  - `reports/genNNN/evaluator_group*.md` — per-group debriefs
+  - New ideas/patterns the Light Evaluators already added to `knowledge/ideas/` and `knowledge/patterns/` (these are existing files — do not recreate them; update if new evidence warrants).
 - **Reports** (`reports/genNNN/`) — agent debrief reports from this generation.
 - **Solution-idea map** (`history/solution_idea_map.md`) — which solutions implement which ideas.
 - **Coverage matrix** (`history/coverage_matrix.md`) — which idea combinations have been tried.
+
+### Consolidation, not duplication
+
+If the generation had multiple parallel groups, Light Evaluators have already
+added ideas/patterns mid-gen. Your job is to **consolidate**, not re-extract:
+
+1. Before creating a new idea file, check whether a Light Evaluator already
+   added one with the same concept this gen. If yes, **update** its
+   `last_updated`, `last_confirmed_gen`, `supported_by`, and body — do not
+   create a duplicate under a different name.
+2. Use the `reports/genNNN/evaluator_group*.md` debriefs to see what each
+   Light Evaluator chose to register vs. defer. The "deferred" observations
+   in `group_notes/genNNN/group*.md` are the ones you should now decide on.
+3. Lifecycle transitions (active → established / disputed / debunked) remain
+   YOUR job — Light Evaluators never change lifecycle. Use cumulative
+   cross-generation evidence, not just this gen's groups.
+4. `state_of_affairs.md`, coverage matrix, clusters, and solution-idea map
+   are YOUR exclusive outputs. Light Evaluators never touch them.
 
 ## Process
 

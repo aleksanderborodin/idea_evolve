@@ -164,7 +164,8 @@ Previous problems: Binary-Ternary GEMM (`problems/gemm/`), Permutation Codes M(8
 `cayley-py-megaminx` (1001 scrambled Megaminx states; minimize total path length; lower
 is better). Class A (test set downloadable, metric self-checking). **GPU**: RTX 5060 Ti
 (Blackwell), CUDA 12.8 via torch 2.11.0+cu128; NVIDIA MPS enabled for true concurrent
-GPU kernels across agents. `concurrency: parallel`. Eval default is a **stratified 1/10
+GPU kernels across agents. `concurrency: 3` (MPS-bounded parallel slots).
+Eval default is a **stratified 1/10
 proxy** (every 10th id = 101 puzzles; preserves full depth distribution; ~7 min/eval).
 `--full` operator override evaluates all 1001 (~70 min). Score anchors (proxy units):
 sample_submission floor **50,572**; baseline_cayleypy (unguided) ~40–50k; **target 15,000**;
@@ -419,13 +420,31 @@ skip logic and dashboard pipeline tab.
   to consolidate later. Skip rules (in `run_light_evaluator`):
   single-group manifests skip (heavy is next anyway), the final group in any
   manifest skips (heavy is next), groups that produced literally nothing skip,
-  and `analysis.evaluator_light.enabled: false` skips. Defaults live in
+  and the per-problem toggle disables (see below). Defaults live in
   `DEFAULT_TIMEOUTS` / `DEFAULT_MAX_TURNS` under the key `evaluator_light`
-  (900s / 220 turns) and overridable via `user/config.yaml`. `gen_progress.json`
+  (900s / 400 turns) and overridable via `user/config.yaml`. `gen_progress.json`
   tracks per-group status under `light_evaluators.group{K}`. Surfaced on the
   dashboard via a sub-phase pipeline node (`pn-lighteval`) and the
   `/api/generation/<gen>/light_evaluators` endpoint. Prompt template:
   [idea-evolve/agents/evaluator_light.md](idea-evolve/agents/evaluator_light.md).
+  **Ideas and patterns created by the Light Evaluator use the same frontmatter
+  schema and body depth (2-4 paragraphs for ideas, 1-3 for patterns) as the
+  Heavy Evaluator** — the prompt inlines the format rules directly so future
+  agents cannot distinguish Light-authored from Heavy-authored knowledge files.
+- **Per-problem Light Evaluator toggle.** Every `metrics.yaml` may declare
+  `evaluator_light_enabled: true|false` to opt in or out of Phase 2.5.
+  Resolution order: `metrics.yaml` → `user/config.yaml:
+  analysis.evaluator_light.enabled` → `DEFAULT_EVALUATOR_LIGHT_ENABLED` (True)
+  from `problems/_shared/constants.py`. Helper:
+  [orchestrator.py:evaluator_light_enabled()](idea-evolve/orchestrator.py).
+  Default `true` for every `concurrency:` value. With `concurrency: 1`,
+  each group holds a single agent and the light eval runs between agents —
+  that is the intended mid-gen learning loop: agent N+1 sees the ideas /
+  patterns extracted from agent N before starting, instead of waiting for
+  the end-of-gen heavy evaluator. Strawberry, megaminx, gemm, sidon,
+  permcodes all default to true. Explicit `false` only when sonnet cost
+  dominates an already-cheap eval. See
+  [docs/problem_design_guide.md §9.5](docs/problem_design_guide.md#95-per-group-light-evaluator-opt-inout).
 - **Architect debrief and failure reporting.** After each architect session, `architect_report.md`
   is copied from `briefs/genNNN/` to `reports/genNNN/architect.md`. The System Critic reads it
   automatically as part of `reports/genNNN/`. The next Architect gets it via `prev_gen_reports.md`.
@@ -539,14 +558,20 @@ skip logic and dashboard pipeline tab.
   4. To fill in the new metric for specific solutions, delete their `.score` sidecar AND
      their `eval_cache.json` entry (by content hash); the next `evaluate.py` recomputes.
   Do NOT bulk-rerun — wastes compute, perturbs rankings.
-- **Architect-driven scheduling for resource-contended problems.** `metrics.yaml` declares
-  `concurrency: serial|parallel` (default `parallel`). The orchestrator passes the mode to
-  the architect prompt context. The architect writes `parallel_groups` (groups sequential,
-  agents within parallel) — the orchestrator HONORS what it writes via
-  `_normalize_parallel_groups()` and only falls back to `[[all]]` on malformed YAML.
-  Single-element groups serialize, multi-element groups parallelize. Strawberry uses
-  `concurrency: serial` (one solution agent per group) so GPU evals never collide.
-  See [docs/problem_design_guide.md](docs/problem_design_guide.md) §9.1.
+- **Architect-driven scheduling with numeric concurrency budget.** `metrics.yaml`
+  declares a non-negative integer `concurrency:` — `0` = unlimited (CPU-bound, or
+  GPU+MPS), `1` = serial (exactly one eval at a time), `N>=2` = at most N
+  simultaneous evals per group. Every agent role (explore/exploit/full/genetic/
+  research/experimentator) counts as one slot — there are no free roles. The
+  orchestrator passes the budget to the architect via prompt context; the
+  architect writes `parallel_groups` (groups sequential, agents within parallel)
+  and `_normalize_parallel_groups()` auto-splits any oversized group into
+  back-to-back sub-groups, writing a note to `feedback/architect_hints.md` so
+  the next generation's architect sees the budget violation. Current values:
+  strawberry=1 (GPU without MPS, physical `GPU_LOCK_PATH` backstop), megaminx=3
+  (GPU with MPS sharing), sidon/gemm/permcodes=0 (CPU-bound). Only integers are
+  accepted — legacy `serial`/`parallel` strings raise `ValueError`. See
+  [docs/problem_design_guide.md §9.1](docs/problem_design_guide.md).
 - **Universal eval queue + same-agent kill contract.** Every `evaluate.py` enqueues itself
   in `/tmp/idea_evolve_eval_queue.json` (under `fcntl.flock`) and on entry calls
   `eval_queue.kill_stale_same_agent(agent_name, kill_hook=...)`. The kill check enforces
@@ -1153,57 +1178,52 @@ a thumbnail gallery for each solution — click to enlarge.
 - Problems that produce no visual output (sidon, gemm, permcodes) simply omit the block.
 - Not yet implemented.
 
-### [DESIGN-17] Numeric concurrency limit + research-always-parallel rule
+### [DESIGN-17] ~~Numeric concurrency limit~~ — IMPLEMENTED
 
-**Current state:** `concurrency:` in `metrics.yaml` is binary — `serial` (1 eval at a time)
-or `parallel` (unlimited). The architect is told which mode applies and sizes `parallel_groups`
-accordingly. Research and experimentator agents (which never call `evaluate.py`) have no
-special treatment — the architect example showed them serialized even on serial-eval problems,
-wasting wall-clock time.
+`concurrency:` in `metrics.yaml` is a non-negative integer: `0` = unlimited,
+`1` = serial, `N>=2` = bounded. Every agent role counts as one eval slot
+(no free roles — simplified from the original two-tier proposal per
+"no agents are eval free" feedback). Only integers are accepted; strings
+like `"parallel"`/`"serial"` raise `ValueError` to avoid a second schema.
 
-**Two gaps to fix:**
+**What landed:**
 
-1. **Numeric concurrency.** Some problems have N ≥ 2 parallel eval slots (e.g. 2 GPUs, a
-   service with rate limiting, a batched evaluator). `concurrency: 2` should mean "up to 2
-   solution agents per group." Today only `serial` and `parallel` are recognized; `2` or `3`
-   would be ignored.
+- `concurrency_budget()` (replaces `concurrency_mode()`) in
+  [orchestrator.py](idea-evolve/orchestrator.py) reads `metrics.yaml` and
+  returns an int; `DEFAULT_CONCURRENCY = 0` in `problems/_shared/constants.py`.
+- `_normalize_parallel_groups()` auto-splits any oversized group into
+  back-to-back sub-groups and writes a note to
+  `feedback/architect_hints.md` so the next generation's architect sees
+  the budget violation (archived with gen number on overwrite, mirroring
+  `system_recommendations.md`).
+- Architect prompt block ([agents/architect.md](idea-evolve/agents/architect.md))
+  rewritten with numeric semantics + three examples (0, 1, 3).
+- Per-problem values: strawberry=1, megaminx=3, sidon/gemm/permcodes=0,
+  `_kaggle_template`=0.
+- Docs: [docs/problem_design_guide.md §9](docs/problem_design_guide.md) fully
+  rewritten with two-layered (budget + file lock) framing, evidence table,
+  picking guide in §9.1.1. Cross-ref table (§11) and glossary (§10) updated.
+- Consistency checker enforces integer schema — non-integer values fail loudly.
 
-2. **Research/experimentator are always free.** These agent types never acquire the GPU lock
-   or call `evaluate.py`. They consume zero eval slots regardless of the problem's concurrency
-   mode. The architect should always colocate them with a running solution agent — never place
-   them in a solo sequential group, as that forces all prior solution agents to finish before
-   research starts. The current `architect.md` example incorrectly shows `research_1` in its
-   own solo group for serial-eval problems; the text contradicts this but agents follow the
-   example.
-
-**What needs to change:**
-
-| Layer | Change |
-|---|---|
-| `metrics.yaml` schema | Accept `concurrency: serial\|parallel\|N` (integer = max simultaneous evals) |
-| `orchestrator.py` | Parse numeric value; pass to architect context as "max N evals in parallel" |
-| `agents/architect.md` | Fix the serial-mode example to colocate `research_1` with a solution agent; add the "research/experimentator = 0 eval slots" rule explicitly; show a 3-case example (serial / parallel / N=2) |
-| `docs/problem_design_guide.md` §9 | Rewrite concurrency section: binary → numeric; add research-free-slot rule |
-| `scripts/check_docs_consistency.py` | Accept numeric `concurrency` value when validating |
-
-**The research-always-parallel rule is universal** (applies regardless of concurrency mode)
-and should be stated as a hard rule in `architect.md`, not a soft "MAY share a group."
-
-**Not yet implemented.**
+**Deferred:** the "research/experimentator = 0 eval slots" exemption from
+the original plan. User explicitly chose uniform counting ("no agents are
+eval free") for simplicity. The architect is told every agent counts and
+sizes groups accordingly.
 
 ### [DESIGN-18] Architect-driven resource-aware scheduling (mixed-compute pools)
 
-**Problem.** The current `concurrency: serial|parallel` flag is binary. It cannot
-express "this problem has 8 CPU slots and 1 GPU slot — the architect should
-schedule one GPU-heavy agent per group plus several CPU-light agents alongside
-it." A Kaggle problem like Megaminx may evolve from a CPU-only baseline (cayleypy
-beam search) into a GPU-trained predictor — at which point the system needs to
-keep the GPU slot saturated by exactly one agent at a time *while* CPU-only
-explorers run in parallel.
+**Problem.** The current scalar `concurrency: N` budget is a single pool. It
+cannot express "this problem has 8 CPU slots and 1 GPU slot — the architect
+should schedule one GPU-heavy agent per group plus several CPU-light agents
+alongside it." A Kaggle problem like Megaminx may evolve from a CPU-only
+baseline (cayleypy beam search) into a GPU-trained predictor — at which
+point the system needs to keep the GPU slot saturated by exactly one agent
+at a time *while* CPU-only explorers run in parallel.
 
 **Status.** Tracked via [docs/problem_design_guide.md §13.13](docs/problem_design_guide.md).
-Not yet implemented. Megaminx ships with `concurrency: parallel` and CPU-only
-baselines; if/when GPU variants matter, this design must land first.
+Not yet implemented. Megaminx ships with `concurrency: 3` (MPS-bounded)
+and CPU-only baselines; if/when GPU variants matter alongside CPU, this
+design must land first.
 
 **Planned schema** for `metrics.yaml`:
 ```yaml
@@ -1226,7 +1246,7 @@ resources:
 | `dashboard/` | Per-pool utilization panel (eval queue tagged by pool) |
 | `scripts/check_docs_consistency.py` | Validate `resources.pools` keys + per-agent hints reference real agent types |
 
-**The `concurrency: serial|parallel` flag stays as the simple default**; problems
+**The scalar `concurrency: N` budget stays as the simple default**; problems
 that need granular pools opt in by adding `resources:`.
 
 ### [DESIGN-19] Light Evaluator between groups — open risks
@@ -1238,9 +1258,11 @@ per-group `report.md`, so the next group's agents see what the earlier
 group already tried. Code: `orchestrator.py:run_light_evaluator` +
 `build_light_evaluator_prompt`; template: `agents/evaluator_light.md`;
 config: `analysis.evaluator_light` (`enabled: true`, `model: sonnet`,
-`max_turns: 400`, `timeout: 900s`). Skipped on single-group manifests
-(majority of `concurrency: parallel` problems) and on groups that produced
-no output.
+`max_turns: 400`, `timeout: 900s`); per-problem toggle:
+`metrics.yaml: evaluator_light_enabled` (resolved by
+`orchestrator.py:evaluator_light_enabled()`, see docs §9.5). Skipped on
+single-group manifests (majority of `concurrency: 0` problems), on
+groups that produced no output, and when the problem opts out.
 
 **Known risks — none verified yet; first real run will stress-test them:**
 
@@ -1253,13 +1275,14 @@ no output.
    (`agents/evaluator.md`) isn't updated to say "consolidate, don't
    duplicate." Watch `knowledge/ideas/active/` for obvious dupes after
    gen 1; if seen, add a dedup pass or update the template.
-2. **Wall-clock penalty on serial-eval problems.** Strawberry uses
-   `concurrency: serial` → one agent per group → light eval runs between
-   every pair of agents. 5+ agents per gen × 900 s budget each =
-   potentially +1 hour per gen. Megaminx is `parallel` so most gens
-   should produce a single group and pay zero penalty — but if the
-   architect splits for any reason (e.g. isolating research agents),
-   the penalty hits. Consider per-problem toggle of `evaluator_light.enabled`.
+2. **Wall-clock on `concurrency: 1` problems.** Light eval now defaults
+   to **true** for every concurrency value — on serial problems it runs
+   between single-agent groups, which is the intended mid-gen learning
+   loop (agent N+1 reads agent N's extracted ideas before starting).
+   Sonnet cost (~tens of seconds) is small compared to a serial eval.
+   Per-problem opt-out via `metrics.yaml: evaluator_light_enabled: false`
+   remains available for the edge case where sonnet cost dominates an
+   already-cheap eval.
 3. **No strategic-shift escalation.** Heavy Evaluator can set
    `strategic_shift: true` to trigger an emergency Consistency Review.
    Light Evaluator can't — it has no access to that flag. So a major

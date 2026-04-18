@@ -472,28 +472,81 @@ When you add a new problem, work through this list:
 
 ---
 
-## 9. Resource-contended problems (GPU-serial, file-locked, shared external service)
+## 9. Resource-contended problems (GPU, file-locked, shared external service)
 
-Some problems cannot have more than one `evaluate.py` running at once: GPU training,
-problems that bind the same TCP port, problems that hold an exclusive file lock on a
-dataset, etc. Idea-evolve calls these **eval-serial** problems. The mechanism for
-serializing them is **architect-driven scheduling**, not a race on a system-wide lock —
-the lock exists only as a backstop.
+Some problems cannot run as many `evaluate.py` instances in parallel as the architect
+would like: GPU training without NVIDIA MPS ⇒ one at a time (GPU context collisions);
+GPU with MPS ⇒ a handful of kernels before memory thrashes; a shared rate-limited
+HTTP API ⇒ capped by the service's per-second budget; eval binds a fixed TCP port ⇒
+one at a time. Idea-evolve offers **two layered mechanisms** for this. Pick
+between them based on evidence from your problem, or combine them:
+
+1. **Architect-driven budget** (primary). `metrics.yaml: concurrency: N` declares a
+   numeric eval-slot budget. The architect sizes `parallel_groups` so no group
+   exceeds N agents; the orchestrator auto-splits any that do and leaves a note
+   in `feedback/architect_hints.md` so the next architect learns. Cheap, pure
+   scheduling, works for any hardware shape including MPS-capped GPUs.
+
+2. **Physical lock inside `evaluate.py`** (backstop). A file lock on a canonical
+   path (typically `GPU_LOCK_PATH` for GPU training, see
+   `problems/_shared/constants.py`) serializes evaluations even if the architect
+   mis-schedules. This is the only defense when an agent launches two evals back-
+   to-back — the same-agent kill contract (§9.2) assumes this lock exists for
+   single-GPU problems.
+
+**The two are complementary, not alternatives.** Evidence from the shipped
+problems:
+
+| Problem | Hardware reality | `concurrency:` | Physical lock | Why this pair |
+|---|---|---|---|---|
+| sidon, gemm, permcodes | CPU only, cache-friendly | 0 | none | No contention — parallel is free wall-clock. |
+| megaminx | GPU (RTX 5060 Ti) with NVIDIA MPS | 3 | none | MPS shares the device at the CUDA-context level; the numeric budget prevents over-subscription beyond what the GPU's memory can hold. |
+| strawberry | GPU without MPS (YOLO training) | 1 | `GPU_LOCK_PATH` | One eval at a time is the only safe number. File lock is the backstop against an agent racing itself. |
 
 ### 9.1 Declare it in metrics.yaml
 
 ```yaml
 # problems/<id>/metrics.yaml
-concurrency: serial            # default: parallel
-archive_checkpoints: true      # default: false; only meaningful for problems that train
+concurrency: 0          # default. Unlimited — CPU-bound or GPU+MPS-safe.
+concurrency: 1          # serial — one eval at a time. GPU without MPS.
+concurrency: 3          # at most 3 simultaneous evals. GPU+MPS with memory cap, etc.
+
+archive_checkpoints: true      # default: false; only for problems that train models
 checkpoint_retention: 50       # default 50; LRU pruning keyed by content hash
 ```
 
+`concurrency` must be a non-negative integer. Non-integer values (including the
+old string forms `"parallel"` / `"serial"`) raise `ValueError` at load time —
+there is one canonical form and the system enforces it.
+
+**Every agent role counts as one slot.** Research and experimentator agents can also
+call `evaluate.py` (research testing a paper baseline, experimentator verifying a
+helper it built), so there is no free-role exemption. Size groups by total agent
+count, not by role.
+
 The orchestrator passes `concurrency` to the architect prompt context. The architect
-uses it to decide `parallel_groups` — single-element groups for `serial`, one giant
-group for `parallel`. **The orchestrator no longer overrides `parallel_groups`** —
-whatever the architect writes is honored (with a fallback to `[[all]]` only on
-malformed YAML).
+sizes `parallel_groups` accordingly. If the architect writes an oversized group, the
+orchestrator silently splits it into sequential sub-groups of size ≤ budget and
+writes a note to `feedback/architect_hints.md` that the next architect reads.
+Malformed YAML falls back to `[[all agents]]` (then budget-splits if needed).
+
+### 9.1.1 Picking a budget value — evidence-based
+
+- **Start with 0** unless you have a concrete resource the eval contends for. Over-
+  serializing wastes wall-clock and compresses exploration diversity (fewer parallel
+  ideas per generation).
+- **Set 1** when the eval holds an exclusive resource: GPU training without MPS, a
+  fixed TCP port, an exclusive file lock on a mutable dataset. Evidence: you observe
+  broken pipes, OOMs, or "address in use" errors when two evals overlap. Also add
+  a physical file lock in `evaluate.py` as a backstop.
+- **Set N > 1** when you have measured how many concurrent evals the resource
+  tolerates. For GPU+MPS, the measurement is "how many simultaneous kernels before
+  GPU memory saturates." For a rate-limited API, it's the service's per-second
+  limit divided by per-eval request rate. Don't guess — if you don't have the
+  measurement, start at 1 and raise it when monitoring shows headroom.
+- **For new Kaggle problems** (see §13), default `concurrency: 0` unless the baseline
+  already uses the GPU. If it does, classify: MPS-safe → pick N via measurement;
+  MPS-unsafe → `concurrency: 1` + `GPU_LOCK_PATH`.
 
 ### 9.2 Same-agent kill contract
 
@@ -545,7 +598,7 @@ via `problems/_shared/proc_log.Writer`. Format:
 
 ## What to try next
 (produced by problems/<id>/eval_hooks.py:diagnose_failure)
-- If broken pipe: check that metrics.yaml says `concurrency: serial` ...
+- If broken pipe: check that metrics.yaml says `concurrency: 1` ...
 ```
 
 The `.score` sidecar gains a `log_path` field on failure. Agents are taught to read it
@@ -570,6 +623,61 @@ variance. Four steps:
 If the problem does not train models (sidon, gemm, permcodes), the reproduction story
 is "the cache hit IS the reproduction; identical content hash → identical result".
 
+### 9.5 Per-group Light Evaluator (opt-in/out)
+
+A **Light Evaluator** (Phase 2.5) runs between parallel groups inside a
+generation. Scope: surgical — read only THAT group's outputs, write ideas /
+patterns / `group_notes.md` so the next group's agents see them before they
+start. The end-of-generation Heavy Evaluator still runs for full consolidation.
+See `agents/evaluator_light.md` for the prompt.
+
+**Per-problem toggle — `metrics.yaml: evaluator_light_enabled`**
+
+```yaml
+# Default for every concurrency value (knob can be omitted)
+evaluator_light_enabled: true
+
+# Explicit opt-out — only if the sonnet cost dominates an already-cheap eval
+evaluator_light_enabled: false
+```
+
+Resolution order in `orchestrator.evaluator_light_enabled()`:
+
+1. `metrics.yaml: evaluator_light_enabled` (per-problem override)
+2. `user/config.yaml: analysis.evaluator_light.enabled` (global default)
+3. `DEFAULT_EVALUATOR_LIGHT_ENABLED` from `problems/_shared/constants.py` (True)
+
+**When to leave enabled (default — all concurrency values):**
+
+- `concurrency: 0` (unlimited) or `concurrency: N` (N ≥ 2) — the architect
+  commonly produces 2+ groups per generation; the compounding-knowledge
+  benefit justifies the one extra sonnet run between groups.
+- `concurrency: 1` — every group holds a single agent, so a light eval runs
+  between every single agent. That is **the intended mid-gen learning loop**
+  for serial-eval problems: agent N+1 reads the new ideas/patterns extracted
+  from agent N before starting, instead of waiting for the end-of-gen heavy
+  evaluator. The wall-clock cost is a sonnet run per agent boundary (~tens
+  of seconds), which is usually small compared to a serial eval. Strawberry,
+  megaminx, gemm, sidon, permcodes all default to true.
+
+**When to disable:**
+
+- The sonnet run cost dominates an already-cheap eval (e.g. sub-second
+  evals with dozens of agents per gen).
+- Single-agent workflows where the architect never produces any groups
+  with multiple or sequential agents.
+
+The skip rules inside the orchestrator still apply even when enabled:
+single-group manifests skip (heavy is next anyway), the last group in any
+manifest skips (heavy is next), and groups that produced literally no output
+skip. The knob controls **whether the gate exists at all** for this problem.
+
+Tunables (global, in `user/config.yaml`):
+
+- `analysis.evaluator_light.model` — default `sonnet`
+- `timeouts.evaluator_light` — default `900s`
+- `max_turns.evaluator_light` — default `400`
+
 ---
 
 ## 10. Glossary (consistent terminology across docs and prompts)
@@ -577,8 +685,11 @@ is "the cache hit IS the reproduction; identical content hash → identical resu
 | Term | Definition |
 |---|---|
 | **Evaluation** | One call to `evaluate.py <solution>` that produces a `.score` sidecar (or fails into a proc_log). |
-| **Eval-serial problem** | `metrics.yaml: concurrency: serial`. Architect must use single-element `parallel_groups`. |
-| **Eval-parallel problem** | `metrics.yaml: concurrency: parallel` (default). Architect groups all solution agents together. |
+| **Concurrency budget** | Integer in `metrics.yaml: concurrency`. `0` = unlimited, `1` = serial, `N` = at most N simultaneous evals. Every agent role counts as one slot. |
+| **Eval-serial problem** | A problem with `concurrency: 1`. Architect must use single-element `parallel_groups`. |
+| **Eval-parallel problem** | A problem with `concurrency: 0` (unlimited). Architect groups all agents together. |
+| **Budgeted problem** | A problem with `concurrency: N` where N ≥ 2. Architect may group up to N agents; the orchestrator auto-splits oversized groups. |
+| **Auto-split** | Orchestrator silently chunks an oversized group into sequential sub-groups of size ≤ budget and writes a note to `feedback/architect_hints.md`. |
 | **Same-agent kill contract** | Rule that a new `evaluate.py` from agent X kills any still-running `evaluate.py` from the same agent X before acquiring resources. |
 | **Kill hook** | `problems/<id>/eval_hooks.py:kill_eval(pid, pgid, solution_path)` — problem-specific termination logic. |
 | **Diagnosis hook** | `problems/<id>/eval_hooks.py:diagnose_failure(error_class, message, context)` — returns markdown hint surfaced in the failure proc_log. |
@@ -587,6 +698,8 @@ is "the cache hit IS the reproduction; identical content hash → identical resu
 | **Archive checkpoint** | `runs/<problem>/<attempt>/checkpoints/<content_hash>.pt` — kept iff `metrics.yaml: archive_checkpoints: true`. LRU-pruned to `checkpoint_retention`. |
 | **Stale evaluation** | A queue entry whose pid is alive but belongs to a previous `evaluate.py` of the same agent that is launching a new one. Targeted by the kill contract. |
 | **Sticky proc_log** | A proc_log marked `sticky: true` (typically failures, kills) and excluded from the 200-log retention prune. |
+| **Light Evaluator** | Phase 2.5 surgical sonnet eval that runs between parallel groups in a generation — writes new ideas/patterns + `group_notes.md` for the next group. Gated by `metrics.yaml: evaluator_light_enabled`. See §9.5. |
+| **Heavy Evaluator** | End-of-generation opus eval that consolidates all group findings, rewrites state of affairs, updates clusters, coverage matrix, and solution-idea map. |
 
 All other docs (`CLAUDE.md`, `description.md`, `helpers/README.md`, agent prompts) MUST
 use these exact terms.
@@ -600,12 +713,13 @@ script verifies the references resolve.
 
 | Behavior | Code | Doc | Agent prompt |
 |---|---|---|---|
-| `concurrency` flag parsing | `orchestrator.py:concurrency_mode()`, `problems/_shared/constants.py:DEFAULT_CONCURRENCY` | this guide §9.1 | `architect.md` § "Parallel groups" |
+| `concurrency` budget parsing | `orchestrator.py:concurrency_budget()`, `problems/_shared/constants.py:DEFAULT_CONCURRENCY` | this guide §9.1 | `architect.md` § "Parallel groups" |
 | `parallel_groups` honoring | `orchestrator.py:_normalize_parallel_groups()` | this guide §9.1 | `architect.md` § "What You Produce" |
 | Eval queue | `problems/_shared/eval_queue.py`, `problems/_shared/constants.py:EVAL_QUEUE_PATH` | this guide §9.2 | `_shared_eval_contract.md` § "Per-evaluation artifacts" |
 | Same-agent kill | `eval_queue.kill_stale_same_agent()`, per-problem `eval_hooks.py:kill_eval` | this guide §9.2 | `_shared_eval_contract.md` § "Same-agent kill contract" |
 | Proc logs | `problems/_shared/proc_log.py:Writer` | this guide §9.3 | `_shared_eval_contract.md` § "Reading failure logs" |
 | Archive checkpoint | `metrics.yaml: archive_checkpoints`, helpers/core.py `archive_checkpoint`/`evaluate_from_checkpoint` | this guide §9.4 | per-problem `description.md` "Reproducing a scored solution" |
+| Light Evaluator toggle | `metrics.yaml: evaluator_light_enabled`, `orchestrator.py:evaluator_light_enabled()`, `problems/_shared/constants.py:DEFAULT_EVALUATOR_LIGHT_ENABLED` | this guide §9.5 | `agents/evaluator_light.md` |
 | Identity env vars | `problems/_shared/constants.py:ENV_AGENT_NAME` etc., `orchestrator_harness._build_env` | this guide §9.2 | (transparent to agents) |
 | Kaggle competition import | `scripts/new_kaggle_problem.py`, `problems/_kaggle_template/`, `problems/_shared/constants.py:KAGGLE_*` | this guide §13 | (transparent to agents) |
 | Kaggle classification manifest | `problems/<id>/data/.kaggle_spec.yaml`, `scripts/check_docs_consistency.py:check_kaggle_specs()` | this guide §13.3 | (operator-facing) |
@@ -843,17 +957,20 @@ python3 scripts/submit_to_kaggle.py <problem_id> <solution.py> [--message TEXT]
 - **Library cache races:** if your problem uses a library that downloads
   models on first run (cayleypy, HuggingFace, ultralytics), pre-warm the cache
   during scaffolding so parallel agents don't race on first eval.
-- **GPU access:** Kaggle problems default to `concurrency: parallel` on CPU.
-  If a problem grows GPU-dependent, follow §9 (declare `serial`, ship
-  `eval_hooks.py`, acquire `GPU_LOCK_PATH`).
+- **GPU access:** Kaggle problems default to `concurrency: 0` (unlimited) on CPU.
+  If a problem grows GPU-dependent without NVIDIA MPS, follow §9 (declare
+  `concurrency: 1`, ship `eval_hooks.py`, acquire `GPU_LOCK_PATH`). If MPS is
+  available, `concurrency: N` with N matching the desired per-process memory
+  slice is usually the better trade-off.
 
 ### 13.13 Resource-aware scheduling (roadmap, not yet implemented)
 
 Some Kaggle problems will eventually have *mixed* compute needs: a baseline
 that runs in 2 seconds on CPU plus an experimental beam-search variant that
-needs 3 minutes on GPU. The current binary `concurrency: serial|parallel`
-flag can't express "run 4 CPU agents in parallel + 1 GPU agent in the same
-group". Tracked as **DESIGN-18** in CLAUDE.md.
+needs 3 minutes on GPU. The current scalar `concurrency: N` budget is a
+single pool — it can't express "run 4 CPU agents in parallel + 1 GPU agent
+in the same group" without conservatively capping the whole generation at
+the GPU-slot count. Tracked as **DESIGN-18** in CLAUDE.md.
 
 Planned schema (NOT YET ACTIVE):
 
@@ -867,9 +984,10 @@ resources:
     full: gpu             # the architect places this in the GPU slot
 ```
 
-Until DESIGN-18 lands, Kaggle problems should declare a single
-`concurrency: parallel` (or `serial` for full-time GPU) and let the
-backstop locks handle contention.
+Until DESIGN-18 lands, Kaggle problems should pick one scalar
+`concurrency:` value (0 for CPU-unlimited, 1 for GPU-without-MPS, N for
+GPU-with-MPS or other bounded pools) and let the backstop locks handle
+any residual contention.
 
 ### 13.14 Quick checklist for a new Kaggle problem
 

@@ -30,7 +30,16 @@
       "agent_exploit_1": 1830.7,
       "agent_experimentator_1_wrap_up": 30.7,
       "agent_experimentator_1": 1831.2,
-      "agent_explore_1_work": 2100.6
+      "agent_explore_1_work": 2100.6,
+      "agent_explore_1_wrap_up": 1068.8,
+      "agent_explore_1_debrief": 1086.6,
+      "agent_explore_1": 3187.2,
+      "evaluator": 325.2,
+      "evaluator_debrief": 19.6,
+      "system_critic": 220.5,
+      "consistency_reviewer": 145.5,
+      "consistency_reviewer_debrief": 9.9,
+      "total": 4077.7
     }
   }
 }

@@ -153,8 +153,9 @@ confidence: high
   share the GPU with true kernel concurrency, no time-slicing overhead.
   `CUDA_MPS_PIPE_DIRECTORY=/tmp/nvidia-mps` must be in the launch env (loaded
   from `.env` before the orchestrator starts).
-- `metrics.yaml: concurrency: parallel` — agents may call `evaluate.py`
-  simultaneously without a GPU lock.
+- `metrics.yaml: concurrency: 3` — up to 3 `evaluate.py` processes may run
+  simultaneously, sharing the GPU through MPS. No per-problem GPU lock; the
+  architect's group sizing is the primary concurrency control.
 - **Per-eval budget** (proxy, stratified 101 puzzles): ~7 min with the
   cayleypy baseline; varies widely with beam_width × max_steps. Full-set
   (`--full`) eval is ~70 min.

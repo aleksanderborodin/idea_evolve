@@ -1,61 +1,52 @@
----
-generation: 1
-best_score: 46312
-trajectory: compression_baseline_established
-last_updated_gen: 1
----
-
-# State of Affairs — Gen 001
+# State of Affairs — Gen 002
 
 ## Current Standing
 
-Gen 1 established a compression baseline: **46312** (8.4% improvement over sample_submission's 50572) via X.-X cancellation. All 10 valid solutions converged to this same floor. The remaining gap to target (15000) is ~31k proxy moves — cannot be closed by cancellation or unguided search.
+Gen 2 achieved **44114** — a 4.7% improvement over gen 1's 46312 baseline via empirical algebraic identity compression (idea_009). Six explore_2 solutions independently confirmed this floor. The gap to target (15000) is ~29k proxy moves. Compression alone is exhausted; the next breakthrough requires trained-predictor-guided beam search.
 
-**Key fact:** The ML pipeline is confirmed functional (research_1) but **no solution actually ran predictor-guided beam search**. This is the primary path to the target and it has never been tested.
+**Generations run:** 2. **Trajectory:** compression floor broken, primary path untested.
 
 ## What Works
 
-- **X.-X cancellation (idea_001)**: ESTABLISHED. Used by all solutions. compression_ratio=0.9158.
-- **Unguided beam search is dead**: Tested by 3+ solutions, widths 512-4000, steps 50-300 — all converged to exact same result as compression. State space (depth 8 = 3.5B states) makes coverage impossible.
-- **cayleypy ML pipeline confirmed working**: graph.random_walks(), Predictor, beam_search(predictor=...) all verified by research_1.
-- **Hamming predictor shortcut (idea_006)**: exists in cayleypy (`Predictor(graph, 'hamming')`), zero cost, completely untested.
+- **X.-X + commutator/conjugation compression (idea_001 + idea_009)**: Established. 6 solutions → 44114 (compression_ratio=0.8723). Empirical discovery outperforms systematic enumeration (336 rules > 432 rules).
+- **Hamming predictor is useless (idea_006)**: Debunked. Zero advantage over unguided at every beam width tested.
+- **All 24 Megaminx generators are 5-cycles**: Confirmed. Corner/edge classification from cube puzzles does not apply.
 
 ## Current Frontier
 
-The pipeline is stuck at the compression floor. No solution has beaten 46312. The next generation must test predictor-guided search — this is the only demonstrated path to the target.
+**idea_008 (trained MLP predictor) — NEVER TESTED end-to-end.** research_1 confirmed the pipeline is functional (`random_walks` → train MLP → `beam_search(predictor=...)`), but no agent executed it. exploit_1 hit a state-encoding error and fell back. This is the only demonstrated path to the target.
 
-Priority order:
-1. idea_006: Hamming predictor baseline (zero-cost experiment, answers yes/no on guided search)
-2. idea_003: Trained MLP predictor + beam_search(predictor=...)
-3. idea_005: Systematic identity discovery (medium priority)
-4. idea_007: Corner-only pattern database for IDA* (lower priority)
+Priority for gen 3:
+1. Run `graph.random_walks(50000, 20)` → train MLP → `beam_search(predictor=...)` on hard/very_hard buckets
+2. Combine compression (44114 floor) + trained-predictor beam search (从未 tested)
+3. Test beam_width=[1024, 2048, 4096, 8192] with trained predictor
 
 ## Coverage Map
 
 | Idea | Central Uses | Best Score | Status |
 |------|-------------|------------|--------|
-| idea_001 | 11 | 46312 | established |
-| idea_002 | 1 | 50474 (invalid) | debunked |
-| idea_003 | 0 | 46312 (unguided only) | active (NEVER predictor-tested) |
-| idea_004 | 0 | 46312 | active (limited depth) |
-| idea_005 | 0 | — | active (untested) |
-| idea_006 | 0 | — | active (untested) |
-| idea_007 | 0 | — | active (untested) |
+| idea_001 (cancellation) | 16 | 46312 | established (STALE) |
+| idea_005 (identity discovery) | 6 | 44114 | established |
+| idea_008 (trained MLP) | 0 | — | active (NEVER TESTED) |
+| idea_003 (predictor beam) | 0 | 46312 | active (pipeline confirmed, untrained) |
+| idea_006 (hamming) | 0 | 46312 | DEBUNKED |
+| idea_009 (empirical algebraic) | 6 | 44114 | active |
 
-**Unexplored**: idea_003 with trained predictor, idea_006 (hamming), idea_005, idea_007.
+**Unexplored**: idea_008 (trained MLP) — 0 trials. compression + beam search combination — 0 trials.
 
 ## Dead Ends
 
-1. **Unguided beam search**: Confirmed ceiling = compression. All widths/steps tested.
-2. **X.Y.-X commutator heuristic (idea_002)**: Debunked — Megaminx is non-commutative.
-3. **Iterative cancellation**: No gains over greedy single-pass (pattern_002 confirmed).
+1. **Unguided beam search**: Adds nothing over compression at any beam width. Confirmed by 10+ solutions.
+2. **Hamming predictor**: Zero advantage. Debunked.
+3. **X.Y.-X heuristic (idea_002)**: Invalid for non-commutative Megaminx. Debunked.
+4. **idea_007 corner-only PDB**: All generators are 5-cycles — the corner/edge classification assumptions are wrong. Invalidated.
 
 ## Open Questions
 
-1. **Does any predictor beat compression?** CRITICAL — highest priority experiment. Hamming predictor is zero-cost; run it first.
-2. **What beam params work with a trained predictor?** Unknown — never tested.
-3. **Are there valid Megaminx-specific identities beyond X.-X?** idea_005 unexplored.
-4. **What training data size is needed?** 1k? 10k? Unknown.
-5. **Helper interface flaw**: `cayleypy_beam_solver` doesn't expose `predictor` — agents must call cayleypy API directly.
+1. **Does trained MLP predictor beat 44114 compression?** CRITICAL — never run. The central unknown.
+2. **Does compression + beam search combined outperform either alone?** Never tested. Low-hanging fruit.
+3. **What training depth generalizes to depth-500+ puzzles?** Trained on depth-20; unknown if it generalizes.
+4. **Why did systematic enumeration (432 rules) underperform empirical (336 rules)?** Test-set specificity matters more than mathematical completeness.
+5. **Beam_mode='advanced' bug**: Returns path=None despite path_found=True. Must use 'simple' mode.
 
-**very_hard bucket (ids 501-1000) = 74.8% of score.** Focus all effort there.
+**very_hard bucket (ids 501-1000) = 74.8% of score.** All predictor experiments must focus there.

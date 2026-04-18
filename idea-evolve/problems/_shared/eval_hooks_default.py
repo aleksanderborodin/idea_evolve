@@ -55,7 +55,7 @@ def diagnose_failure(error_class: str, error_message: str, context: dict) -> str
             "- Broken pipe usually means another process disrupted shared resources "
             "(GPU context, file handles). Check `current_queue()` for concurrent "
             "`running` entries at the time of failure. If the problem is GPU-bound, "
-            "verify metrics.yaml has `concurrency: serial`."
+            "verify metrics.yaml has `concurrency: 1` (serial eval)."
         )
     if "out of memory" in msg or "oom" in msg or "cuda out of memory" in msg:
         hints.append(

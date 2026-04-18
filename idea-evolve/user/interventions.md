@@ -532,3 +532,21 @@ Files modified since gen 2:
 - agents/explore.md
 - agents/exploit.md
 - agents/genetic.md
+
+## Generation 2
+Files modified since gen 1:
+- knowledge/state_of_affairs.md
+- knowledge/clusters/cluster_001.md
+- knowledge/clusters/cluster_002.md
+- knowledge/patterns/active/pattern_004.md
+- knowledge/patterns/active/pattern_005.md
+- knowledge/experiments/gen002/experimentator_1/observations.md
+- knowledge/experiments/gen002/experimentator_1/sandbox/notes.md
+- knowledge/experiments/gen002/experimentator_1/sandbox/scripts/hamming_predictor_proxy_experiment.py
+- knowledge/research/gen002/research_1/findings.md
+- knowledge/ideas/debunked/idea_006.md
+- knowledge/ideas/established/idea_005.md
+- knowledge/ideas/active/idea_003.md
+- knowledge/ideas/active/idea_009.md
+- knowledge/ideas/active/idea_007.md
+- knowledge/ideas/active/idea_008.md

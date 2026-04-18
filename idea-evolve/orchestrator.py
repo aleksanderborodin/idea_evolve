@@ -479,21 +479,52 @@ def fitness_is_higher_better(project_root: Path) -> bool:
     return spec.get("higher_is_better", True)
 
 
-def concurrency_mode(project_root: Path) -> str:
-    """Per-problem evaluation concurrency from metrics.yaml.
+def concurrency_budget(project_root: Path) -> int:
+    """Per-problem evaluation concurrency budget from metrics.yaml.
 
-    Returns "serial" if evaluations contend for a single hardware resource
-    (GPU, large RAM, exclusive disk lock) and must run one at a time.
-    Returns "parallel" (default) for CPU-bound problems where many agents
-    can evaluate concurrently.
+    Returns a non-negative integer slot budget:
+      - 0  → unlimited (CPU-bound, or GPU+MPS). Architect groups all agents together.
+      - 1  → serial. One eval at a time.
+      - N  → at most N simultaneous evals per group.
 
-    The architect reads this value (surfaced in its prompt) to decide how to
-    structure `parallel_groups` in the manifest.
+    Every agent role (explore, exploit, full, genetic, research, experimentator)
+    counts as one slot — there is no free-role exemption.
+
+    Only integers are accepted. No legacy "parallel"/"serial" strings, no silent
+    coercion. If `concurrency` is missing, DEFAULT_CONCURRENCY (0) is used. If
+    it is present but not a non-negative int, ValueError is raised pointing to
+    the design guide — fix the problem's metrics.yaml at the source.
+
+    The architect reads this value (surfaced in its prompt) to size
+    `parallel_groups`. The orchestrator enforces the budget as a safety net
+    in `_normalize_parallel_groups` — oversized groups are auto-split and a
+    warning is written to feedback/architect_hints.md for the next architect.
     """
     from problems._shared.constants import DEFAULT_CONCURRENCY  # type: ignore
     mf = load_metrics_file(project_root)
-    val = str(mf.get("concurrency", DEFAULT_CONCURRENCY)).lower()
-    return val if val in ("serial", "parallel") else DEFAULT_CONCURRENCY
+    if "concurrency" not in mf:
+        return int(DEFAULT_CONCURRENCY)
+    raw = mf["concurrency"]
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        raise ValueError(
+            f"metrics.yaml: concurrency must be a non-negative integer, got "
+            f"{raw!r} ({type(raw).__name__}). See docs/problem_design_guide.md §9.1."
+        )
+    if raw < 0:
+        raise ValueError(
+            f"metrics.yaml: concurrency must be >= 0, got {raw}. "
+            f"See docs/problem_design_guide.md §9.1."
+        )
+    return raw
+
+
+def _budget_display(budget: int) -> str:
+    """Human-readable one-line summary of a concurrency budget value."""
+    if budget == 0:
+        return "0 (unlimited)"
+    if budget == 1:
+        return "1 (serial — one eval at a time)"
+    return f"{budget} (at most {budget} evals in parallel per group)"
 
 
 def archive_checkpoints_enabled(project_root: Path) -> bool:
@@ -501,6 +532,28 @@ def archive_checkpoints_enabled(project_root: Path) -> bool:
     from problems._shared.constants import DEFAULT_ARCHIVE_CHECKPOINTS  # type: ignore
     mf = load_metrics_file(project_root)
     return bool(mf.get("archive_checkpoints", DEFAULT_ARCHIVE_CHECKPOINTS))
+
+
+def evaluator_light_enabled(project_root: Path, config: dict) -> bool:
+    """Whether per-group Light Evaluator runs mid-generation.
+
+    Resolution order (first match wins):
+      1. metrics.yaml: `evaluator_light_enabled: true|false` (per-problem override)
+      2. user/config.yaml: `analysis.evaluator_light.enabled` (global default)
+      3. DEFAULT_EVALUATOR_LIGHT_ENABLED (True) from problems._shared.constants
+
+    Per-problem override lets parallel-eval problems (multi-agent groups) opt
+    in to the mid-gen feedback loop while serial-eval problems opt out to
+    avoid per-agent wall-clock overhead. See docs/problem_design_guide.md §9.5.
+    """
+    from problems._shared.constants import DEFAULT_EVALUATOR_LIGHT_ENABLED  # type: ignore
+    mf = load_metrics_file(project_root)
+    if "evaluator_light_enabled" in mf:
+        return bool(mf["evaluator_light_enabled"])
+    cfg = config.get("analysis", {}).get("evaluator_light", {})
+    if "enabled" in cfg:
+        return bool(cfg["enabled"])
+    return DEFAULT_EVALUATOR_LIGHT_ENABLED
 
 
 def get_target_score(project_root: Path, config: dict) -> float:
@@ -1891,18 +1944,30 @@ def build_architect_prompt(project_root: Path, gen: int, config: dict) -> str:
 11. `{project_root}/feedback/system_recommendations.md` — System critic recommendations
 12. `{project_root}/feedback/experiment_suggestions/` — Latest experiment suggestions
 13. `{project_root}/feedback/consistency_reviews/` — Latest consistency review
-14. `{project_root}/user/interventions.md` — User edits between generations
+14. `{project_root}/feedback/architect_hints.md` — Orchestrator hints from the previous gen (auto-splits, etc.). Exists only if relevant.
+15. `{project_root}/user/interventions.md` — User edits between generations
 
 {exp_req_section}
 
 ## Evaluation concurrency for this problem
 
-`metrics.yaml: concurrency: {concurrency_mode(project_root)}`
+`metrics.yaml: concurrency: {concurrency_budget(project_root)}`  ({_budget_display(concurrency_budget(project_root))})
 
-- **parallel** → group all solution agents in one parallel group: `[[a, b, c, d]]`.
-- **serial** → one agent per group: `[[a], [b], [c], [d]]`. Evaluations would otherwise
-  collide on a shared resource (GPU, port, lock). The same-agent kill contract is the
-  backstop, NOT the primary defense — your scheduling is.
+**Every agent counts as one eval slot** — research and experimentator agents may also
+call `evaluate.py`, so there is no free-role exemption. Size your `parallel_groups`
+so no group has more than the budget's number of agents.
+
+- `concurrency: 0` → unlimited. Put all agents in one parallel group:
+  `[["explore_1", "explore_2", "exploit_1", "research_1"]]`.
+- `concurrency: 1` → serial. One agent per group:
+  `[["exploit_1"], ["explore_1"], ["explore_2"], ["research_1"]]`.
+- `concurrency: N` (e.g. 3) → at most N agents per group, rest sequential. Example
+  with N=3 and 5 agents: `[["explore_1", "explore_2", "exploit_1"], ["explore_3", "research_1"]]`.
+
+If you exceed the budget, the orchestrator silently splits oversized groups into
+sequential sub-groups and writes a warning to `feedback/architect_hints.md` that
+future-you will read. Prefer to get it right first — extra splits add wall-clock
+time (every split adds a Light Evaluator pass between the sub-groups).
 
 See `agents/architect.md` § "Parallel groups" for the full rules.
 
@@ -3001,25 +3066,33 @@ def _run_agent_group(project_root: Path, gen: int, config: dict,
                 print(f"  ERROR in agent thread: {e}")
 
 
-def _normalize_parallel_groups(raw_groups, all_names: list[str], mode: str) -> list[list[str]]:
-    """Validate architect-supplied parallel_groups; fall back safely on any error.
+def _normalize_parallel_groups(
+    raw_groups,
+    all_names: list[str],
+    budget: int,
+    project_root: "Path | None" = None,
+    gen: "int | None" = None,
+) -> list[list[str]]:
+    """Validate architect-supplied parallel_groups and enforce the concurrency budget.
+
+    Every agent counts as one eval slot regardless of role (research and
+    experimentator agents may call evaluate.py too).
 
     Rules:
-      - serial mode: every agent gets its own group (one-at-a-time execution),
-        regardless of what the architect wrote. The kill-on-new-solution
-        contract handles intra-agent serialization; this handles inter-agent.
-      - parallel mode + valid groups: honored as-written, with dedup + filter
-        to only include known agents. Any agent missing from the manifest
-        groups is appended as its own trailing group (so nothing is silently
-        dropped).
-      - parallel mode + missing/invalid groups: fall back to one big group
-        (all agents in parallel), preserving prior behavior.
+      - budget == 0 (unlimited): honor architect structure verbatim after
+        dedup + filter. Any agent missing from the manifest groups is
+        appended as its own trailing group so nothing is silently dropped.
+      - budget >= 1: after honoring structure, split any group with more
+        than `budget` agents into sequential sub-groups of size <= budget.
+        A warning is written to feedback/architect_hints.md (if
+        project_root and gen are supplied) so the next architect learns.
+      - Missing/invalid groups: fall back to a single group with all agents,
+        then apply budget splitting if needed.
     """
-    if mode == "serial":
-        return [[name] for name in all_names]
-
+    # Step 1 — honor architect structure, with safety cleanup.
     if not raw_groups or not isinstance(raw_groups, list):
-        return [list(all_names)] if all_names else []
+        groups: list[list[str]] = [list(all_names)] if all_names else []
+        return _apply_budget(groups, budget, project_root, gen)
 
     seen_global: set[str] = set()
     groups: list[list[str]] = []
@@ -3041,7 +3114,89 @@ def _normalize_parallel_groups(raw_groups, all_names: list[str], mode: str) -> l
     leftover = [n for n in all_names if n not in seen_global]
     if leftover:
         groups.append(leftover)
-    return groups if groups else ([list(all_names)] if all_names else [])
+    if not groups:
+        groups = [list(all_names)] if all_names else []
+    return _apply_budget(groups, budget, project_root, gen)
+
+
+def _apply_budget(
+    groups: list[list[str]],
+    budget: int,
+    project_root: "Path | None",
+    gen: "int | None",
+) -> list[list[str]]:
+    """Split any group that exceeds `budget` into sequential sub-groups.
+
+    budget == 0 disables splitting (unlimited). For budget >= 1, a group with
+    more than `budget` agents is chunked in order into sub-groups of size
+    <= budget, preserving the architect's intended ordering within the group.
+    Splits are logged to feedback/architect_hints.md.
+    """
+    if budget <= 0:
+        return groups
+
+    split_events: list[tuple[list[str], list[list[str]]]] = []
+    final: list[list[str]] = []
+    for g in groups:
+        if len(g) <= budget:
+            final.append(g)
+            continue
+        chunks = [g[i : i + budget] for i in range(0, len(g), budget)]
+        split_events.append((list(g), [list(c) for c in chunks]))
+        final.extend(chunks)
+
+    if split_events and project_root is not None and gen is not None:
+        try:
+            _write_architect_hint_split(project_root, gen, budget, split_events)
+        except Exception as e:  # never let hint-writing break a run
+            print(f"  WARNING: failed to write architect hint: {e}")
+
+    return final
+
+
+def _write_architect_hint_split(
+    project_root: "Path",
+    gen: int,
+    budget: int,
+    split_events: list[tuple[list[str], list[list[str]]]],
+) -> None:
+    """Write feedback/architect_hints.md so the next architect sees auto-splits.
+
+    Overwrites the current file (previous content archived to
+    feedback/architect_hints_archive/genNNN.md first). Mirrors the
+    system_recommendations.md archive pattern.
+    """
+    hints_path = project_root / "feedback" / "architect_hints.md"
+    archive_dir = project_root / "feedback" / "architect_hints_archive"
+    hints_path.parent.mkdir(parents=True, exist_ok=True)
+    archive_dir.mkdir(parents=True, exist_ok=True)
+
+    if hints_path.exists():
+        try:
+            archive_path = archive_dir / f"gen{max(gen - 1, 0):03d}.md"
+            shutil.copy2(hints_path, archive_path)
+        except Exception:
+            pass
+
+    lines = [
+        f"# Architect Hints (auto-written during gen{gen:03d})",
+        "",
+        f"`metrics.yaml` declares `concurrency: {budget}` for this problem.",
+        "One or more groups in your last `parallel_groups` exceeded that budget,",
+        "so the orchestrator silently split them into sequential sub-groups.",
+        f"Size every group in your NEXT manifest to at most **{budget}** agent"
+        + ("s" if budget != 1 else "")
+        + " — all agent roles count equally.",
+        "",
+        "## Auto-split events (this generation)",
+        "",
+    ]
+    for original, produced in split_events:
+        lines.append(f"- **Original group:** `{original}`")
+        for i, sub in enumerate(produced):
+            lines.append(f"  - Sub-group {i + 1}: `{sub}`")
+    lines.append("")
+    hints_path.write_text("\n".join(lines))
 
 
 def run_agents(project_root: Path, gen: int, config: dict):
@@ -3090,15 +3245,15 @@ def run_agents(project_root: Path, gen: int, config: dict):
         agent_lookup[name] = spec
 
     # Honor architect-specified parallel_groups when present and valid.
-    # For serial-eval problems, force one-agent-per-group regardless of manifest
-    # (otherwise the GPU lock pile-up that destroyed strawberry gen 1-3 returns).
-    mode = concurrency_mode(project_root)
+    # Enforce the problem's concurrency budget by auto-splitting any group that
+    # exceeds it. Every agent role counts as one eval slot (research and
+    # experimentator agents may call evaluate.py too).
+    budget = concurrency_budget(project_root)
     raw_groups = manifest.get("parallel_groups")
-    parallel_groups = _normalize_parallel_groups(raw_groups, list(agent_lookup.keys()), mode)
-    if mode == "serial":
-        print(f"  Concurrency mode: SERIAL ({len(parallel_groups)} sequential groups, 1 agent each)")
-    else:
-        print(f"  Concurrency mode: PARALLEL ({len(parallel_groups)} group(s))")
+    parallel_groups = _normalize_parallel_groups(
+        raw_groups, list(agent_lookup.keys()), budget, project_root, gen
+    )
+    print(f"  Concurrency budget: {_budget_display(budget)} → {len(parallel_groups)} group(s)")
 
     # Kill orphans from any prior crashed run of this generation
     _kill_generation_orphans(project_root, gen)
@@ -3361,9 +3516,9 @@ def run_light_evaluator(
         print(f"  Light evaluator for group {group_idx} already {le_progress.get('status')}, skipping")
         return
 
-    # Disabled in config
-    if not config.get("analysis", {}).get("evaluator_light", {}).get("enabled", True):
-        print(f"  Light evaluator disabled in config, skipping group {group_idx}")
+    # Per-problem metrics.yaml wins, then config.yaml, then default True
+    if not evaluator_light_enabled(project_root, config):
+        print(f"  Light evaluator disabled for this problem, skipping group {group_idx}")
         _write_gen_progress(project_root, gen, light_evaluators={
             group_key: {"status": "skipped", "reason": "disabled",
                          "completed_at": datetime.now(timezone.utc).isoformat()}

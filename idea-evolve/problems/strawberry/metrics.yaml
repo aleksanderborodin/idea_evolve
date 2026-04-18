@@ -1,10 +1,20 @@
 show_eval_time_in_prompts: true
 target_score: 0.92
 
-# Evaluation is GPU-serialized via /tmp/idea_evolve_gpu.lock. Architect MUST
-# write parallel_groups so that at most ONE training-heavy agent runs at a
-# time. See docs/problem_design_guide.md §Resource-Contended Problems.
-concurrency: serial
+# Numeric eval-slot budget. Every agent role (including research and
+# experimentator) counts as one slot. Strawberry trains YOLO on the single GPU
+# without an MPS-safe sharing path, so exactly 1 eval runs at a time. The
+# architect's group sizing is the primary defense; evaluate.py also holds the
+# system-wide GPU file lock (GPU_LOCK_PATH) as a physical backstop.
+# See docs/problem_design_guide.md §9.
+concurrency: 1
+
+# Per-group Light Evaluator stays enabled even with concurrency: 1 — a sonnet
+# run between each serial agent lets agent N+1 read the new ideas/patterns
+# extracted from agent N before starting, which is especially valuable when
+# evals are serial (the heavy end-of-gen evaluator is too late for that).
+# See §9.5 of the design guide. Explicit for clarity; default is true.
+evaluator_light_enabled: true
 
 # Persist best.pt under runs/<problem>/<attempt>/checkpoints/<content_hash>.pt
 # so a scored solution can be reproduced without retraining via

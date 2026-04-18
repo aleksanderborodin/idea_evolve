@@ -18,10 +18,14 @@ show_eval_time_in_prompts: true
 #    8,050    Kaggle top-3 equivalent (80,499 ÷ 10)
 target_score: 15000
 
-# parallel: agents may run evaluate.py concurrently. NVIDIA MPS is enabled on
-# this box (see .env → CUDA_MPS_PIPE_DIRECTORY) so multiple cayleypy beam
-# searches share the GPU without time-slicing overhead.
-concurrency: parallel
+# Numeric eval-slot budget (every agent role counts equally — see
+# problems/_shared/constants.py). Megaminx evals run cayleypy beam search on
+# the RTX 5060 Ti with NVIDIA MPS enabled (see .env → CUDA_MPS_PIPE_DIRECTORY),
+# so concurrent evals share the GPU without time-slicing overhead. 3 is a
+# conservative cap that leaves GPU memory headroom; tune upward if the dashboard
+# shows MPS has more capacity, or downward if deeper beam states cause OOMs.
+# See docs/problem_design_guide.md §9.
+concurrency: 3
 
 # No model checkpoints to archive — the solution code IS the artifact.
 archive_checkpoints: false

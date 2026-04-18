@@ -86,8 +86,8 @@ parallel_groups:
   - ["exploit_1"]
 ```
 
-For a `concurrency: serial` problem (e.g. strawberry), the same agents would instead use
-single-element groups so only one evaluation runs at a time:
+For a `concurrency: 1` problem (e.g. strawberry), the same agents use single-element
+groups so only one evaluation runs at a time:
 
 ```yaml
 parallel_groups:
@@ -95,6 +95,15 @@ parallel_groups:
   - ["explore_2"]
   - ["research_1"]
   - ["exploit_1"]
+```
+
+For a `concurrency: 3` problem (e.g. megaminx), group up to 3 agents together and
+sequence the rest:
+
+```yaml
+parallel_groups:
+  - ["explore_1", "explore_2", "research_1"]
+  - ["exploit_1", "explore_3"]
 ```
 
 **Fields per agent:**
@@ -111,26 +120,37 @@ parallel_groups:
 group execute **in parallel**. Agents do not communicate with each other; results feed
 into the **next generation** via the Evaluator.
 
-The right structure depends on the problem's `concurrency:` mode (provided in CONTEXT):
+The right structure depends on the problem's `concurrency:` **budget** (provided in
+CONTEXT as a non-negative integer). **Every agent role counts as one eval slot** —
+research and experimentator agents may also call `evaluate.py` (to sanity-check a
+baseline from a paper, test a helper they built, etc.), so there is no free-role
+exemption. Size each group so its total agent count is **≤ N** where N is the
+budget. Budget `0` means unlimited — no per-group cap.
 
-- **`concurrency: parallel`** (default — sidon, gemm, permcodes): evaluations are CPU-bound
-  and cache-friendly. Group every solution agent together: `[["explore_1", "explore_2",
-  "exploit_1", "research_1"]]`. Anything else is wasted wall-clock time.
+- **`concurrency: 0`** (unlimited — sidon, gemm, permcodes, megaminx): evaluations are
+  CPU-bound, or GPU-safe via NVIDIA MPS. Group every agent together:
+  `[["explore_1", "explore_2", "exploit_1", "research_1"]]`. Anything else wastes
+  wall-clock time.
 
-- **`concurrency: serial`** (strawberry and any GPU/expensive-eval problem): only ONE
-  evaluation can run at a time without contention. Place each solution agent in its own
-  single-element group: `[["exploit_1"], ["explore_1"], ["explore_2"], ["research_1"]]`.
-  Research and experimentator agents that do **not** call `evaluate.py` heavily (pure
-  literature surveys, helper builders) MAY share a group with the running solution agent
-  — but if you are not certain, keep them solo too.
+- **`concurrency: 1`** (serial — strawberry and any GPU/expensive-eval problem without
+  MPS): only ONE eval can run at a time without contention. Place every agent in its
+  own single-element group:
+  `[["exploit_1"], ["explore_1"], ["explore_2"], ["research_1"]]`.
 
-- **Mixed:** if you have one heavy training run plus several light analysis tasks, use
-  e.g. `[["exploit_1"], ["research_1", "experimentator_1"]]`.
+- **`concurrency: N`** (e.g. 3 — GPU-with-MPS problems capped to avoid memory thrash,
+  or problems with a shared rate-limited external service): at most N agents per group,
+  rest sequential. Example with N=3 and 5 agents:
+  `[["explore_1", "explore_2", "exploit_1"], ["explore_3", "research_1"]]`.
+
+**Budget enforcement.** If you write an oversized group, the orchestrator silently
+splits it into sequential sub-groups of size ≤ budget and writes a note to
+`feedback/architect_hints.md` that you will read next generation. Get it right first
+time — each split adds a Light Evaluator pass between sub-groups (extra wall-clock).
 
 **Validation:** every name in `parallel_groups` must also appear in `agents:`. No
 duplicates within or across groups. No empty groups. If `parallel_groups` is missing
-or malformed, the orchestrator falls back to `[[all agents]]` and writes a warning into
-the next architect's prompt — do not rely on the fallback for serial-eval problems.
+or malformed, the orchestrator falls back to `[[all agents]]` (then budget-splits if
+needed) and writes a warning — do not rely on the fallback for budgeted problems.
 
 **Light Evaluator between groups.** The orchestrator runs a *Light Evaluator* after
 each group that produced output (except the last group — the heavy evaluator runs
@@ -147,9 +167,19 @@ right after it). The light evaluator:
 **What this means for your scheduling:** more (smaller) sequential groups give the
 pipeline more chances to learn mid-generation, at the cost of a light-eval call
 between each pair. Fewer (larger) groups ship more work in parallel but skip the
-inter-group learning opportunity. For fast-iteration / parallel problems, prefer
-1 big group. For serial-eval problems where you already have one-agent-per-group,
-you get progressive learning for free (no extra grouping work required).
+inter-group learning opportunity. Concrete guidance:
+
+- **`concurrency: 0`** — prefer 1 big group; mid-gen learning is cheap but
+  parallel-evals are cheaper. Only split into 2+ groups if a later agent genuinely
+  depends on an earlier one's output (e.g. experimentator ships a helper the
+  exploit agent consumes).
+- **`concurrency: 1`** — one agent per group is the ONLY valid structure. The
+  Light Evaluator runs between every single agent by default. **This is a
+  feature, not a cost:** agent N+1 reads the new ideas/patterns extracted from
+  agent N before starting, so serial problems get mid-gen learning that
+  parallel problems don't. Do not try to avoid it.
+- **`concurrency: N`** — fill each group to N agents; spillover goes into a
+  sequential next group. Light Evaluator runs between groups.
 
 ### 2. Per-Instance Briefs — `type_instance.md`
 

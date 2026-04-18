@@ -20,9 +20,23 @@ Runs when ALL of:
 - Manifest has more than one group in `parallel_groups`
 - The current group is not the final group
 - The group produced at least one artifact (solution, report, research finding, or experiment)
-- `analysis.evaluator_light.enabled` is `true` in `user/config.yaml` (default)
+- The problem opts in (see "Enable/disable" below)
 
 Skipped otherwise (including on single-group manifests — the heavy evaluator is next anyway).
+
+### Enable/disable — resolved by `orchestrator.evaluator_light_enabled()`
+
+First match wins:
+
+1. `problems/<id>/metrics.yaml` → `evaluator_light_enabled: true|false` (per-problem override)
+2. `user/config.yaml` → `analysis.evaluator_light.enabled` (global default)
+3. `problems/_shared/constants.py` → `DEFAULT_EVALUATOR_LIGHT_ENABLED = True` (hardcoded default)
+
+Strawberry ships with `evaluator_light_enabled: false` because `concurrency: 1`
+makes every parallel_group a single solution agent — a light eval would run
+between every agent with no multi-agent findings to consolidate. Parallel-eval
+problems (megaminx, gemm, sidon, permcodes) leave it at default `true`.
+See [docs/problem_design_guide.md §9.5](problem_design_guide.md).
 
 ### Input files
 
@@ -92,12 +106,15 @@ Possible statuses: `running`, `complete`, `skipped`, `failed`.
 
 ### Defaults
 
-| Setting | Default | Config path |
-|---------|---------|-------------|
-| Enabled | `true` | `analysis.evaluator_light.enabled` |
-| Model | `sonnet` | `analysis.evaluator_light.model` |
-| Timeout | 900s | `timeouts.evaluator_light` |
-| Max turns | 400 | `max_turns.evaluator_light` |
+| Setting | Default | Per-problem | Global config |
+|---------|---------|-------------|---------------|
+| Enabled | `true` | `metrics.yaml: evaluator_light_enabled` | `analysis.evaluator_light.enabled` |
+| Model | `sonnet` | — | `analysis.evaluator_light.model` |
+| Timeout | 900s | — | `timeouts.evaluator_light` |
+| Max turns | 400 | — | `max_turns.evaluator_light` |
+
+Only the enable flag supports per-problem override; model/timeout/max_turns
+are global so tuning is centralized.
 
 ### Dashboard surface
 

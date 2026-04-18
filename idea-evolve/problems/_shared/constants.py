@@ -24,10 +24,31 @@ KILL_DEADLINE_SECONDS = 10
 # Per-agent kill mutex prevents two new evals from racing to kill each other.
 AGENT_KILL_LOCK_TEMPLATE = "/tmp/idea_evolve_agent_{name}.lock"
 
-# Default values for metrics.yaml (used when key absent — backward compat).
-DEFAULT_CONCURRENCY = "parallel"   # one of: parallel, serial
+# Default values for metrics.yaml (used when key absent).
+#
+# DEFAULT_CONCURRENCY is a non-negative integer eval-slot budget:
+#   0      = unlimited (CPU-bound problems, or GPU problems using NVIDIA MPS)
+#   1      = serial (exactly one eval at a time; GPU without MPS)
+#   N >= 2 = at most N simultaneous evals per group
+# Only integers are accepted — no "parallel"/"serial" strings.
+# See docs/problem_design_guide.md §9.1.
+DEFAULT_CONCURRENCY = 0
 DEFAULT_ARCHIVE_CHECKPOINTS = False
 DEFAULT_CHECKPOINT_RETENTION = 50
+
+# Per-problem opt-in for the per-group Light Evaluator (Phase 2.5). True by
+# default — parallel-eval problems with multi-agent groups benefit from the
+# mid-gen feedback loop. Serial-eval problems may prefer to disable it since
+# the light eval runs between every agent and compounds wall-clock per gen.
+# See docs/problem_design_guide.md §9.5.
+DEFAULT_EVALUATOR_LIGHT_ENABLED = True
+
+# Every agent role (explore, exploit, genetic, full, research, experimentator)
+# may call evaluate.py during its session — research agents sometimes sanity-
+# check a baseline they find in a paper, experimentator agents test the helpers
+# they build, etc. All roles therefore count equally against the concurrency
+# budget. The architect sizes parallel_groups so no group exceeds the budget;
+# the orchestrator auto-splits any that do. There is no per-role exemption.
 
 # Process-log retention per attempt (LRU; sticky logs excluded).
 DEFAULT_PROC_LOG_RETENTION = 200

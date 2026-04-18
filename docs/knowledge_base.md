@@ -1,14 +1,14 @@
 # Knowledge Base
 
 All knowledge lives under `runs/{problem}/{attempt}/knowledge/`. It is cumulative —
-updated by the evaluator and consistency reviewer each generation, read by every agent
-and the architect.
+updated by the Light Evaluator (between groups), Heavy Evaluator (end of gen), and
+Consistency Reviewer (periodic), read by every agent and the architect.
 
 ## Directory Structure
 
 ```
 knowledge/
-├── state_of_affairs.md        # Strategic overview (Layer 0) — written by consistency reviewer
+├── state_of_affairs.md        # Strategic overview (Layer 0) — written by consistency reviewer / heavy evaluator
 ├── ideas/                     # Ideas (Layer 1) — organized by lifecycle
 │   ├── active/                # Currently relevant ideas
 │   ├── established/           # Proven ideas from past gens (high confidence)
@@ -20,11 +20,25 @@ knowledge/
 │   └── confirmed/
 ├── clusters/                  # Groupings of related ideas (no lifecycle)
 ├── facts/                     # Ground-truth facts (problem constants, verified results)
+├── group_notes/               # Light Evaluator per-group notes — gen-scoped, advisory
+│   └── gen{NNN}/group{K}.md   # 200-400 word summary for the NEXT group's agents
 ├── research/                  # Research agent outputs, archived by generation
 │   └── gen{NNN}/research_{instance}/
 └── experiments/               # Experimentator outputs, archived by generation
     └── gen{NNN}/experimentator_{instance}/
 ```
+
+**Authorship contract** — who writes what:
+
+| Path | Light Evaluator (phase 2.5) | Heavy Evaluator (phase 3) | Consistency Reviewer |
+|------|------|------|------|
+| `state_of_affairs.md` | ❌ never | ✅ rewrites | ✅ rewrites |
+| `ideas/*/` | ✅ adds new only | ✅ adds + updates + lifecycle transitions | ✅ audits lifecycle |
+| `patterns/*/` | ✅ adds new only | ✅ adds + updates | — |
+| `clusters/` | ❌ never | ✅ updates | ✅ reshuffles |
+| `facts/` | ❌ never | ✅ adds | — |
+| `group_notes/gen{NNN}/` | ✅ writes one file per group | reads (for consolidation) | — |
+| `research/`, `experiments/` | — | reads (for consolidation) | reads (for audit) |
 
 ## File Schemas
 
@@ -124,6 +138,41 @@ last_updated_gen: 7
 Markdown body: current problem state, frontier approaches, exhausted directions,
 open questions, recommended next steps.
 ```
+
+### Group Notes (`group_notes/gen{NNN}/group{K}.md`)
+
+Written by the Light Evaluator after each parallel group (phase 2.5) to unblock
+the next group's agents. **No frontmatter** — advisory narrative, not a
+structured record. Gen-scoped: only read by solution agents in LATER groups of
+the same generation (prompt item #7) and by the Heavy Evaluator at end-of-gen.
+
+```
+# Group {K} notes — generation {NNN}
+
+## Agents in this group
+- agent_name_1 — N solutions, best score X
+- agent_name_2 — N solutions, best score X
+
+## What they tried
+- <1-line summary per distinct approach>
+
+## What worked
+- <one sentence each>
+
+## What didn't work
+- <one sentence each>
+
+## Open questions for next groups
+- <one sentence each>
+
+## New ideas registered (filenames only)
+- idea_NNN — <short name>
+```
+
+Target length: 200–400 words. Group notes persist on disk across generations
+but are NOT pre-concatenated into later gens' prompts — only the current
+gen's folder is advertised to agents. Never pruned automatically (see
+CLAUDE.md DESIGN-19 risk #4).
 
 ## Lifecycle Transitions
 

@@ -4,8 +4,24 @@
 show_eval_time_in_prompts: true
 target_score: <TARGET_SCORE>
 
-# parallel | serial. See docs/problem_design_guide.md §9.
-concurrency: parallel
+# Numeric eval-slot budget. Every agent role (explore/exploit/full/genetic/
+# research/experimentator) counts as one slot.
+#   0   = unlimited (CPU-bound, or GPU+MPS). Default for most Kaggle problems.
+#   1   = serial. GPU training without MPS, shared TCP port, exclusive file lock.
+#   N>1 = capped parallelism (GPU+MPS with memory limits, rate-limited external API).
+# Must be a non-negative integer. See §9.1.
+concurrency: 0
+
+# Per-group Light Evaluator (Phase 2.5). True = runs a surgical sonnet eval
+# between parallel groups so the next group's agents see new ideas/patterns.
+# Default: true — works for every concurrency value:
+#   - concurrency: 0 or N>=2 → runs between multi-agent groups
+#   - concurrency: 1 → runs between single-agent groups (mid-gen learning
+#     is especially valuable here since serial agents would otherwise only
+#     learn from each other via the end-of-gen heavy evaluator)
+# Set false only if you have a specific reason (e.g. sonnet cost dominates
+# an already-cheap eval). See docs/problem_design_guide.md §9.5.
+# evaluator_light_enabled: true
 
 # Set true only if entrypoint() trains a model whose checkpoint agents may want
 # to reproduce without retraining. Most Kaggle problems don't need this.

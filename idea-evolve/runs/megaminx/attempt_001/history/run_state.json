@@ -27,42 +27,15 @@
     }
   ],
   "completed_gens": [
-    1
+    1,
+    2
   ],
   "pid": 52671,
   "started_at": "2026-04-16T15:26:22.861204+00:00",
   "target_gen": 30,
-  "status": "running",
+  "status": "stopped",
   "current_gen": 2,
-  "current_phase": "agents_running",
-  "agents": {
-    "exploit_1": {
-      "status": "done",
-      "finished_at": "2026-04-16T15:59:43.072129+00:00",
-      "solutions": 1,
-      "elapsed": 1830.7
-    },
-    "experimentator_1": {
-      "status": "done",
-      "finished_at": "2026-04-16T15:59:43.719673+00:00",
-      "solutions": 0,
-      "elapsed": 1831.2
-    },
-    "explore_1": {
-      "status": "wrapping_up"
-    },
-    "explore_2": {
-      "status": "done",
-      "finished_at": "2026-04-16T15:45:21.371603+00:00",
-      "solutions": 8,
-      "elapsed": 968.9
-    },
-    "research_1": {
-      "status": "done",
-      "finished_at": "2026-04-16T15:51:04.915387+00:00",
-      "solutions": 0,
-      "elapsed": 1312.4
-    }
-  },
-  "last_updated": "2026-04-16T16:04:13.025401+00:00"
+  "current_phase": "idle",
+  "agents": {},
+  "last_updated": "2026-04-16T16:34:20.531045+00:00"
 }

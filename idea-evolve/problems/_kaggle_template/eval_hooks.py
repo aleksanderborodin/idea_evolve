@@ -1,9 +1,10 @@
 """Optional per-problem failure-diagnosis hints + kill hook.
 
-For Kaggle problems running `concurrency: parallel` on CPU, the default kill
-hook (problems/_shared/eval_hooks_default.py) is sufficient — agents kill
-their own stale evals via SIGTERM/SIGKILL. Override `kill_eval` here only if
-the problem holds non-fcntl resources (GPU lock, named-port server, etc.).
+For Kaggle problems running `concurrency: 0` on CPU (or `concurrency: N` with
+MPS-safe GPU sharing), the default kill hook (problems/_shared/eval_hooks_default.py)
+is sufficient — agents kill their own stale evals via SIGTERM/SIGKILL. Override
+`kill_eval` here only if the problem holds non-fcntl resources (GPU lock,
+named-port server, etc.).
 
 `diagnose_failure` returns a markdown string embedded in proc_logs under
 "What to try next." Keep hints actionable and problem-specific.

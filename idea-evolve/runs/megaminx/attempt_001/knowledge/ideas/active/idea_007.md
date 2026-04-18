@@ -1,35 +1,52 @@
 ---
 type: idea
 id: idea_007
-name: Corner-only pattern database for IDA*
+name: Corner-only pattern database for IDA* — INVALID assumptions
 lifecycle: active
-confidence: 0.4
+confidence: 0.2
 first_seen: gen_001
-last_updated: gen_001
-last_confirmed_gen: gen_001
+last_updated: gen_002
+last_confirmed_gen: gen_002
 supported_by: []
-contradicted_by: []
+contradicted_by: [gen002_explore_1_sol01]
 related_ideas: [idea_004, idea_003]
 cluster: heuristics
-tags: [pattern_database, IDA_star, admissible_heuristic]
+tags: [pattern_database, IDA_star, admissible_heuristic, invalidated]
 ---
 
-# Corner-Only Pattern Database for IDA*
+# Corner-Only Pattern Database for IDA* — INVALID Assumptions
 
-## Concept
+## What Was Claimed
 
-Precompute exact distances for corner-only Megaminx configurations. The corner-only state space (20 corners, orientations) is small enough to enumerate exhaustively. Use the precomputed distance as an admissible heuristic for IDA* search on the full puzzle.
+Precompute exact distances for corner-only Megaminx configurations. The "corner-only"
+state space was assumed to be small enough to enumerate exhaustively. Use the
+precomputed distance as an admissible heuristic for IDA* search on the full puzzle.
 
-## Rationale
+## Why the Assumptions Are Wrong
 
-IDA* with a strong admissible heuristic can solve puzzles optimally with depth-first memory requirements. If the corner-only pattern database is accurate enough, it could find optimal paths for medium and even hard buckets.
+**gen002_explore_1_sol01 confirmed:** All 24 Megaminx generators have 5-cycle structure.
+There are NO 2-cycles or 3-cycles in the generator set. The idea's description assumed
+a mix of 2-cycles and 3-cycles (like Rubik's cube corners/edges) that doesn't exist
+in Megaminx.
 
-## Challenges
+The "corner-only" projection does not decompose the state space the same way.
+The heuristic's admissibility depends on corner/edge piece classification that is
+INVALID for Megaminx.
 
-- Megaminx has 20 corners with orientations. The enumeration size needs to be verified as tractable.
-- Corner-only distance may be a weak heuristic for the full puzzle (corners don't capture all constraints).
-- Implementation complexity: need to project full state to corner-only representation and look up distance.
+## Evidence
+
+gen002_explore_1_sol01's IDA* attempt:
+- Built a BFS corner PDB up to depth 5
+- The corner configuration space did NOT provide useful guidance because
+  all generators are 5-cycles, not a mix of 2-cycles and 3-cycles
+- The search still explored massive state spaces and timed out
 
 ## Status
 
-Hypothesized in initial_ideas.md, confirmed as a reasonable direction but not attempted in gen_1. Medium priority — less immediately actionable than predictor training but potentially more rigorous (optimal solutions vs approximate).
+ACTIVE but DESPERATELY NEEDS REVISION. The structural assumptions are wrong.
+The idea needs either:
+1. A reformulation based on correct Megaminx state space structure, OR
+2. Reclassification as debunked if no valid reformulation exists
+
+The pattern database approach is theoretically sound for IDA* — but the specific
+"corner-only" decomposition is invalid for Megaminx's generator structure.

@@ -97,7 +97,7 @@ def diagnose_failure(error_class: str, error_message: str, context: dict) -> str
             "- **Broken pipe during YOLO training is almost always concurrent GPU access.** "
             f"At failure time there were {len(concurrent)} concurrent strawberry evaluations "
             "marked `running` in the queue. The expected count is 1 (this one). "
-            "Check `metrics.yaml` — `concurrency: serial` MUST be set, and the architect "
+            "Check `metrics.yaml` — `concurrency: 1` MUST be set, and the architect "
             "MUST place strawberry agents in single-element parallel_groups so they run "
             "one at a time."
         )

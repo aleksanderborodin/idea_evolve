@@ -8,8 +8,10 @@
       "solutions": 1
     },
     "explore_1": {
-      "status": "pending",
-      "started_at": "2026-04-16T15:29:12.375803+00:00"
+      "status": "complete",
+      "outputs_moved": true,
+      "completed_at": "2026-04-16T16:22:19.626607+00:00",
+      "solutions": 4
     },
     "explore_2": {
       "status": "complete",
@@ -30,5 +32,17 @@
       "solutions": 0
     }
   },
-  "last_updated": "2026-04-16T15:59:43.719999+00:00"
+  "last_updated": "2026-04-16T16:34:20.524925+00:00",
+  "evaluator": {
+    "status": "complete"
+  },
+  "system_critic": {
+    "status": "complete"
+  },
+  "consistency_review": {
+    "status": "complete"
+  },
+  "finalize": {
+    "status": "complete"
+  }
 }
