@@ -3,14 +3,14 @@ type: idea
 id: idea_008
 name: Trained MLP predictor-guided beam search
 lifecycle: active
-confidence: 0.7
+confidence: 0.4
 first_seen: gen_002
-last_updated: gen_002
-last_confirmed_gen: gen_002
-supported_by: [gen002_research_1]
+last_updated: gen_004
+last_confirmed_gen: gen_004
+supported_by: [gen002_research_1, gen003_explore_2_sol01, gen004_exploit_1_sol01]
 contradicted_by: []
-related_ideas: [idea_003, idea_006]
-cluster: machine_learning
+related_ideas: [idea_003, idea_006, idea_010, idea_011, idea_012, idea_014, idea_015, idea_016]
+cluster: search_algorithms
 tags: [predictor, MLP, beam_search, ML, trained_predictor]
 ---
 
@@ -18,69 +18,50 @@ tags: [predictor, MLP, beam_search, ML, trained_predictor]
 
 ## Summary
 
-Train a neural network (MLP) on random-walk distance data to predict actual optimal
-distance from any Megaminx state. Use this predictor to guide beam search toward
-shorter paths than compression can achieve. research_1 confirmed the complete pipeline:
-`graph.random_walks()` → PyTorch MLP training → `Predictor(graph, model)` →
-`graph.beam_search(predictor=predictor)`.
+Train a neural network on distance data to predict optimal distance from any Megaminx
+state. Use this predictor to guide beam search toward shorter paths than compression
+can achieve. Two generations of end-to-end testing confirm the pipeline works but
+the improvement is marginal regardless of model architecture. **The bottleneck is
+training data depth, not model architecture.**
 
-## Evidence from Gen 2
+## Evidence from Gen 3 and Gen 4
 
-**research_1 (findings.md):** Confirmed that:
-- `graph.random_walks(width=50000, length=20, mode='bfs')` generates 50k (state, distance)
-  training pairs from the solved state
-- `Predictor(graph, model)` accepts a trained PyTorch model
-- Beam mode must be `'simple'` to get actual paths (advanced mode has a path-return bug)
-- The pipeline was proven functional but no solution actually ran end-to-end with a trained predictor
+**gen003 (explore_2_sol01, raw integer MLP):** 44094 — 20 moves over compression. Marginal
+improvement explained by wrong architecture (raw integers for categorical data).
 
-**CRITICAL FINDING from research_1:** The hamming predictor provides ZERO advantage over
-unguided search. This definitively answers EXP-1: hamming is not the path forward.
-Only a trained MLP predictor can potentially beat compression.
+**gen004 (exploit_1_sol01, embedding MLP):** 44111 — 3 moves over compression. WORSE than
+gen003 despite using the correct architecture (embedding-based categorical representation).
+Training data: random walks depth 50. Improved 2/101 puzzles.
 
-## Pipeline
+**CRITICAL FINDING:** The architecture fix (embedding vs raw integers) did not help. Both
+experiments confirm the predictor fails to guide beam search on hard/very_hard puzzles.
+The root cause is now clearly identified as **training data depth**: the predictor has
+no information about states at depth 100+, regardless of how well it represents shallow
+states.
 
-```python
-import torch
-gdef = cayleypy.Puzzles.megaminx()
-graph = cayleypy.CayleyGraph(gdef, dtype=torch.int8)  # GPU, int8
+## Updated Diagnosis
 
-# Generate training data: random walks from solved state
-X, y = graph.random_walks(50000, 20, mode='bfs')  # 50k samples, length 20 walks
-
-# Train MLP
-model = torch.nn.Sequential(
-    torch.nn.Linear(120, 256), torch.nn.ReLU(),
-    torch.nn.Linear(256, 128), torch.nn.ReLU(),
-    torch.nn.Linear(128, 1)
-)
-# Train with MSE on distance
-
-# Use in beam search
-predictor = cayleypy.Predictor(graph, model)
-res = graph.beam_search(start_state=state, beam_width=8192, max_steps=80,
-                        predictor=predictor, beam_mode='simple',
-                        return_path=True, verbose=0)
+```
+Gen003 hypothesis: "Architecture is wrong (raw integers)"
+Gen004 result: "Architecture was fixed — still marginal"
+New hypothesis: "Training data doesn't cover the depth range that matters"
 ```
 
-## Key Unknown
+The 74.8% of score comes from very_hard puzzles (depth 501–1000). Predictor trained on
+depth ≤50 data (BFS or random walks) has zero predictive power there.
 
-Whether the trained predictor's accuracy on depth-20 random walks generalizes to
-depth-100+ puzzles in the hard/very_hard buckets. This is the central research question
-for gen 3.
+## Path Forward
 
-## Status
+1. **Training data:** Use path-intermediate states (idea_016) — these cover depths 1–888
+   with approximate but correlated distance labels. This is now the #1 priority.
+2. **Model:** Use CayleyPy's built-in MlpModel (idea_014) — proven architecture, no
+   custom implementation needed.
+3. **Beam width:** Scale to 65536+ (pattern_009 — log-linear improvement).
+4. **Beam mode:** Test non-backtracking (idea_015) vs MITM (idea_012) — mutually exclusive,
+   need to pick the better option.
 
-ACTIVE — highest priority experiment for gen 3. The pipeline is confirmed functional.
-The question is whether the predictor can guide beam search to paths shorter than
-compression achieves (~44114 with empirical identities).
+## Architecture Reference
 
-## Beam Width Requirements
-
-research_1 found beam_width must be 4x-32x larger than gen001 used:
-- depth 10: beam_width=32768 solves optimally
-- depth 26-100: beam_width=65536 needed but too slow
-- depth 500-1000 (very_hard): astronomical beam width required without perfect predictor
-
-The trained predictor must compensate for beam width limitations by better guiding the search.
-
-**NOTE:** Never actually tested end-to-end after 2 generations. This is the primary path to the target and it has never been executed.
+Embedding MLP (idea_011) achieves 5.3x lower loss than raw integer MLP. MlpModel (idea_014,
+one-hot) is the library's proven approach. Either architecture is acceptable for the model
+itself — training data depth is the binding constraint.

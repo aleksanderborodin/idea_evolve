@@ -36,9 +36,13 @@ if str(_IDEA_EVOLVE_ROOT) not in sys.path:
 if str(PROBLEM_ROOT) not in sys.path:
     sys.path.insert(0, str(PROBLEM_ROOT))
 
-from problems._shared import eval_queue  # noqa: E402
+from problems._shared import eval_queue, proc_log  # noqa: E402
 from problems._shared.constants import (  # noqa: E402
     ENV_AGENT_NAME, ENV_ATTEMPT, ENV_PROBLEM, ENV_RUN_ROOT,
+)
+from problems._shared.eval_boilerplate import (  # noqa: E402
+    try_diagnose_failure,
+    try_kill_stale_same_agent,
 )
 
 _RUN_ROOT = Path(os.environ[ENV_RUN_ROOT]) if ENV_RUN_ROOT in os.environ else None
@@ -173,6 +177,11 @@ def main() -> int:
             print(json.dumps(cached))
             return 0
 
+        # Same-agent kill contract: terminate any stale evaluate.py owned by
+        # me before enqueueing. Megaminx runs parallel under MPS
+        # (concurrency: 3); fails open if no matching process exists.
+        try_kill_stale_same_agent(PROBLEM_ROOT)
+
         queue_id = eval_queue.enqueue(
             os.environ.get(ENV_AGENT_NAME, "unknown"),
             os.environ.get(ENV_PROBLEM, "megaminx"),
@@ -211,6 +220,28 @@ def main() -> int:
         return 0
     except Exception as e:
         result = _error_result(e, t0, started_at)
+        # Agent-readable narrative failure log + problem-specific hint.
+        if _RUN_ROOT is not None:
+            try:
+                fail_log = proc_log.Writer(
+                    _RUN_ROOT,
+                    os.environ.get(ENV_AGENT_NAME, "unknown"),
+                    "eval_fail",
+                    sticky=True,
+                )
+                fail_log.event(f"crashed on {Path(solution_path).name}")
+                fail_log.kv(error_class=type(e).__name__, error_message=str(e)[:200])
+                fail_log.traceback(e)
+                hint = try_diagnose_failure(
+                    PROBLEM_ROOT, type(e).__name__, str(e),
+                    {"queue_at_failure": eval_queue.current_queue()},
+                )
+                if hint:
+                    fail_log.hints(hint)
+                fail_log.finalize("CRASHED", mark_sticky=True)
+                result["log_path"] = fail_log.log_path
+            except Exception:
+                pass
         _write_score_sidecar(solution_path, result)
         print(json.dumps(result))
         print(f"ERROR: {e}", file=sys.stderr)

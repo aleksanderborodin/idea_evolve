@@ -1,6 +1,6 @@
 """Adapter smoke tests.
 
-These tests exercise the minimum contract both harnesses must honor:
+These tests exercise the minimum contract all harnesses must honor:
   - `launch()` returns a non-empty session id (and finishes under timeout)
   - `resume()` with the returned id retains session memory
   - `SessionTimeout` is raised on wall-clock timeout AND carries a session id
@@ -17,6 +17,7 @@ Running:
 ClaudeCode tests skip unless `npx` and `@anthropic-ai/claude-code` resolve.
 OpenCode tests skip unless the `opencode` binary is on `$PATH` and
 `MODELGATE_API_KEY` is exported.
+Codex coverage here is unit-only; live Codex sessions are not exercised.
 """
 
 from __future__ import annotations
@@ -34,9 +35,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from orchestrator_harness import (
     ClaudeCodeAdapter,
+    CodexAdapter,
     OpenCodeAdapter,
     SessionError,
     SessionTimeout,
+    _find_session_id,
     get_adapter,
 )
 
@@ -62,6 +65,47 @@ def test_opencode_adapter_takes_model_map_override():
     override = {"sonnet": "modelgate/gpt-4o"}
     adapter = OpenCodeAdapter(model_map=override)
     assert adapter.model_map["sonnet"] == "modelgate/gpt-4o"
+
+
+def test_codex_adapter_takes_model_map_override():
+    override = {"sonnet": "gpt-5.4"}
+    adapter = CodexAdapter(model_map=override)
+    assert adapter.model_map["sonnet"] == "gpt-5.4"
+
+
+def test_registry_returns_codex_adapter():
+    adapter = get_adapter("codex")
+    assert adapter.name == "codex"
+
+
+def test_codex_session_id_extraction_accepts_nested_events():
+    ev = {"type": "session_configured", "payload": {"session_id": "abc-123"}}
+    assert _find_session_id(ev) == "abc-123"
+
+
+def test_codex_adapter_adds_reasoning_effort_config(tmp_path):
+    adapter = CodexAdapter(
+        model_map={"opus": "gpt-5.5"},
+        reasoning_effort_map={"opus": "high"},
+    )
+    captured = {}
+
+    def fake_run(cmd, prompt_text, project_root, timeout, run_root,
+                 agent_name=None, problem=None, attempt=None):
+        captured["cmd"] = cmd
+        return "", "thread_123", 1234
+
+    adapter._run_streaming = fake_run
+    _, sid, _ = adapter.launch(
+        project_root=tmp_path,
+        prompt_text="ok",
+        model="opus",
+        timeout=1,
+    )
+
+    assert sid == "thread_123"
+    assert "-c" in captured["cmd"]
+    assert 'model_reasoning_effort="high"' in captured["cmd"]
 
 
 def test_opencode_tool_env_mapping():

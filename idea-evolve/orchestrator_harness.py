@@ -1,7 +1,7 @@
 """
 Agent harness adapters.
 
-Two CLI harnesses launch Claude Code-compatible agent sessions in idea-evolve:
+Three CLI harnesses launch coding-agent sessions in idea-evolve:
 
 - `ClaudeCodeAdapter` — `npx @anthropic-ai/claude-code --print ...` (default).
   Session ids are caller-assigned UUIDs. Wrap-up/debrief resumes via `--resume`.
@@ -13,7 +13,11 @@ Two CLI harnesses launch Claude Code-compatible agent sessions in idea-evolve:
   Resume uses `-s <ses_id>`. Sessions persist in opencode's SQLite DB even
   after SIGKILL, so the wrap-up/debrief state machine works unchanged.
 
-Both adapters return identical `(stdout, session_id, pid)` / `(stdout, session_id)`
+- `CodexAdapter` — `codex exec --json ...`.
+  Session ids are emitted by the Codex CLI JSONL stream and resume uses
+  `codex exec resume <session_id>`.
+
+All adapters return identical `(stdout, session_id, pid)` / `(stdout, session_id)`
 shapes so callers can swap between them by one line.
 """
 
@@ -73,6 +77,14 @@ OPENCODE_MODEL_MAP_DEFAULT = {
     "opus": "modelgate/claude-sonnet-4-5",
     "sonnet": "modelgate/minimax-m2.7",
     "haiku": "modelgate/minimax-m2.7",
+}
+
+# Default Codex model map. Can be overridden via user/config.yaml
+# `models.codex:` block.
+CODEX_MODEL_MAP_DEFAULT = {
+    "opus": "gpt-5.5",
+    "sonnet": "gpt-5.4",
+    "haiku": "gpt-5.4-mini",
 }
 
 
@@ -335,6 +347,15 @@ class ClaudeCodeAdapter:
 
 OPENCODE_BIN = os.environ.get("OPENCODE_BIN", "opencode")
 
+# Serializes the opencode startup phase. opencode initialises a shared SQLite
+# DB (~/.local/share/opencode/opencode.db) with `PRAGMA journal_mode = WAL` on
+# every launch; if two processes hit that pragma concurrently, one crashes
+# with "Failed to run the query 'PRAGMA journal_mode = WAL'". We hold the lock
+# only until the first JSON event (session ID) appears on stdout — by then
+# the DB is initialised and subsequent processes can safely proceed.
+_OPENCODE_STARTUP_LOCK = threading.Lock()
+_OPENCODE_STARTUP_GUARD_S = 8.0
+
 
 class OpenCodeAdapter:
     name = "opencode"
@@ -372,50 +393,71 @@ class OpenCodeAdapter:
         env = _build_env(run_root, agent_name=agent_name, problem=problem, attempt=attempt)
         env.update(extra_env)
 
+        # Serialize opencode startup to avoid the SQLite-WAL race on the shared
+        # DB. Lock is held across Popen + stdin-write + until the first stdout
+        # event (session ID) confirms DB init is past the pragma. Then released
+        # so other agents can start. Sessions themselves run fully concurrent.
+        _OPENCODE_STARTUP_LOCK.acquire()
+        lock_released = False
+
         try:
-            proc = subprocess.Popen(
-                cmd,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                cwd=str(project_root),
-                env=env,
-                start_new_session=True,
-                bufsize=1,
-                preexec_fn=_set_pdeathsig,
-            )
-        except FileNotFoundError:
-            print(f"  ERROR: opencode binary not found at '{OPENCODE_BIN}'. Install: https://opencode.ai")
-            sys.exit(1)
-
-        pid = proc.pid
-        session_id_box = {"id": None}
-        lines_box = {"buf": []}
-
-        def reader():
             try:
-                for line in proc.stdout:
-                    lines_box["buf"].append(line)
-                    if session_id_box["id"] is None:
-                        try:
-                            ev = json.loads(line)
-                            sid = ev.get("sessionID")
-                            if sid:
-                                session_id_box["id"] = sid
-                        except Exception:
-                            pass
-            except Exception:
+                proc = subprocess.Popen(
+                    cmd,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    cwd=str(project_root),
+                    env=env,
+                    start_new_session=True,
+                    bufsize=1,
+                    preexec_fn=_set_pdeathsig,
+                )
+            except FileNotFoundError:
+                print(f"  ERROR: opencode binary not found at '{OPENCODE_BIN}'. Install: https://opencode.ai")
+                sys.exit(1)
+
+            pid = proc.pid
+            session_id_box = {"id": None}
+            lines_box = {"buf": []}
+            startup_done = threading.Event()
+
+            def reader():
+                try:
+                    for line in proc.stdout:
+                        lines_box["buf"].append(line)
+                        if session_id_box["id"] is None:
+                            try:
+                                ev = json.loads(line)
+                                sid = ev.get("sessionID")
+                                if sid:
+                                    session_id_box["id"] = sid
+                                    startup_done.set()
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+                finally:
+                    startup_done.set()
+
+            t = threading.Thread(target=reader, daemon=True)
+            t.start()
+
+            try:
+                proc.stdin.write(prompt_text)
+                proc.stdin.close()
+            except (BrokenPipeError, OSError):
                 pass
 
-        t = threading.Thread(target=reader, daemon=True)
-        t.start()
-
-        try:
-            proc.stdin.write(prompt_text)
-            proc.stdin.close()
-        except (BrokenPipeError, OSError):
-            pass
+            # Hold the startup lock until the SQLite WAL init is past —
+            # either the first session event arrives, the process exits,
+            # or the guard timeout fires.
+            startup_done.wait(timeout=_OPENCODE_STARTUP_GUARD_S)
+        finally:
+            if not lock_released:
+                _OPENCODE_STARTUP_LOCK.release()
+                lock_released = True
 
         try:
             proc.wait(timeout=timeout)
@@ -503,23 +545,242 @@ class OpenCodeAdapter:
 
 
 # ---------------------------------------------------------------------------
+# CodexAdapter
+# ---------------------------------------------------------------------------
+
+CODEX_BIN = os.environ.get("CODEX_BIN", "codex")
+
+
+def _find_session_id(obj):
+    """Best-effort session id extraction from Codex JSONL events."""
+    if isinstance(obj, dict):
+        for key in (
+            "session_id",
+            "sessionId",
+            "sessionID",
+            "conversation_id",
+            "conversationId",
+            "thread_id",
+            "threadId",
+        ):
+            val = obj.get(key)
+            if isinstance(val, str) and val:
+                return val
+        for val in obj.values():
+            sid = _find_session_id(val)
+            if sid:
+                return sid
+    elif isinstance(obj, list):
+        for val in obj:
+            sid = _find_session_id(val)
+            if sid:
+                return sid
+    return None
+
+
+class CodexAdapter:
+    name = "codex"
+
+    def __init__(self, model_map: dict | None = None, reasoning_effort_map: dict | None = None):
+        self.model_map = model_map or CODEX_MODEL_MAP_DEFAULT
+        self.reasoning_effort_map = reasoning_effort_map or {}
+        self._warned_max_turns = False
+        self._warned_tools = False
+
+    def _cmd_base(self, project_root: Path) -> list[str]:
+        return [
+            CODEX_BIN,
+            "-C", str(project_root),
+            "--sandbox", "workspace-write",
+            "--ask-for-approval", "never",
+        ]
+
+    def _reasoning_config_args(self, model: str, model_id: str) -> list[str]:
+        effort = self.reasoning_effort_map.get(model) or self.reasoning_effort_map.get(model_id)
+        if not effort:
+            return []
+        return ["-c", f'model_reasoning_effort="{effort}"']
+
+    def _run_streaming(self, cmd, prompt_text, project_root, timeout, run_root,
+                       agent_name=None, problem=None, attempt=None):
+        """Run Codex JSONL mode and capture the emitted session id."""
+        env = _build_env(run_root, agent_name=agent_name, problem=problem, attempt=attempt)
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                cwd=str(project_root),
+                env=env,
+                start_new_session=True,
+                bufsize=1,
+                preexec_fn=_set_pdeathsig,
+            )
+        except FileNotFoundError:
+            print(f"  ERROR: Codex CLI not found at '{CODEX_BIN}'. Install or set CODEX_BIN.")
+            sys.exit(1)
+
+        pid = proc.pid
+        session_id_box = {"id": None}
+        lines_box = {"buf": []}
+
+        def reader():
+            try:
+                for line in proc.stdout:
+                    lines_box["buf"].append(line)
+                    if session_id_box["id"] is None:
+                        try:
+                            sid = _find_session_id(json.loads(line))
+                            if sid:
+                                session_id_box["id"] = sid
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+        t = threading.Thread(target=reader, daemon=True)
+        t.start()
+
+        try:
+            proc.stdin.write(prompt_text)
+            proc.stdin.close()
+        except (BrokenPipeError, OSError):
+            pass
+
+        try:
+            proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            t.join(timeout=0.5)
+            _kill_group(proc)
+            t.join(timeout=2.0)
+            raise SessionTimeout(
+                f"Timed out after {timeout}s",
+                session_id=session_id_box["id"],
+                pid=pid,
+            )
+
+        t.join(timeout=5.0)
+        stderr = proc.stderr.read() if proc.stderr else ""
+        stdout = "".join(lines_box["buf"])
+
+        if proc.returncode != 0:
+            if stderr:
+                print(f"  STDERR: {stderr[:500]}")
+            raise SessionError(
+                f"Exited with code {proc.returncode}: {stderr[:200] if stderr else 'no stderr'}",
+                session_id=session_id_box["id"],
+            )
+        return stdout, session_id_box["id"], pid
+
+    def launch(
+        self,
+        project_root: Path,
+        prompt_text: str,
+        model: str = "sonnet",
+        timeout: int = 300,
+        max_turns: int = 50,
+        allowed_tools: list[str] | None = None,
+        session_id: str | None = None,
+        run_root: Path | None = None,
+        agent_name: str | None = None,
+        problem: str | None = None,
+        attempt: str | None = None,
+    ) -> tuple[str, str, int]:
+        if not self._warned_max_turns:
+            print(f"  NOTE: codex has no --max-turns equivalent (requested {max_turns}); wall-clock timeout {timeout}s is the only ceiling.")
+            self._warned_max_turns = True
+        if allowed_tools and not self._warned_tools:
+            print("  NOTE: codex uses sandbox/approval policy instead of per-tool allowlists; allowed_tools is not translated.")
+            self._warned_tools = True
+        if session_id:
+            print("  NOTE: codex assigns session ids itself; supplied session_id is ignored.")
+
+        model_id = self.model_map.get(model, model)
+        cmd = self._cmd_base(project_root) + [
+            "exec",
+            "--json",
+            "-m", model_id,
+            *self._reasoning_config_args(model, model_id),
+            "--skip-git-repo-check",
+            "-",
+        ]
+        stdout, sid, pid = self._run_streaming(
+            cmd, prompt_text, project_root, timeout, run_root,
+            agent_name=agent_name, problem=problem, attempt=attempt,
+        )
+        if sid is None:
+            raise SessionError(
+                "codex launch produced no session id in stdout",
+                session_id=None,
+            )
+        return stdout, sid, pid
+
+    def resume(
+        self,
+        project_root: Path,
+        session_id: str,
+        prompt_text: str,
+        model: str = "sonnet",
+        timeout: int = 300,
+        max_turns: int = 50,
+        allowed_tools: list[str] | None = None,
+        run_root: Path | None = None,
+        agent_name: str | None = None,
+        problem: str | None = None,
+        attempt: str | None = None,
+    ) -> str:
+        if allowed_tools and not self._warned_tools:
+            print("  NOTE: codex uses sandbox/approval policy instead of per-tool allowlists; allowed_tools is not translated.")
+            self._warned_tools = True
+
+        model_id = self.model_map.get(model, model)
+        cmd = self._cmd_base(project_root) + [
+            "exec",
+            "resume",
+            "--json",
+            "-m", model_id,
+            *self._reasoning_config_args(model, model_id),
+            "--skip-git-repo-check",
+            session_id,
+            "-",
+        ]
+        stdout, _sid, _pid = self._run_streaming(
+            cmd, prompt_text, project_root, timeout, run_root,
+            agent_name=agent_name, problem=problem, attempt=attempt,
+        )
+        return stdout
+
+
+# ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
 
 _ADAPTERS: dict[str, object] = {}
 
 
-def get_adapter(name: str, opencode_model_map: dict | None = None):
+def get_adapter(
+    name: str,
+    opencode_model_map: dict | None = None,
+    codex_model_map: dict | None = None,
+    codex_reasoning_effort_map: dict | None = None,
+):
     """Return a cached adapter instance by name. Unknown names fall back to
     claude-code with a one-time warning."""
     key = (name or "claude-code").strip().lower()
-    if key not in ("claude-code", "opencode"):
+    if key not in ("claude-code", "opencode", "codex"):
         print(f"  WARNING: unknown harness '{name}', falling back to claude-code")
         key = "claude-code"
     if key in _ADAPTERS:
         return _ADAPTERS[key]
     if key == "opencode":
         adapter = OpenCodeAdapter(model_map=opencode_model_map)
+    elif key == "codex":
+        adapter = CodexAdapter(
+            model_map=codex_model_map,
+            reasoning_effort_map=codex_reasoning_effort_map,
+        )
     else:
         adapter = ClaudeCodeAdapter()
     _ADAPTERS[key] = adapter

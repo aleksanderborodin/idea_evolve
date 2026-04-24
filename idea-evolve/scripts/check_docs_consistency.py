@@ -23,7 +23,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent      # idea-evolve/
 IDEA_EVOLVE = REPO_ROOT
-PROJECT_ROOT = REPO_ROOT.parent                         # project_alpha/
+PROJECT_ROOT = REPO_ROOT.parent                         # idea_evolve/ (repo root)
 CONSTANTS_FILE = IDEA_EVOLVE / "problems" / "_shared" / "constants.py"
 
 sys.path.insert(0, str(IDEA_EVOLVE))

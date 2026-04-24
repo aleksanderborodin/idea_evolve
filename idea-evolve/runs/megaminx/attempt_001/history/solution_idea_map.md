@@ -1,74 +1,54 @@
-# Solution-Idea Map — Gen 002
+# Solution-Idea Map — Gen 004
 
-## Solution gen002_explore_1_sol01 (score: INVALID, syntax error)
-- **Central:** idea_007 (IDA* with corner-only PDB)
-- **Peripheral:** None
-- **Novel elements:** Attempted IDA* with corner-only pattern database — FAILED due to structural error in corner/edge classification assumptions. All 24 Megaminx generators are 5-cycles, not a mix of 2-cycles and 3-cycles.
+## Solution gen004_exploit_1_sol01 (score: 44111, compression_ratio: 0.8722)
 
-## Solution gen002_explore_1_sol02 (score: INVALID, syntax error in file write)
-- **Central:** idea_006 (Hamming-predictor guided beam search)
-- **Peripheral:** None
-- **Novel elements:** Attempted hamming-guided beam search — FAILED due to UTF-8 file corruption. Score = sentinel 1e9. This was the zero-cost experiment to test idea_006.
+**Pipeline:** Compression (336 rules) → BFS depth 6 (MITM backstop) → Embedding MLP
+predictor (random walks depth 50, 2.3M samples, 15 epochs) → Beam search (beam_width=4096,
+max_steps=60) → compression fallback.
 
-## Solution gen002_explore_1_sol03 (score: 46312, compression_ratio: 0.9158)
-- **Central:** idea_001 (multi-pass enhanced compression) + idea_006 (hamming-guided beam fallback)
-- **Peripheral:** idea_006 (hamming predictor for hard/very_hard)
-- **Novel elements:** Hybrid approach: multi-pass compression for all, hamming-guided beam for hard/very_hard. No improvement over baseline — hamming provides no advantage.
+- **Central:** idea_009 (empirical algebraic identity compression, Phase 1) + idea_008
+  (trained MLP predictor beam search concept) + idea_011 (embedding MLP — used directly
+  in this solution) + idea_012 (MITM backstop via bfs_result_for_mitm)
+- **Peripheral:** idea_001 (X.-X baseline cancellation), idea_010 (BFS data for MITM only —
+  NOT used as training data here; random walks were used instead)
+- **Novel elements:** First solution to test idea_013 (combined recipe) end-to-end. Result
+  reveals the bottleneck is training data depth: predictor trained on depth ≤50 data
+  cannot guide beam search for hard/very_hard puzzles. Only 2/101 puzzles improved.
+- **Key finding:** BFS-only predictor (depth 0–5) predicts every state as ~4 — completely
+  useless for deep puzzles. Directly refutes idea_010's "strictly superior" training claim.
 
-## Solution gen002_explore_1_sol04 (score: 46312, compression_ratio: 0.9158)
-- **Central:** idea_001 (timing-budget-aware beam + enhanced compression)
-- **Peripheral:** idea_006 (hamming predictor)
-- **Novel elements:** Timing-budget-aware approach: timed beam on deepest very_hard puzzles. No improvement — beam search ceiling confirmed.
+## Agent gen004_explore_1 (score: N/A — zero output)
 
-## Solution gen002_explore_2_sol01 (score: 44114, compression_ratio: 0.8723) — NEW BEST
-- **Central:** idea_009 (empirical algebraic identity compression)
-- **Peripheral:** idea_001 (baseline X.-X cancellation)
-- **Novel elements:** Discovered 336 empirically verified rewrite rules from sample_submission. Commutators and conjugations confirmed valid in Megaminx. 2198 points better than baseline.
+- **Central:** N/A (assigned: GNN predictor + embedding MLP comparison)
+- **Peripheral:** N/A
+- **Novel elements:** None. Context reading consumed all turns — agent confirmed API
+  details and architectural constraints but produced no code. Raised idea of GNN predictor
+  using generator-induced adjacency with hand-rolled message passing.
 
-## Solution gen002_explore_2_sol02 (score: 44118, compression_ratio: 0.8724)
-- **Central:** idea_009 (systematic commutator enumeration, 432 rules)
-- **Peripheral:** idea_001
-- **Novel elements:** Same approach but systematic enumeration of ALL commutators/conjugations. Slightly worse than empirical (44118 > 44114) — extra systematic rules were noise.
+## Agent gen004_explore_2 (score: N/A — no report found)
 
-## Solution gen002_explore_2_sol03 (score: 44118, compression_ratio: 0.8724)
-- **Central:** idea_009 (combined systematic + empirical)
-- **Peripheral:** idea_001
-- **Novel elements:** Combined empirical + systematic rules. Same as sol02.
+- **Status:** No debrief report found in reports/gen004/. Agent either produced no output
+  or report was not written. No solutions evaluated.
 
-## Solution gen002_explore_2_sol04 (score: INVALID, unknown move '-')
-- **Central:** idea_009 (string replacement for identity rules)
-- **Peripheral:** None
-- **Novel elements:** Attempted string replacement to apply rules. FAILED — string replacement creates empty move names at pattern boundaries, corrupting paths. Never use string replacement for move sequences.
+## Agent gen004_experimentator_1 (score: N/A — zero output)
 
-## Solution gen002_explore_2_sol05 (score: 44118, compression_ratio: 0.8724)
-- **Central:** idea_009 (systematic rules, move-list application)
-- **Peripheral:** idea_001
-- **Novel elements:** Same systematic enumeration as sol02 but with move-list (not string replacement). Confirms that string replacement is the failure mode.
+- **Central:** N/A (assigned: write embedding_predictor_beam.py helper)
+- **Peripheral:** N/A
+- **Novel elements:** None. **Third consecutive generation** with zero experimentator output
+  on the helper-writing task. The helper module remains broken (raw-integer MLP). The
+  architect should stop routing this task to experimentator role — it's been failing for
+  3 straight gens.
 
-## Solution gen002_explore_2_sol06 (score: 46312, compression_ratio: 0.9158)
-- **Central:** idea_001 (pure empirical internal-cancellation mining, 1832 rules)
-- **Peripheral:** None
-- **Novel elements:** Attempted to find patterns with internal X.-X cancellation. FAILED — any pattern with internal cancellation is already caught by X.-X pass. 1832 rules were noise, no improvement.
+## Agent gen004_research_1 (no score — research agent)
 
-## Solution gen002_explore_2_sol07 (score: 44114, compression_ratio: 0.8723)
-- **Central:** idea_009 (span-6 extended patterns, 888 rules)
-- **Peripheral:** idea_001
-- **Novel elements:** Extended to span-6 patterns (sol01 was span-2 to span-5). Matched sol01 (44114) — additional span-6 patterns too specific.
-
-## Solution gen002_explore_2_sol08 (score: 44114, compression_ratio: 0.8723)
-- **Central:** idea_009 (bucket-aware compression with same rules)
-- **Peripheral:** idea_001
-- **Novel elements:** Same rules applied uniformly to all buckets. Matched sol01 — bucket-aware approach didn't help, rules universally applicable.
-
-## Solution gen002_exploit_1_sol02 (score: 46312, compression_ratio: 0.9158)
-- **Central:** idea_006 (narrow hamming-guided search on hard/very_hard)
-- **Peripheral:** idea_001
-- **Novel elements:** Narrow hamming-guided search with small beam budgets on hard/very_hard. 293s eval time. Same as baseline — hamming provides no advantage (confirmed by research_1).
-
-## Solution gen002_research_1 (no score — research agent)
 - **Central:** research findings (no solution produced)
 - **Peripheral:** None
-- **Novel elements:** CRITICAL FINDINGS: (1) hamming = unguided at all beam widths, (2) beam_mode='simple' required, (3) trained MLP pipeline confirmed, (4) beam_width must be 4x-32x larger, (5) all generators are 5-cycles, (6) GPU automatically used
+- **Novel elements:** Major literature findings: (1) CayleyPy's MlpModel uses one-hot
+  encoding, NOT raw integers — corrects our 2-gen assumption; (2) non-backtracking beam
+  search quadruples success rate (17.6% → 69.7%); (3) beam width is the dominant
+  parameter (log-linear relationship — paper explicit); (4) random walk training is the
+  CayleyPy team's actual approach, not BFS-only. Three new ideas (014, 015, 016) and
+  two new patterns (008, 009) created from these findings.
 
 ---
 
@@ -76,16 +56,32 @@
 
 | Metric | Value |
 |--------|-------|
-| Total solutions | 12 |
-| Valid solutions | 10 |
-| Invalid solutions | 2 (sol01 syntax, sol04 move error) |
-| Best score | 44114 (gen002_explore_2_sol01) |
-| Best valid score | 44114 |
-| Previous best | 46312 (gen001 baseline) |
-| Improvement | 2198 points (4.7%) |
-| Solutions using idea_001 | 10 |
-| Solutions using idea_003 | 0 (beam used but not central) |
-| Solutions using idea_005/009 | 6 |
-| Solutions using idea_006 | 3 (all = 46312, debunked) |
-| Solutions using idea_007 | 1 (invalid assumptions) |
-| Solutions using idea_008 | 0 (never tested) |
+| Total agents launched | 5 |
+| Agents with output | 2 (exploit_1, research_1) |
+| Agents with zero output | 3 (explore_1, explore_2, experimentator_1) |
+| Valid solutions scored | 1 (gen004_exploit_1_sol01) |
+| Best score this generation | 44111 (gen004_exploit_1_sol01) |
+| Overall best score | 44094 (gen003_explore_2_sol01) — unchanged |
+| Improvement vs previous best | -17 (REGRESSION) |
+| Solutions using idea_009 | 1 |
+| Solutions using idea_008/idea_011 | 1 (marginal — training data issue) |
+| Solutions using idea_012 (MITM) | 1 (in pipeline but benefit not measured separately) |
+| Solutions using idea_013 (recipe) | 1 (confirmed tested — disappointing) |
+| Solutions using idea_014 | 0 (not yet tried in solution) |
+| Solutions using idea_015 | 0 (not yet tried) |
+| Solutions using idea_016 | 0 (not yet tried — TOP PRIORITY) |
+
+---
+
+## Cumulative Map (all generations)
+
+| Solution | Score | Central Ideas | Notes |
+|----------|-------|---------------|-------|
+| gen001_explore_1_sol01..05 | 46312 | idea_001 | Basic cancellation, 5 variants |
+| gen001_explore_2_sol01..08 | 46312 | idea_001 | MITM attempt, all fall back to cancellation |
+| gen001_full_1_sol01 | 46312 | idea_001 | Ensemble, same floor |
+| gen002_explore_1_sol01..03 | 46312 | idea_001 | Tried IDA*, fell back |
+| gen002_explore_2_sol01 | 44114 | idea_005, idea_009 | BEST compression — 336 empirical rules |
+| gen002_explore_2_sol02..08 | 44114–44118 | idea_005, idea_009 | Variants of identity compression |
+| gen003_explore_2_sol01 | **44094** | idea_009, idea_008 | **ALL-TIME BEST** — compression + raw-integer predictor tail |
+| gen004_exploit_1_sol01 | 44111 | idea_009, idea_008, idea_011, idea_012 | Combined recipe — REGRESSION from gen003 |

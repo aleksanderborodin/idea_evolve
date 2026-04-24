@@ -46,7 +46,7 @@ the relevant file in `docs/`. That folder is the technical deep-dive:**
 | [docs/analysis_phases.md](docs/analysis_phases.md) | Evaluator, Critic, Consistency Reviewer | EXISTS |
 | [docs/knowledge_base.md](docs/knowledge_base.md) | Knowledge directory + file schemas | EXISTS |
 | [docs/file_layout.md](docs/file_layout.md) | Complete run directory tree | EXISTS |
-| [docs/harness.md](docs/harness.md) | ClaudeCode/OpenCode adapter layer | EXISTS |
+| [docs/harness.md](docs/harness.md) | ClaudeCode/OpenCode/Codex adapter layer | EXISTS |
 | [docs/dashboard.md](docs/dashboard.md) | Dashboard tabs, API endpoints, scanner functions | EXISTS |
 | [docs/communication.md](docs/communication.md) | Engine ↔ Dashboard file interface | EXISTS |
 
@@ -62,7 +62,7 @@ All commands below assume the venv is active. Dependencies: `requirements.txt` a
 
 ### Secrets and provider credentials (`.env`)
 
-Secrets and provider endpoints live in `/home/sasha/Desktop/project_alpha/.env` (project root,
+Secrets and provider endpoints live in `/home/sasha/Desktop/idea_evolve/.env` (repo root,
 gitignored via `.gitignore` entry `.env`). Everything in this file is loaded into the shell
 environment before running the orchestrator or any harness CLI.
 
@@ -75,6 +75,8 @@ Current keys:
 | `KAGGLE_API_TOKEN` | Kaggle competitions CLI token (format `KGAT_...`). Generated at kaggle.com → Settings → API. Used by `scripts/new_kaggle_problem.py` and any evaluate.py that needs to re-pull competition data. See [docs/problem_design_guide.md §13](docs/problem_design_guide.md#13-turning-a-kaggle-competition-into-a-problem). |
 | `CHEAPGPT_API_KEY` | CheapGPT (aiproductiv.ru) API key — OpenAI-compatible proxy routed to OpenAI, ~3× cheaper, works from RU without VPN. JWT-format token from cheapgpt.ru personal cabinet. Used by the `cheapgpt` opencode provider (`~/.config/opencode/opencode.json`) for GPT-5.4 / GPT-5.4-mini. Currently routed as the `opus` tier in `user/config.yaml`. |
 | `CHEAPGPT_BASE_URL` | CheapGPT base URL (`https://api.aiproductiv.ru/v1`). Hard-coded in opencode's provider block too; duplicated here for Python clients. |
+| `ZAI_API_KEY` | Z.ai GLM Coding Plan API key (format `<32hex>.<16chars>`). Referenced from `~/.config/opencode/opencode.json` as `{env:ZAI_API_KEY}`. Used by the `zai` opencode provider (GLM-5.1, GLM-4.7, GLM-4.5 Air). **All three tier aliases (opus/sonnet/haiku) currently route to `zai/glm-5.1`** per `user/config.yaml`. |
+| `ZAI_BASE_URL` | Z.ai coding-plan base URL (`https://api.z.ai/api/coding/paas/v4`). Note: this is the **coding-plan** endpoint, NOT the general `/api/paas/v4` endpoint — using the wrong one fails with quota errors. Hard-coded in opencode's provider block too; duplicated here for Python clients. |
 
 Load pattern (bash):
 
@@ -83,13 +85,14 @@ set -a; source .env; set +a
 ```
 
 Future additions expected (do not commit real values): `ANTHROPIC_API_KEY` (used by `claude-code`
-if we ever run against a non-default provider), `OPENAI_API_KEY` (for codex when/if added).
+if we ever run against a non-default provider), `OPENAI_API_KEY` (for Codex API-key auth if not
+using the normal Codex CLI login).
 
 **Never commit `.env`.** If you add a new variable, document it in the table above.
 
-### OpenCode provider setup (ModelGate + CheapGPT)
+### OpenCode provider setup (ModelGate + CheapGPT + Z.ai)
 
-OpenCode is configured at `~/.config/opencode/opencode.json` with two providers, both using
+OpenCode is configured at `~/.config/opencode/opencode.json` with three providers, all using
 the OpenAI-compatible `@ai-sdk/openai-compatible` driver:
 
 - **`modelgate`** — `https://api.modelgate.ru/v1`, key from `{env:MODELGATE_API_KEY}`.
@@ -99,15 +102,23 @@ the OpenAI-compatible `@ai-sdk/openai-compatible` driver:
   OpenAI proxy (~3× cheaper, RU-accessible). Models: `cheapgpt/gpt-5.4`,
   `cheapgpt/gpt-5.4-mini`, `cheapgpt/gpt-5.3-codex`, `cheapgpt/gpt-5.2-codex`,
   `cheapgpt/gpt-5.2`. gpt-5.4 has `reasoning: true` + image input.
+- **`zai`** — `https://api.z.ai/api/coding/paas/v4`, key from `{env:ZAI_API_KEY}`.
+  Z.ai GLM Coding Plan. Models: `zai/glm-5.1` (default), `zai/glm-4.7`,
+  `zai/glm-4.5-air`. **Must use the `/api/coding/paas/v4` coding-plan endpoint**, not
+  the general `/api/paas/v4` endpoint — the coding plan is billed separately and
+  the general endpoint returns quota errors under this key.
 
 Add new models by editing the relevant provider block (id on left = opencode's
-`provider/<id>`). Both providers read their API key from env, so the shell must
+`provider/<id>`). All three providers read their API key from env, so the shell must
 have `.env` loaded (`set -a; source .env; set +a`) before `opencode run`.
 
 Current tier mapping in `idea-evolve/user/config.yaml` (`models.opencode`):
-`opus → cheapgpt/gpt-5.4`, `sonnet → modelgate/minimax-m2.7`,
-`haiku → modelgate/minimax-m2.7`. High-reasoning roles (architect, evaluator,
-experimentator) hit GPT-5.4; workhorse roles stay on Minimax.
+`opus → zai/glm-5.1`, `sonnet → zai/glm-5.1`, `haiku → zai/glm-5.1`. Every agent
+role (architect / evaluator / explore / exploit / full / genetic / research /
+experimentator / critic / consistency_reviewer) currently resolves to GLM-5.1
+via Z.ai. Smoke-tested 2026-04-21 against `https://api.z.ai/api/coding/paas/v4`.
+Swap tiers back to the previous mapping by restoring the `cheapgpt/gpt-5.4` +
+`modelgate/minimax-m2.7` lines (see git history).
 
 ## Running
 
@@ -273,14 +284,16 @@ from the last completed phase by inspecting which files exist (`phase_status()`)
 5. **Consistency Review** — every 3rd gen or on strategic shift: audits knowledge base, rewrites State of Affairs
 6. **Finalize** — update rankings, population summary, score progression, detect user interventions
 
-**Agents are launched as:** `npx @anthropic-ai/claude-code --print --model <model> --max-turns <N>`
-with `--allowedTools Read,Write,Bash,Glob,Grep`. Each agent gets a lean prompt with file paths to read
-(not inline content), so prompts stay small regardless of knowledge base size.
+Agent launch goes through the configured harness (`claude-code`, `opencode`, or `codex`).
+Claude Code receives `--allowedTools Read,Write,Bash,Glob,Grep`; OpenCode translates the same
+allowlist to `OPENCODE_PERMISSION`; Codex runs under `workspace-write` with noninteractive
+approval policy. Each agent gets a lean prompt with file paths to read (not inline content),
+so prompts stay small regardless of knowledge base size.
 
 ### Harness layer
 
 Agent subprocesses are launched through a `HarnessAdapter` abstraction in
-`idea-evolve/orchestrator_harness.py`. Two adapters are supported:
+`idea-evolve/orchestrator_harness.py`. Three adapters are supported:
 
 - **`ClaudeCodeAdapter`** (default) — `npx @anthropic-ai/claude-code --print`. Session ids are
   caller-assigned UUIDs. Wrap-up/debrief resumes via `--resume <uuid>`. Models from
@@ -291,34 +304,49 @@ Agent subprocesses are launched through a `HarnessAdapter` abstraction in
   `SessionTimeout(session_id=...)` so wrap-up/debrief can resume with `-s <ses_id>`.
   No `--max-turns` equivalent — wall-clock timeout is the only ceiling (warning logged once).
   Tool allowlist is translated into `OPENCODE_PERMISSION` env JSON (edit/bash/webfetch).
+- **`CodexAdapter`** — `codex exec --json`. Session ids/thread ids are emitted in the Codex
+  JSONL stream and captured before any potential timeout-kill when possible.
+  Wrap-up/debrief resumes via `codex exec resume <session_id>`. No `--max-turns` equivalent —
+  wall-clock timeout is the only ceiling (warning logged once). Codex uses sandbox/approval
+  policy instead of per-tool allowlists. `models.codex_reasoning_effort` is passed through as
+  `-c model_reasoning_effort="<effort>"`.
 
 Selection is per-agent via `user/config.yaml`:
 
 ```yaml
 harnesses:
-  default: claude-code      # or: opencode
-  per_agent: {}             # e.g. {explore: opencode, architect: claude-code}
+  default: claude-code      # or: opencode | codex
+  per_agent: {}             # e.g. {explore: codex, architect: claude-code}
+  per_model: {}             # e.g. {opus: codex}
 
 models:
   opencode:                 # opencode alias → provider/model
     opus: modelgate/claude-sonnet-4-5
     sonnet: modelgate/minimax-m2.7
     haiku: modelgate/minimax-m2.7
+  codex:                    # codex alias → model id
+    opus: gpt-5.5
+    sonnet: gpt-5.4
+    haiku: gpt-5.4-mini
+  codex_reasoning_effort:
+    opus: high
 ```
 
 `launch_claude_session()` / `resume_claude_session()` in `orchestrator.py` are thin shims
 that dispatch to the configured adapter via `_get_adapter(agent_role)`. Call-site names kept
 for legacy reasons; both accept an optional `agent_role` kwarg to resolve `per_agent` overrides.
 
-**Resolution order** (per launch): `harnesses.per_agent[agent_role]` → `harnesses.default` →
-`claude-code` (with one-line warning on unknown names).
+**Resolution order** (per launch): `harnesses.per_agent[agent_role]` →
+`harnesses.per_model[model]` → `harnesses.default` → `claude-code` (with one-line warning on
+unknown names).
 
 **`per_agent` keys** accept the agent role names the orchestrator passes from call sites:
 `architect`, `explore`, `exploit`, `genetic`, `full`, `research`, `experimentator`,
 `evaluator`, `system_critic`, `consistency_reviewer`, `wrap_up`, `debrief_recovery`.
 Any call site that does NOT pass `agent_role=` falls back to `harnesses.default` — so
-flipping `default: opencode` is the simplest way to route "everything except one or two
-roles" to opencode.
+flipping `default: opencode` or `default: codex` is the simplest way to route "everything
+except one or two roles" to another harness. `per_model` is useful when all requests for a
+tier should use one harness, e.g. `opus: codex` while normal `sonnet` work stays on OpenCode.
 
 **Currently wired call sites** (pass `agent_role=` explicitly):
 - `run_architect()` launch + wrap-up resume → `agent_role="architect"`
@@ -342,6 +370,16 @@ cd idea-evolve && python3 orchestrator.py . --problem sidon --single
 Without this, opencode exits silently with empty stdout and the adapter raises
 `SessionError: opencode launch produced no sessionID in stdout`.
 
+### Pre-flight for the codex harness
+
+Codex uses the normal Codex CLI auth/config. Ensure `codex` is on `PATH`, or set `CODEX_BIN`
+to the installed binary. The VS Code bundled CLI may also work if `CODEX_BIN` points at it.
+
+Codex has no `--max-turns` equivalent and its `--json` session id field is CLI-version
+dependent, so `CodexAdapter` captures `session_id`, `sessionId`, `sessionID`,
+`conversation_id`, `conversationId`, `thread_id`, or `threadId` recursively from JSONL events.
+For high-reasoning runs, set `models.codex_reasoning_effort.opus: high`.
+
 ### Example: architect on claude-code, everything else on opencode
 
 ```yaml
@@ -364,7 +402,7 @@ This is the configuration validated end-to-end on the permcodes problem
 
 Contract tests live in `idea-evolve/tests/test_adapters.py`
 (`cd idea-evolve && python3 -m pytest tests/test_adapters.py -v`).
-Unit tests (7) always run. Integration tests (3) auto-skip if the `opencode` binary or
+Unit tests (11) always run. Integration tests (3) auto-skip if the `opencode` binary or
 `MODELGATE_API_KEY` is absent.
 
 ## File Structure
@@ -1024,26 +1062,28 @@ from scratch with no examples. Gen 1-2 knowledge quality may be poor and set a b
 The `opus`/`sonnet`/`haiku` aliases mean different things depending on the harness. For
 `claude-code`, they map to actual Claude model tiers with meaningful capability differences
 (Opus > Sonnet > Haiku). For `opencode`, the aliases currently all point to
-`modelgate/minimax-m2.7` — so every agent gets the same model regardless of tier. This means
+`zai/glm-5.1`, and for `codex` they map to OpenAI model ids configured under
+`models.codex`. This means
 high-reasoning roles (evaluator, experimentator, architect) that are supposed to get Opus
-are silently downgraded. Additionally, different providers have different strengths — a
+may be silently downgraded if the active harness maps tiers to equal or weaker models. Additionally, different providers have different strengths — a
 model that works well for code generation (Minimax) may not reason as well as Claude for
 knowledge synthesis (evaluator) or strategic planning (architect).
 
 **Problem:** We have no validation, warning, or per-role model routing that accounts for the
-actual capabilities of non-Claude models. The `models.opencode:` block is purely a lookup
-table with no quality signal.
+actual capabilities of non-Claude models. The `models.opencode:` and `models.codex:` blocks
+are pure lookup tables with no quality signal.
 
 **Future work:**
 - Distinguish "reasoning-heavy" roles (architect, evaluator, consistency_reviewer,
   experimentator) from "workhorse" roles (explore, exploit, genetic, full, research)
-- Allow separate `models.opencode.high_reasoning` and `models.opencode.workhorse` keys, or
-  full per-role model overrides in config
+- Allow separate high-reasoning/workhorse keys per harness, or full per-role model overrides
+  in config
 - Log a warning when a role configured for `opus` is mapped to the same model as `haiku`
 - Test non-Claude models on evaluator/architect tasks to measure quality regression
 
 **Current workaround:** Keep architect on `claude-code` (real Claude Sonnet) via
-`per_agent.architect: claude-code`. All other roles use Minimax via opencode.
+`per_agent.architect: claude-code`, or deliberately route it to `codex` with an explicit
+high-reasoning model after a live smoke test.
 
 ### [DESIGN-11] ~~Architect skips experimentator for recurring helper requests~~ — MITIGATED
 When `system_recommendations.md` asks for a shared helper (e.g. SA calibration utility),

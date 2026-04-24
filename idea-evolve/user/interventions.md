@@ -550,3 +550,51 @@ Files modified since gen 1:
 - knowledge/ideas/active/idea_009.md
 - knowledge/ideas/active/idea_007.md
 - knowledge/ideas/active/idea_008.md
+
+## Generation 3
+Files modified since gen 2:
+- knowledge/state_of_affairs.md
+- knowledge/clusters/cluster_001.md
+- knowledge/clusters/cluster_002.md
+- knowledge/patterns/active/pattern_007.md
+- knowledge/patterns/active/pattern_006.md
+- knowledge/experiments/gen003/experimentator_1/helpers/trained_predictor_beam_search.py
+- knowledge/experiments/gen003/experimentator_1/helpers/__init__.py
+- knowledge/experiments/gen003/experimentator_1/sandbox/scripts/test_helper.py
+- knowledge/experiments/gen003/experimentator_1/helpers/__pycache__/trained_predictor_beam_search.cpython-312.pyc
+- knowledge/research/gen003/research_1/findings.md
+- knowledge/ideas/debunked/idea_007.md
+- knowledge/ideas/established/idea_009.md
+- knowledge/ideas/established/idea_001.md
+- knowledge/ideas/active/idea_003.md
+- knowledge/ideas/active/idea_004.md
+- knowledge/ideas/active/idea_010.md
+- knowledge/ideas/active/idea_011.md
+- knowledge/ideas/active/idea_008.md
+- knowledge/ideas/active/idea_012.md
+- knowledge/ideas/active/idea_013.md
+- user/config.yaml
+- agents/evaluator_light.md
+- agents/architect.md
+- agents/_shared_eval_contract.md
+- agents/evaluator.md
+
+## Generation 4
+Files modified since gen 3:
+- knowledge/state_of_affairs.md
+- knowledge/clusters/cluster_001.md
+- knowledge/clusters/cluster_002.md
+- knowledge/clusters/.no_changes_needed
+- knowledge/patterns/active/pattern_009.md
+- knowledge/patterns/active/pattern_008.md
+- knowledge/ideas/established/idea_009.md
+- knowledge/ideas/active/idea_015.md
+- knowledge/ideas/active/idea_016.md
+- knowledge/ideas/active/idea_010.md
+- knowledge/ideas/active/idea_011.md
+- knowledge/ideas/active/idea_008.md
+- knowledge/ideas/active/idea_012.md
+- knowledge/ideas/active/idea_014.md
+- knowledge/ideas/active/idea_013.md
+- knowledge/group_notes/gen004/group0.md
+- user/config.yaml

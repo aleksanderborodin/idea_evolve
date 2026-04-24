@@ -1,0 +1,31 @@
+generation: 3
+strategy_summary: "Execute the critical trained-MLP-predictor experiment (idea_008, 0 trials after 2 gens). Build the helper to eliminate API friction. Maintain Track B exploration for backup approaches."
+agents:
+  - type: exploit
+    instance: 1
+    model: opus
+    brief: "briefs/gen003/exploit_1.md"
+    timeout: 3600
+  - type: experimentator
+    instance: 1
+    model: opus
+    brief: "briefs/gen003/experimentator_1.md"
+    timeout: 2700
+  - type: explore
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen003/explore_1.md"
+    timeout: 2700
+  - type: research
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen003/research_1.md"
+    timeout: 1800
+  - type: explore
+    instance: 2
+    model: sonnet
+    brief: "briefs/gen003/explore_2.md"
+    timeout: 2700
+parallel_groups:
+  - ["exploit_1", "experimentator_1", "explore_1"]
+  - ["research_1", "explore_2"]

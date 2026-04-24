@@ -5,11 +5,11 @@ name: Basic move cancellation compression
 lifecycle: established
 confidence: 0.95
 first_seen: gen_001
-last_updated: gen_001
-last_confirmed_gen: gen_001
+last_updated: gen_003
+last_confirmed_gen: gen_002
 supported_by: [gen001_explore_1_sol01, gen001_explore_1_sol02, gen001_explore_1_sol03, gen001_explore_1_sol04, gen001_explore_1_sol05, gen001_explore_2_sol01, gen001_explore_2_sol02, gen001_explore_2_sol03, gen001_explore_2_sol05, gen001_full_1_sol01]
 contradicted_by: []
-related_ideas: [idea_002, idea_003]
+related_ideas: [idea_002, idea_003, idea_005, idea_009]
 cluster: compression
 tags: [compression, baseline, cancellation]
 ---
@@ -28,7 +28,7 @@ Implementation: greedy left-to-right pass, repeated until fixed point. All 5 exp
 
 ## Evidence
 
-All 11 evaluated solutions use cancellation as a baseline. Achieved compression_ratio of 0.9158 across all solutions, corresponding to 8.4% improvement over sample_submission (50572 → 46312). This is at the lower end of the predicted 5-15% range from initial_ideas.md.
+All 11 evaluated solutions use cancellation as a baseline. Achieved compression_ratio of 0.9158 across all solutions, corresponding to 8.4% improvement over sample_submission (50572 -> 46312). This is at the lower end of the predicted 5-15% range from initial_ideas.md.
 
 ## When It Helps
 

@@ -87,32 +87,41 @@ max_turns:
   consistency_reviewer: 1500
 
 # --- Models ---
-# Tier aliases resolved via models.opencode below (opus → cheapgpt/gpt-5.4,
-# sonnet → modelgate/minimax-m2.7). Only the architect runs on opus; everything
-# else stays on sonnet to control cost.
+# Tier aliases are routed by harnesses.per_model below:
+# opus → codex/gpt-5.5 with high reasoning effort, sonnet → opencode/zai/glm-5.1.
+# Only the architect runs on opus by default; everything else stays on sonnet to control cost.
 default_model: sonnet              # Default for solution agents (explore/exploit/full/genetic/research)
 architect_model: opus              # Architect plans the generation — high-reasoning role
 experimentator_model: sonnet       # Experimentator stays on sonnet per current policy
 
 # --- Parallelism ---
-max_parallel_sessions: 10          # Max concurrent Claude Code sessions
+max_parallel_sessions: 10          # Max concurrent agent harness sessions
 
 # --- Agent harnesses (which CLI launches each agent session) ---
-# default: claude-code | opencode
+# default: claude-code | opencode | codex
 # per_agent: optional overrides by agent role (architect, explore, exploit, full, genetic,
 #   experimentator, evaluator, system_critic, consistency_reviewer).
 # Unknown harness names fall back to claude-code with a warning.
 harnesses:
   default: opencode
-  per_agent: {}                    # all agents use opencode (minimax-m2.7)
+  per_agent: {}                    # role-specific overrides, if needed
+  per_model:
+    opus: codex                    # high-reasoning tier uses Codex
 
 # Per-harness model aliases. Keys `opus|sonnet|haiku` map to provider/model strings.
 # Opencode reads from `~/.config/opencode/opencode.json` providers; ModelGate preferred.
+# Codex reads auth/config from your normal Codex CLI setup.
 models:
   opencode:
-    opus:   cheapgpt/gpt-5.4          # high-reasoning roles (architect, evaluator, experimentator)
-    sonnet: modelgate/minimax-m2.7    # workhorse roles (explore, exploit, full, genetic, critic)
-    haiku:  modelgate/minimax-m2.7
+    opus:   zai/glm-5.1               # all tiers → GLM-5.1 via Z.ai coding plan
+    sonnet: zai/glm-5.1
+    haiku:  zai/glm-5.1
+  codex:
+    opus:   gpt-5.5
+    sonnet: gpt-5.4
+    haiku:  gpt-5.4-mini
+  codex_reasoning_effort:
+    opus:   high
 
 # --- Knowledge management (advisory — passed to agents as guidance, not enforced) ---
 knowledge_hierarchy:
@@ -133,4 +142,3 @@ staleness_threshold: 5             # Generations without confirmation before fla
 # --- Consistency review ---
 consistency_review_interval: 1     # Run consistency review every N generations
 emergency_review_on_strategic_shift: true  # Also run on evaluator strategic_shift flag
-

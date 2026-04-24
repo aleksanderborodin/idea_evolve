@@ -1,1 +1,1 @@
-gen002/explore_2/sol07.py
+gen002/explore_2/sol01.py

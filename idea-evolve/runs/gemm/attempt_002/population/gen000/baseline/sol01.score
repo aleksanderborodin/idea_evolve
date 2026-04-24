@@ -1,0 +1,12 @@
+{
+  "fitness": 100000.0,
+  "is_valid": 0,
+  "time_small": 100000.0,
+  "time_medium": 100000.0,
+  "time_large": 100000.0,
+  "error": "Compilation failed:\ncc1plus: fatal error: /home/sasha/Desktop/idea_evolve/idea-evolve/fast-conv/bench_harness.cpp: No such file or directory\ncompilation terminated.\ncc1plus: fatal error: /home/sasha/Desktop/idea_evolve/idea-evolve/fast-conv/util/encoder.cpp: No such file or directory\ncompilation terminated.\ncc1plus: fatal error: /home/sasha/Desktop/idea_evolve/idea-evolve/fast-conv/gemm/baseline.cpp: No such file or directory\ncompilation terminated.\n",
+  "traceback": "Traceback (most recent call last):\n  File \"/home/sasha/Desktop/idea_evolve/idea-evolve/problems/gemm/evaluate.py\", line 145, in main\n    result = validate(output)\n             ^^^^^^^^^^^^^^^^\n  File \"/home/sasha/Desktop/idea_evolve/idea-evolve/problems/gemm/validate.py\", line 107, in validate\n    raise ValueError(f\"Compilation failed:\\n{compile_result.stderr[:2000]}\")\nValueError: Compilation failed:\ncc1plus: fatal error: /home/sasha/Desktop/idea_evolve/idea-evolve/fast-conv/bench_harness.cpp: No such file or directory\ncompilation terminated.\ncc1plus: fatal error: /home/sasha/Desktop/idea_evolve/idea-evolve/fast-conv/util/encoder.cpp: No such file or directory\ncompilation terminated.\ncc1plus: fatal error: /home/sasha/Desktop/idea_evolve/idea-evolve/fast-conv/gemm/baseline.cpp: No such file or directory\ncompilation terminated.\n\n",
+  "eval_time_s": 0.6227,
+  "eval_started_at": "2026-04-24T18:03:53+00:00",
+  "eval_ended_at": "2026-04-24T18:03:53+00:00"
+}

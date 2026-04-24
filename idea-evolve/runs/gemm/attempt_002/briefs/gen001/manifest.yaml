@@ -1,0 +1,25 @@
+generation: 1
+strategy_summary: "Cold start: establish valid self-contained kernels while exploring AVX-512 popcount and VNNI formulations."
+agents:
+  - type: explore
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen001/explore_1.md"
+    timeout: 1800
+  - type: explore
+    instance: 2
+    model: sonnet
+    brief: "briefs/gen001/explore_2.md"
+    timeout: 1800
+  - type: full
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen001/full_1.md"
+    timeout: 2100
+  - type: research
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen001/research_1.md"
+    timeout: 900
+parallel_groups:
+  - ["explore_1", "explore_2", "full_1", "research_1"]

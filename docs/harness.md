@@ -32,9 +32,23 @@ Resume:   run --format json -s <ses_id> -m <provider/model> --dangerously-skip-p
 - **No `--max-turns` equivalent** — wall-clock timeout is the only ceiling (one-time warning logged per run).
 - Tool allowlist is translated into `OPENCODE_PERMISSION` env JSON: `edit`/`bash`/`webfetch`.
 
+### CodexAdapter (`codex`)
+
+```
+Binary:   $CODEX_BIN (default: "codex", override via CODEX_BIN env var)
+Launch:   exec --json -m <model> --skip-git-repo-check -
+Resume:   exec resume --json -m <model> --skip-git-repo-check <session_id> -
+```
+
+- Session ids are emitted by the Codex CLI JSONL stream and captured recursively from known id fields.
+- `SessionTimeout` is raised with the captured `session_id` attached when available.
+- **No `--max-turns` equivalent** — wall-clock timeout is the only ceiling (one-time warning logged per run).
+- Codex uses sandbox/approval policy instead of per-tool allowlists; this adapter runs with `workspace-write` and `never` approval.
+- Reasoning effort can be set per model alias via `models.codex_reasoning_effort`; the adapter passes it as `-c model_reasoning_effort="<effort>"`.
+
 ## Contract
 
-Both adapters expose the same interface:
+All adapters expose the same interface:
 
 ```python
 adapter.launch(
@@ -64,18 +78,25 @@ adapter.resume(
 
 ```yaml
 harnesses:
-  default: claude-code   # or: opencode
+  default: claude-code   # or: opencode | codex
   per_agent: {}          # override by role — only list EXCEPTIONS to default
                          # (listing a role whose harness == default is a no-op)
+  per_model: {}          # optional model-tier routing, e.g. {opus: codex}
 
 models:
   opencode:              # opencode alias → provider/model
     opus:   modelgate/claude-sonnet-4-5
     sonnet: modelgate/minimax-m2.7
     haiku:  modelgate/minimax-m2.7
+  codex:                 # codex alias → model id
+    opus:   gpt-5.5
+    sonnet: gpt-5.4
+    haiku:  gpt-5.4-mini
+  codex_reasoning_effort:
+    opus: high
 ```
 
-**Resolution order** at every launch: `per_agent[agent_role]` → `default` → `claude-code` (fallback with warning on unknown names).
+**Resolution order** at every launch: `per_agent[agent_role]` → `per_model[model]` → `default` → `claude-code` (fallback with warning on unknown names).
 
 **Per-agent role keys:** `architect`, `explore`, `exploit`, `genetic`, `full`, `research`,
 `experimentator`, `evaluator`, `system_critic`, `consistency_reviewer`, `wrap_up`, `debrief_recovery`.
@@ -96,13 +117,13 @@ All other call sites (agents, evaluator, critic, consistency reviewer) rely on
 
 ## Process Management
 
-Both adapters use `start_new_session=True` when spawning subprocesses. On timeout:
+All adapters use `start_new_session=True` when spawning subprocesses. On timeout:
 
 1. `os.killpg(proc.pid, SIGTERM)` — terminate process group
 2. Wait up to 5 seconds
 3. `os.killpg(proc.pid, SIGKILL)` if still alive
 
-This prevents orphan `node` (claude-code) or `bun` (opencode) grandchildren after timeout.
+This prevents orphan harness grandchildren after timeout.
 
 ## Exceptions
 
@@ -131,6 +152,14 @@ Also ensure `OPENCODE_BIN` points to the actual binary if `opencode` is not on `
 OPENCODE_BIN=/home/sasha/.opencode/bin/opencode
 ```
 
+## Pre-flight Requirement for Codex
+
+Codex uses your normal Codex CLI auth/config. Ensure `codex` is on `$PATH`, or set:
+
+```bash
+CODEX_BIN=/path/to/codex
+```
+
 ## Tests
 
 ```bash
@@ -138,5 +167,5 @@ cd idea-evolve
 python3 -m pytest tests/test_adapters.py -v
 ```
 
-7 unit tests always run. 3 integration tests auto-skip if `opencode` binary or
+11 unit tests always run. 3 integration tests auto-skip if `opencode` binary or
 `MODELGATE_API_KEY` is absent.

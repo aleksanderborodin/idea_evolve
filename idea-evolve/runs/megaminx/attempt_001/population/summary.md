@@ -1,9 +1,9 @@
 # Population Summary
 
-Total solutions: 23
-Valid solutions: 23
-Best fitness: 44114 (lower is better)
-Average fitness: 4435396
+Total solutions: 25
+Valid solutions: 25
+Best fitness: 44094 (lower is better)
+Average fitness: 4084093
 
 ## By Agent Type
 
@@ -15,18 +15,19 @@ Average fitness: 4435396
   - gen000/baseline/sol01.py: fitness 101000000
 
 ### exploit
-- Count: 1
-- Best: 46312
-- Avg: 46312
+- Count: 2
+- Best: 44111
+- Avg: 45212
+  - gen004/exploit_1/sol01.py: fitness 44111
   - gen002/exploit_1/sol02.py: fitness 46312
 
 ### explore
-- Count: 19
-- Best: 44114
-- Avg: 45838
+- Count: 20
+- Best: 44094
+- Avg: 45750
+  - gen003/explore_2/sol01.py: fitness 44094
   - gen002/explore_2/sol01.py: fitness 44114
   - gen002/explore_2/sol08.py: fitness 44114
-  - gen002/explore_2/sol07.py: fitness 44114
 
 ### full
 - Count: 1

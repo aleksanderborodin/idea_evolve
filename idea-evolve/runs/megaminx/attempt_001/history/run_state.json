@@ -24,18 +24,84 @@
       "type": "timeout",
       "message": "Timed out after 2100s",
       "ts": "2026-04-16T16:04:13.024377+00:00"
+    },
+    {
+      "gen": 3,
+      "phase": "agents",
+      "agent": "experimentator_1",
+      "type": "timeout",
+      "message": "Timed out after 2700s",
+      "ts": "2026-04-21T09:43:29.329857+00:00"
+    },
+    {
+      "gen": 3,
+      "phase": "agents",
+      "agent": "explore_1",
+      "type": "timeout",
+      "message": "Timed out after 2700s",
+      "ts": "2026-04-21T09:43:29.347136+00:00"
+    },
+    {
+      "gen": 3,
+      "phase": "agents",
+      "agent": "exploit_1",
+      "type": "timeout",
+      "message": "Timed out after 3600s",
+      "ts": "2026-04-21T09:58:29.336396+00:00"
+    },
+    {
+      "gen": 3,
+      "phase": "agents",
+      "agent": "explore_2",
+      "type": "timeout",
+      "message": "Timed out after 2700s",
+      "ts": "2026-04-23T18:49:26.173766+00:00"
+    },
+    {
+      "gen": 4,
+      "phase": "agents",
+      "agent": "exploit_1",
+      "type": "error",
+      "message": "Exited with code 1: \u001b[91m\u001b[1mError: \u001b[0mUnexpected error, check log file at /home/sasha/snap/code/232/.local/share/opencode/log/2026-04-24T145522.log for more details\n\nFailed to run the query 'PRAGMA ",
+      "ts": "2026-04-24T14:55:23.055609+00:00"
+    },
+    {
+      "gen": 4,
+      "phase": "agents",
+      "agent": "research_1",
+      "type": "error",
+      "message": "Exited with code 1: \u001b[91m\u001b[1mError: \u001b[0mUnexpected error, check log file at /home/sasha/snap/code/232/.local/share/opencode/log/2026-04-24T145522.log for more details\n\nFailed to run the query 'PRAGMA ",
+      "ts": "2026-04-24T14:55:23.065815+00:00"
+    },
+    {
+      "gen": 4,
+      "phase": "agents",
+      "agent": "exploit_1",
+      "type": "timeout",
+      "message": "Timed out after 2100s",
+      "ts": "2026-04-24T15:34:05.101461+00:00"
+    },
+    {
+      "gen": 4,
+      "phase": "agents",
+      "agent": "explore_2",
+      "type": "timeout",
+      "message": "Timed out after 1800s",
+      "ts": "2026-04-24T16:20:24.545555+00:00"
     }
   ],
   "completed_gens": [
     1,
-    2
+    2,
+    3,
+    4
   ],
-  "pid": 52671,
-  "started_at": "2026-04-16T15:26:22.861204+00:00",
+  "pid": 33366,
+  "started_at": "2026-04-24T14:58:40.541023+00:00",
   "target_gen": 30,
   "status": "stopped",
-  "current_gen": 2,
+  "current_gen": 4,
   "current_phase": "idle",
   "agents": {},
-  "last_updated": "2026-04-16T16:34:20.531045+00:00"
+  "last_updated": "2026-04-24T16:46:36.387744+00:00"
 }

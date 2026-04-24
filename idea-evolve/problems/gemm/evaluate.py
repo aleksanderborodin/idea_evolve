@@ -30,6 +30,11 @@ from problems._shared import eval_queue  # noqa: E402
 from problems._shared.constants import (  # noqa: E402
     ENV_AGENT_NAME, ENV_ATTEMPT, ENV_PROBLEM, ENV_RUN_ROOT,
 )
+from problems._shared.eval_boilerplate import (  # noqa: E402
+    build_error_result,
+    try_kill_stale_same_agent,
+    write_score_sidecar,
+)
 
 # Cache lives in the run directory (set by orchestrator via env var).
 # Fallback: walk up from the solution file to find history/, or use /tmp.
@@ -110,16 +115,22 @@ def main():
         sys.exit(1)
 
     solution_path = sys.argv[1]
+    started_at = None
+    t0 = None
 
     try:
         # Check cache first (thread-safe)
         content_hash = _file_hash(solution_path)
         cached = _cached_lookup(content_hash)
         if cached is not None:
+            write_score_sidecar(solution_path, cached)
             print(json.dumps(cached))
             return
 
-        # Queue visibility — gemm is parallel-safe, no kill-stale needed.
+        # Same-agent kill contract: terminate any stale evaluate.py owned by
+        # me before enqueueing. Fails open for parallel-safe problems.
+        try_kill_stale_same_agent(PROBLEM_ROOT)
+
         queue_id = eval_queue.enqueue(
             os.environ.get(ENV_AGENT_NAME, "unknown"),
             os.environ.get(ENV_PROBLEM, "gemm"),
@@ -146,31 +157,14 @@ def main():
 
         # Cache the result (thread-safe) — stores eval_time_s too
         _cached_store(content_hash, result)
+        write_score_sidecar(solution_path, result)
 
         print(json.dumps(result))
     except Exception as e:
-        ended_at_err = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        # Build error result with sentinel values for all metrics
-        error_result = {"error": str(e)}
-        metrics_path = PROBLEM_ROOT / "metrics.yaml"
-        if metrics_path.exists():
-            try:
-                import yaml
-                data = yaml.safe_load(metrics_path.read_text())
-                for name, spec in data.get("specs", {}).items():
-                    error_result[name] = spec.get("sentinel_value", 0)
-            except Exception:
-                error_result["fitness"] = 1e9
-                error_result["is_valid"] = 0
-        else:
-            error_result["fitness"] = 1e9
-            error_result["is_valid"] = 0
-        try:
-            error_result["eval_time_s"] = round(time.perf_counter() - t0, 4)
-            error_result["eval_started_at"] = started_at
-            error_result["eval_ended_at"] = ended_at_err
-        except NameError:
-            pass  # error before measurement began
+        error_result = build_error_result(
+            PROBLEM_ROOT, e, t0=t0, started_at=started_at,
+        )
+        write_score_sidecar(solution_path, error_result)
         print(json.dumps(error_result))
         print(f"ERROR: {e}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)

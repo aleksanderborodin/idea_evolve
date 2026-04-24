@@ -30,7 +30,7 @@
   "bucket_very_hard_fitness": 50000000,
   "bucket_very_hard_solved": 0,
   "bucket_very_hard_invalid": 50,
-  "eval_time_s": 0.2234,
-  "eval_started_at": "2026-04-16T13:59:26+00:00",
-  "eval_ended_at": "2026-04-16T13:59:26+00:00"
+  "eval_time_s": 0.22,
+  "eval_started_at": "2026-04-18T17:09:20+00:00",
+  "eval_ended_at": "2026-04-18T17:09:20+00:00"
 }

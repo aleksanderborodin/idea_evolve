@@ -28,6 +28,11 @@ from problems._shared import eval_queue  # noqa: E402
 from problems._shared.constants import (  # noqa: E402
     ENV_AGENT_NAME, ENV_ATTEMPT, ENV_PROBLEM, ENV_RUN_ROOT,
 )
+from problems._shared.eval_boilerplate import (  # noqa: E402
+    build_error_result,
+    try_kill_stale_same_agent,
+    write_score_sidecar,
+)
 
 # Cache lives in the run directory (set by orchestrator via env var).
 _RUN_ROOT = Path(os.environ[ENV_RUN_ROOT]) if ENV_RUN_ROOT in os.environ else None
@@ -100,33 +105,28 @@ def load_solution(filepath: str):
     return module.entrypoint()
 
 
-def _write_score_sidecar(solution_path: str, result: dict):
-    """Write .score sidecar file next to the solution."""
-    try:
-        score_path = Path(solution_path).with_suffix(".score")
-        tmp_path = score_path.with_suffix(".score.tmp")
-        tmp_path.write_text(json.dumps(result, indent=2))
-        tmp_path.rename(score_path)
-    except Exception:
-        pass
-
-
 def main():
     if len(sys.argv) < 2:
         print("Usage: python3 evaluate.py <solution_file.py>")
         sys.exit(1)
 
     solution_path = sys.argv[1]
+    started_at = None
+    t0 = None
 
     try:
         content_hash = _file_hash(solution_path)
         cached = _cached_lookup(content_hash)
         if cached is not None:
-            _write_score_sidecar(solution_path, cached)
+            write_score_sidecar(solution_path, cached)
             print(json.dumps(cached))
             return
 
-        # Queue visibility — sidon is parallel-safe, no kill-stale needed.
+        # Same-agent kill contract: terminate any stale evaluate.py owned by
+        # me before enqueueing. Safe for parallel problems — fails open if no
+        # agent identity or no other process owned by the same agent exists.
+        try_kill_stale_same_agent(PROBLEM_ROOT)
+
         queue_id = eval_queue.enqueue(
             os.environ.get(ENV_AGENT_NAME, "unknown"),
             os.environ.get(ENV_PROBLEM, "sidon"),
@@ -152,24 +152,14 @@ def main():
         result["eval_ended_at"] = ended_at
 
         _cached_store(content_hash, result)
-        _write_score_sidecar(solution_path, result)
+        write_score_sidecar(solution_path, result)
         print(json.dumps(result))
     except Exception as e:
-        ended_at_err = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        error_result = {
-            "fitness": 0,
-            "is_valid": 0,
-            "violations": -1,
-            "raw_size": 0,
-            "error": str(e)[:500],
-        }
-        try:
-            error_result["eval_time_s"] = round(time.perf_counter() - t0, 4)
-            error_result["eval_started_at"] = started_at
-            error_result["eval_ended_at"] = ended_at_err
-        except NameError:
-            pass  # error before measurement began
-        _write_score_sidecar(solution_path, error_result)
+        error_result = build_error_result(
+            PROBLEM_ROOT, e, t0=t0, started_at=started_at,
+            extra={"violations": -1, "raw_size": 0},
+        )
+        write_score_sidecar(solution_path, error_result)
         print(json.dumps(error_result))
         print(f"ERROR: {e}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)

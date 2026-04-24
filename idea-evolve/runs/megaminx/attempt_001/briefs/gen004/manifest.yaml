@@ -1,0 +1,31 @@
+generation: 4
+strategy_summary: "Execute idea_013 combined recipe (the #1 unresolved experiment) with strict milestone protocol; fix the broken trained_predictor helper via experimentator; research Kaggle-top paradigms and try a GNN predictor as Track B to escape the flat-MLP gravity well."
+agents:
+  - type: exploit
+    instance: 1
+    model: opus
+    brief: "briefs/gen004/exploit_1.md"
+    timeout: 2100
+  - type: experimentator
+    instance: 1
+    model: opus
+    brief: "briefs/gen004/experimentator_1.md"
+    timeout: 1500
+  - type: research
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen004/research_1.md"
+    timeout: 900
+  - type: explore
+    instance: 1
+    model: sonnet
+    brief: "briefs/gen004/explore_1.md"
+    timeout: 1800
+  - type: explore
+    instance: 2
+    model: sonnet
+    brief: "briefs/gen004/explore_2.md"
+    timeout: 1800
+parallel_groups:
+  - ["exploit_1", "experimentator_1", "research_1"]
+  - ["explore_1", "explore_2"]

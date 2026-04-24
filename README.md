@@ -109,14 +109,15 @@ Two orchestrators can run simultaneously on different problems — each works in
 
 ## Harnesses: routing agents to different CLIs
 
-Every agent session is launched through a **harness adapter**. Two are built-in:
+Every agent session is launched through a **harness adapter**. Three are built-in:
 
 | Harness | Binary | Provider reach |
 |---|---|---|
 | `claude-code` *(default)* | `npx @anthropic-ai/claude-code` | Anthropic (Claude) |
 | `opencode` | `opencode run` | Anything opencode supports — Anthropic, OpenAI, Gemini, local, or routed via ModelGate |
+| `codex` | `codex exec` | OpenAI models available to your Codex CLI |
 
-Both adapters expose the same `launch()` / `resume()` contract, so wrap-up and debrief recovery after a timeout work identically. OpenCode's session ids are assigned by the server and captured from the first streamed JSON event; Claude Code accepts caller-assigned UUIDs. Details and contract tests: [idea-evolve/orchestrator_harness.py](idea-evolve/orchestrator_harness.py), [idea-evolve/tests/test_adapters.py](idea-evolve/tests/test_adapters.py).
+All adapters expose the same `launch()` / `resume()` contract, so wrap-up and debrief recovery after a timeout work identically. OpenCode and Codex session ids are captured from streamed JSON events; Claude Code accepts caller-assigned UUIDs. Details and contract tests: [idea-evolve/orchestrator_harness.py](idea-evolve/orchestrator_harness.py), [idea-evolve/tests/test_adapters.py](idea-evolve/tests/test_adapters.py).
 
 ### Selecting a harness per agent
 
@@ -124,18 +125,25 @@ Edit [idea-evolve/user/config.yaml](idea-evolve/user/config.yaml):
 
 ```yaml
 harnesses:
-  default: claude-code        # harness used when no per_agent override matches
+  default: claude-code        # or: opencode | codex
   per_agent: {}               # override by role — only list the EXCEPTIONS
                               # (listing a role whose harness == default is a no-op)
+  per_model: {}               # optional model-tier routing, e.g. {opus: codex}
 
 models:
   opencode:                   # alias → provider/model (only consulted by the opencode harness)
     opus:   modelgate/claude-sonnet-4-5
     sonnet: modelgate/minimax-m2.7
     haiku:  modelgate/minimax-m2.7
+  codex:                      # alias → model id (only consulted by the codex harness)
+    opus:   gpt-5.5
+    sonnet: gpt-5.4
+    haiku:  gpt-5.4-mini
+  codex_reasoning_effort:     # optional alias → low | medium | high | xhigh
+    opus: high
 ```
 
-Resolution order at every launch site: `per_agent[role]` → `default` → `claude-code` (with warning on unknown names). Only list roles in `per_agent` whose harness differs from `default`.
+Resolution order at every launch site: `per_agent[role]` → `per_model[model]` → `default` → `claude-code` (with warning on unknown names). Only list roles in `per_agent` whose harness differs from `default`.
 
 **Example A — keep everything on Claude, route explorers through opencode only:**
 
@@ -155,7 +163,27 @@ harnesses:
     architect: claude-code
 ```
 
-**Fidelity notes.** OpenCode has no `--max-turns` equivalent; wall-clock timeout is the only ceiling (a one-time warning is logged per run). Agent prompt templates are Claude-tuned, so routing `architect` or `evaluator` to a non-Claude model may degrade reasoning quality — keep those on `claude-code` unless you specifically want to validate otherwise.
+**Example C — default to GLM via OpenCode, route `opus` to Codex high reasoning:**
+
+```yaml
+architect_model: opus
+default_model: sonnet
+
+harnesses:
+  default: opencode
+  per_model:
+    opus: codex
+
+models:
+  opencode:
+    sonnet: zai/glm-5.1
+  codex:
+    opus: gpt-5.5
+  codex_reasoning_effort:
+    opus: high
+```
+
+**Fidelity notes.** OpenCode and Codex have no `--max-turns` equivalent; wall-clock timeout is the only ceiling (a one-time warning is logged per run). Agent prompt templates are Claude-tuned, so routing `architect` or `evaluator` to a non-Claude model may degrade reasoning quality — keep those on `claude-code` unless you specifically want to validate otherwise.
 
 ## Defining Your Own Problem
 

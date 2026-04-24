@@ -763,10 +763,12 @@ def _run_root() -> Path | None:
     return CTX.run_root if CTX else None
 
 
-def _harness_for(agent_role: str | None = None) -> str:
+def _harness_for(agent_role: str | None = None, model: str | None = None) -> str:
     """Resolve which harness to use for a given agent role.
     Order: explicit manifest entry (passed as agent_role == harness name already resolved)
-           > user/config.yaml `harnesses.per_agent.<role>` > `harnesses.default` > 'claude-code'.
+           > user/config.yaml `harnesses.per_agent.<role>`
+           > user/config.yaml `harnesses.per_model.<model>`
+           > `harnesses.default` > 'claude-code'.
     For now the manifest-level override is not wired (plan keeps default = claude-code)."""
     cfg = load_config(CTX.project_root) if CTX else {}
     h = (cfg.get("harnesses") or {})
@@ -774,13 +776,25 @@ def _harness_for(agent_role: str | None = None) -> str:
         per = h.get("per_agent") or {}
         if agent_role in per:
             return per[agent_role]
+    if model:
+        per_model = h.get("per_model") or {}
+        if model in per_model:
+            return per_model[model]
     return h.get("default", "claude-code")
 
 
-def _get_adapter(agent_role: str | None = None):
+def _get_adapter(agent_role: str | None = None, model: str | None = None):
     cfg = load_config(CTX.project_root) if CTX else {}
-    oc_map = ((cfg.get("models") or {}).get("opencode"))
-    return get_adapter(_harness_for(agent_role), opencode_model_map=oc_map)
+    models = cfg.get("models") or {}
+    oc_map = models.get("opencode")
+    codex_map = models.get("codex")
+    codex_effort_map = models.get("codex_reasoning_effort")
+    return get_adapter(
+        _harness_for(agent_role, model),
+        opencode_model_map=oc_map,
+        codex_model_map=codex_map,
+        codex_reasoning_effort_map=codex_effort_map,
+    )
 
 
 def _identity_kwargs(agent_name: str | None) -> dict:
@@ -806,7 +820,7 @@ def launch_claude_session(
     agent_name: str | None = None,
 ) -> tuple[str, str, int]:
     """Launch an agent session via the configured harness. Returns (stdout, session_id, pid)."""
-    adapter = _get_adapter(agent_role)
+    adapter = _get_adapter(agent_role, model)
     return adapter.launch(
         project_root=project_root,
         prompt_text=prompt_text,
@@ -832,7 +846,7 @@ def resume_claude_session(
     agent_name: str | None = None,
 ) -> str:
     """Resume an existing session with a follow-up message. The agent retains full memory."""
-    adapter = _get_adapter(agent_role)
+    adapter = _get_adapter(agent_role, model)
     return adapter.resume(
         project_root=project_root,
         session_id=session_id,

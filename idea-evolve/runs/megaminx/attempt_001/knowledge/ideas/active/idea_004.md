@@ -5,11 +5,11 @@ name: Meet-in-the-middle BFS
 lifecycle: active
 confidence: 0.5
 first_seen: gen_001
-last_updated: gen_001
+last_updated: gen_003
 last_confirmed_gen: gen_001
 supported_by: [gen001_explore_1_sol01]
 contradicted_by: []
-related_ideas: [idea_003, idea_005]
+related_ideas: [idea_003, idea_005, idea_012]
 cluster: search_algorithms
 tags: [MITM, BFS, optimal, search]
 ---
@@ -22,21 +22,19 @@ Run BFS simultaneously from initial state and solved state. When frontiers inter
 
 ## Evidence from Gen 1
 
-explore_1 implemented MITM with max_depth=6 per side (total depth 12) and confirmed it is tractable for shallow puzzles. However, for medium/hard buckets (depth 26-100+), the branching factor 24 makes even D=6 per side produce millions of states. MITM only helps when the optimal distance is ≤ 2 × max_depth_per_side.
+explore_1 implemented MITM with max_depth=6 per side (total depth 12) and confirmed it is tractable for shallow puzzles. However, for medium/hard buckets (depth 26-100+), the branching factor 24 makes even D=6 per side produce millions of states.
 
-The special bucket (id=0, depth=72) is theoretically tractable with MITM depth 36 per side, but explore_1 used max_depth=6 and still found no improvement over cancellation.
+## Superseded by idea_012
+
+**CayleyPy has built-in MITM+beam search via `bfs_result_for_mitm` (idea_012).** This provides the same bidirectional search benefit integrated into beam search, with automatic path concatenation. idea_012 is strictly more practical than implementing MITM manually. idea_004 is retained for its documentation of the MITM concept and depth limitations.
 
 ## Limitations
 
 - Branching factor 24 is too large for deep searches
-- BFS to depth 7 = ~4 billion forward states, ~8 billion total with backward
+- BFS to depth 7 = ~4 billion forward states
 - For depth > 12 total, MITM is infeasible without heavy pruning
-- MITM provides optimal solutions but only for shallow puzzles
+- idea_012's MITM backstop (depth 6) helps but only saves 6 beam search steps
 
 ## When It Helps
 
-Best for medium bucket (depth 26-100) where combined search depth 20-40 may be achievable. For very_hard bucket (depth 500-1000), even meeting at depth 250+ is intractable.
-
-## Relationship to Predictor
-
-MITM and predictor-guided beam search are complementary. MITM guarantees optimal solutions for shallow puzzles; predictor-guided beam handles deep puzzles approximately.
+Best for shallow puzzles (depth ≤ 20) where combined search depth may achieve optimal solutions. For very_hard bucket (depth 500-1000), MITM contribution is small relative to total depth.
